@@ -1,0 +1,21 @@
+{
+  "version": "1.0.2",
+  "patchNumber": 2,
+  "title": "Bản vá Hot-Patch #2",
+  "changelog": "Khoi tao he thong Ban va Hot-Patch OTA NA Browser",
+  "updatedAt": "2026-09-11T12:07:11.134Z",
+  "files": [
+    {
+      "filename": "app.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/renderer/app.js"
+    },
+    {
+      "filename": "index.html",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/renderer/index.html"
+    },
+    {
+      "filename": "style.css",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/renderer/style.css"
+    }
+  ]
+}

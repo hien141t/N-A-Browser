@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>N/A Browser</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- ============================================================ -->
+<!-- LOCK SCREEN - Hiện trước khi vào app -->
+<!-- ============================================================ -->
+<div id="lockScreen" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:99999;background:linear-gradient(135deg,#07071a 0%,#0f0f2e 50%,#07071a 100%);align-items:center;justify-content:center;flex-direction:column;gap:0;">
+  <!-- Titlebar in lock screen (no-drag vì phải kéo được) -->
+  <div style="position:absolute;top:0;left:0;right:0;height:36px;-webkit-app-region:drag;display:flex;align-items:center;justify-content:flex-end;padding:0 8px;gap:2px;">
+    <button id="lockBtnMin" style="-webkit-app-region:no-drag;background:none;border:none;color:#444;cursor:pointer;width:28px;height:28px;border-radius:5px;font-size:13px;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='none'">&#x2212;</button>
+    <button id="lockBtnMax" style="-webkit-app-region:no-drag;background:none;border:none;color:#444;cursor:pointer;width:28px;height:28px;border-radius:5px;font-size:13px;" onmouseover="this.style.background='rgba(255,255,255,0.08)'" onmouseout="this.style.background='none'">&#x2610;</button>
+    <button id="lockBtnClose" style="-webkit-app-region:no-drag;background:none;border:none;color:#444;cursor:pointer;width:28px;height:28px;border-radius:5px;font-size:13px;" onmouseover="this.style.background='rgba(239,68,68,0.2);color:#ef4444'" onmouseout="this.style.background='none'">&#x2715;</button>
+  </div>
+
+  <div style="text-align:center;padding:40px 32px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:24px;box-shadow:0 40px 100px rgba(0,0,0,0.5);width:360px;max-width:90vw;animation:fadeInUp 0.4s ease;">
+    <!-- Logo -->
+    <div style="margin-bottom:24px;">
+      <div style="width:72px;height:72px;border-radius:18px;background:linear-gradient(135deg,#6366f1,#06d6a0);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;box-shadow:0 8px 32px rgba(99,102,241,0.4);">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+          <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/><circle cx="12" cy="17" r="1"/>
+        </svg>
+      </div>
+      <h1 style="font-size:22px;font-weight:800;background:linear-gradient(135deg,#6366f1,#06d6a0);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin:0 0 6px;">N/A Browser</h1>
+      <p style="color:#555570;font-size:13px;margin:0;">Nhập mã truy cập để tiếp tục</p>
+    </div>
+
+    <!-- PIN Input -->
+    <div style="margin-bottom:16px;position:relative;">
+      <input
+        id="pinInput"
+        type="password"
+        placeholder="&#9679;&#9679;&#9679;&#9679;&#9679;&#9679;"
+        maxlength="20"
+        style="width:100%;padding:14px 16px;background:rgba(255,255,255,0.05);border:1.5px solid rgba(255,255,255,0.1);border-radius:12px;color:#e8e8f8;font-size:18px;font-family:inherit;box-sizing:border-box;text-align:center;letter-spacing:4px;outline:none;transition:border-color .2s;"
+        onfocus="this.style.borderColor='#6366f1'"
+        onblur="this.style.borderColor='rgba(255,255,255,0.1)'"
+      />
+    </div>
+
+    <!-- Remember me -->
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:20px;justify-content:center;">
+      <input type="checkbox" id="rememberLogin" checked style="width:15px;height:15px;accent-color:#6366f1;cursor:pointer;"/>
+      <span style="font-size:12px;color:#8888aa;">Lưu đăng nhập (không hỏi lại lần sau)</span>
+    </label>
+
+    <!-- Error -->
+    <div id="pinError" style="display:none;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;padding:8px 14px;border-radius:8px;font-size:12px;margin-bottom:14px;">
+      Mã truy cập không đúng! Vui lòng thử lại.
+    </div>
+
+    <!-- Login Button -->
+    <button id="btnUnlock" style="width:100%;padding:13px;background:linear-gradient(135deg,#6366f1,#4f46e5);border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:all .2s;box-shadow:0 4px 20px rgba(99,102,241,0.4);" onmouseover="this.style.transform='translateY(-1px)';this.style.boxShadow='0 8px 30px rgba(99,102,241,0.5)'" onmouseout="this.style.transform='none';this.style.boxShadow='0 4px 20px rgba(99,102,241,0.4)'">
+      &#x1F513; Mở khóa
+    </button>
+
+    <p style="font-size:10px;color:#333348;margin-top:20px 0 0;">N/A Browser &bull; Anti-Detect Android Browser</p>
+  </div>
+</div>
+
+<style>
+@keyframes fadeInUp {
+  from { opacity:0; transform:translateY(20px); }
+  to { opacity:1; transform:translateY(0); }
+}
+@keyframes shakeInput {
+  0%,100% { transform:translateX(0); }
+  20%,60% { transform:translateX(-8px); }
+  40%,80% { transform:translateX(8px); }
+}
+</style>
+
+<!-- ══ CUSTOM TITLEBAR ══ -->
+<div class="titlebar" id="titlebar">
+  <div class="titlebar-logo">
+    <img src="../../assets/icon.png" style="width:22px;height:22px;border-radius:5px;object-fit:cover" alt="Icon"/>
+    <span class="titlebar-name">N/A Browser</span>
+    <span class="titlebar-version" id="appVersion">v1.0</span>
+  </div>
+  <div class="titlebar-drag"></div>
+  
+  <div style="-webkit-app-region:no-drag;display:flex;align-items:center;margin-right:8px;">
+    <button id="navItemAccount" style="-webkit-app-region:no-drag;display:flex;align-items:center;gap:6px;padding:5px 11px;background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.35);border-radius:8px;color:#c7d2fe;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;user-select:none;">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="pointer-events:none;-webkit-app-region:no-drag;"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      <span id="accountBtnLabel" style="pointer-events:none;-webkit-app-region:no-drag;">Tài khoản</span>
+    </button>
+  </div>
+  <div class="titlebar-controls">
+    <button class="tb-btn tb-min" id="btnMin" title="Minimize">─</button>
+    <button class="tb-btn tb-max" id="btnMax" title="Maximize">□</button>
+    <button class="tb-btn tb-close" id="btnClose" title="Close">✕</button>
+  </div>
+</div>
+
+<!-- ══ APP SHELL ══ -->
+<div class="app-shell">
+
+  <!-- ── SIDEBAR ── -->
+  <aside class="sidebar">
+    <nav class="sidebar-nav">
+      <button class="nav-item active" data-page="profiles" title="Browser Profiles">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="5" y="2" width="14" height="20" rx="2"/><line x1="9" y1="7" x2="15" y2="7"/>
+          <line x1="9" y1="11" x2="15" y2="11"/><circle cx="12" cy="17" r="1"/>
+        </svg>
+        <span>Profiles</span>
+      </button>
+      <button class="nav-item" data-page="devices" title="Device Library">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <rect x="7" y="2" width="10" height="20" rx="2"/><line x1="7" y1="6" x2="17" y2="6"/>
+          <line x1="7" y1="18" x2="17" y2="18"/><circle cx="12" cy="21" r="0.5" fill="currentColor"/>
+        </svg>
+        <span>Devices</span>
+      </button>
+      <button class="nav-item" data-page="extensions" title="Chrome Extensions">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+          <line x1="12" y1="22.08" x2="12" y2="12"/>
+        </svg>
+        <span>Extensions</span>
+      </button>
+      <button class="nav-item" data-page="settings" title="Settings">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 1v3M12 20v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M1 12h3M20 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/>
+        </svg>
+        <span>Settings</span>
+      </button>
+      <button class="nav-item" data-page="apidocs" title="HTTP API Docs">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+        </svg>
+        <span>API</span>
+      </button>
+    </nav>
+    <div class="sidebar-bottom">
+      <button class="nav-item" id="sidebarAccountBtn" data-page="account" title="Tài khoản" style="margin-bottom:8px;cursor:pointer;width:48px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="pointer-events:none;">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+          <circle cx="12" cy="7" r="4"/>
+        </svg>
+        <span style="pointer-events:none;font-size:9px;">Tài khoản</span>
+      </button>
+      
+      <div class="sidebar-status">
+        <span class="status-dot" id="sidebarDot"></span>
+        <span id="sidebarStatus">0 running</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── MAIN CONTENT ── -->
+  <main class="main-content">
+
+    <!-- PAGE: Profiles -->
+    <div class="page active" id="page-profiles">
+      <div class="page-header">
+        <div>
+          <h1>Browser Profiles</h1>
+          <p class="page-sub">Quản lý profile trình duyệt Android giả lập</p>
+        </div>
+        <div class="page-actions">
+          <button class="btn-secondary" id="btnManualSyncCloud" style="background:rgba(99,102,241,0.18);border-color:rgba(99,102,241,0.4);color:#a5b4fc;font-weight:600;display:flex;align-items:center;gap:6px;" title="Đồng bộ 2 chiều hồ sơ & dữ liệu web với Cloud (Mã: 151206)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="pointer-events:none;"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><polyline points="12 13 12 9 10 11"/></svg>
+            ☁️ Đồng bộ Cloud
+          </button>
+          <button class="btn-secondary" id="btnRefreshStatus">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+            Refresh
+          </button>
+          <button class="btn-secondary" id="btnArrangeWindows" style="background:rgba(6,214,160,0.12);border-color:rgba(6,214,160,0.3);color:var(--accent2)" title="Tự động xếp gọn tất cả cửa sổ trình duyệt đang chạy thành lưới chuẩn">
+            📐 Arrange Windows
+          </button>
+          <button class="btn-secondary" id="btnBatchCreate" style="background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.3);color:var(--accent)">
+            ⚡ Batch Create
+          </button>
+          <button class="btn-primary" id="btnNewProfile">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New Profile
+          </button>
+        </div>
+      </div>
+
+      <!-- Stats bar -->
+      <div class="stats-bar">
+        <div class="stat-card">
+          <span class="stat-n" id="statTotal">0</span>
+          <span class="stat-l">Total Profiles</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-n running" id="statRunning">0</span>
+          <span class="stat-l">Running</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-n" id="statDevices">10</span>
+          <span class="stat-l">Device Types</span>
+        </div>
+      </div>
+
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <div class="search-wrap">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="searchProfiles" placeholder="Tìm kiếm profile..." autocomplete="off"/>
+        </div>
+        <div class="toolbar-right">
+          <select id="filterStatus" class="select-sm">
+            <option value="all">All Status</option>
+            <option value="running">Running</option>
+            <option value="stopped">Stopped</option>
+          </select>
+          <select id="filterBrand" class="select-sm">
+            <option value="all">All Brands</option>
+            <option value="Samsung">Samsung</option>
+            <option value="Google">Google</option>
+            <option value="Xiaomi">Xiaomi</option>
+            <option value="OPPO">OPPO</option>
+            <option value="OnePlus">OnePlus</option>
+            <option value="Vivo">Vivo</option>
+            <option value="Opera">Opera</option>
+          </select>
+          <div class="view-toggle">
+            <button class="view-btn active" id="viewGrid" title="Grid view">⊞</button>
+            <button class="view-btn" id="viewList" title="List view">☰</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Profile grid / list -->
+      <div class="profile-container" id="profileContainer">
+        <!-- Empty state -->
+        <div class="empty-state" id="emptyState">
+          <div class="empty-icon">📱</div>
+          <h3>No Profiles Yet</h3>
+          <p>Tạo profile đầu tiên để bắt đầu fake Android fingerprint</p>
+          <button class="btn-primary" onclick="document.getElementById('btnNewProfile').click()">
+            + Create First Profile
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: Devices -->
+    <div class="page" id="page-devices">
+      <div class="page-header">
+        <div>
+          <h1>Device Library</h1>
+          <p class="page-sub">10 thiết bị Android được hỗ trợ</p>
+        </div>
+      </div>
+      <div class="device-library" id="deviceLibrary"></div>
+    </div>
+
+    <!-- PAGE: Extensions -->
+    <div class="page" id="page-extensions">
+      <div class="page-header">
+        <div>
+          <h1>Chrome Extensions</h1>
+          <p class="page-sub">Quản lý tiện ích Chrome để gán vào các Profile Android</p>
+        </div>
+        <div class="page-actions">
+          <button class="btn-primary" id="btnAddExtension">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            + Add Extension (Folder)
+          </button>
+        </div>
+      </div>
+      <div class="extensions-grid" id="extensionsGrid"></div>
+      <div class="empty-state" id="extEmptyState" style="display:none">
+        <div class="empty-icon">🧩</div>
+        <h3>No Extensions Added</h3>
+        <p>Thêm tiện ích mở rộng Chrome (Unpacked Extension Folder) để sử dụng với các profile</p>
+        <button class="btn-primary" onclick="document.getElementById('btnAddExtension').click()">
+          + Add First Extension
+        </button>
+      </div>
+    </div>
+
+    <!-- PAGE: Settings -->
+    <div class="page" id="page-settings">
+      <div class="page-header">
+        <div><h1>Settings</h1><p class="page-sub">Cấu hình ứng dụng</p></div>
+      </div>
+      <div class="settings-content">
+        <div class="settings-group">
+          <h3>About</h3>
+          <div class="settings-row"><span>Version</span><span id="settingVersion">—</span></div>
+          <div class="settings-row"><span>Platform</span><span id="settingPlatform">—</span></div>
+          <div class="settings-row"><span>Electron</span><span id="settingElectron">—</span></div>
+          <div class="settings-row"><span>Node.js</span><span id="settingNode">—</span></div>
+        </div>
+        <div class="settings-group">
+          <h3>App Icon & Branding (Logo Ứng Dụng)</h3>
+          <div style="display:flex;align-items:center;gap:16px;margin-top:8px">
+            <img src="../../assets/icon.png" id="previewAppIcon" style="width:64px;height:64px;border-radius:14px;box-shadow:0 4px 15px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.1)" alt="App Icon"/>
+            <div>
+              <div style="font-weight:600;margin-bottom:4px">Logo Icon N/A Browser Cyberpunk Neon</div>
+              <div class="small muted">File Icon lưu tại: <code class="mono">cloakdroid-app/assets/icon.png</code></div>
+            </div>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h3>Window Size & Tiling (Kích Thước Cửa Sổ Thủ Công)</h3>
+          <div class="settings-row">
+            <span>Mẫu Kích Thước (Preset)</span>
+            <select id="settingWinPreset" class="form-select" style="width: 200px">
+              <option value="380x675">📱 4.0 inch (380 × 675 px)</option>
+              <option value="412x732">📱 4.7 inch (412 × 732 px)</option>
+              <option value="450x800">📱 5.5 inch (450 × 800 px)</option>
+              <option value="640x1136">🖥️ Full 640 × 1136 px</option>
+              <option value="custom">⚙️ Tùy chỉnh (Custom Width/Height)</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <span>Chiều rộng Cửa sổ (Width px)</span>
+            <input type="number" id="settingWinWidth" class="form-input" style="width:110px;text-align:center" value="380"/>
+          </div>
+          <div class="settings-row">
+            <span>Chiều cao Cửa sổ (Height px)</span>
+            <input type="number" id="settingWinHeight" class="form-input" style="width:110px;text-align:center" value="675"/>
+          </div>
+          <div style="margin-top:12px;text-align:right">
+            <button class="btn-primary" id="btnSaveWinSettings">💾 Lưu Kích Thước Cửa Sổ</button>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h3>Fingerprint Defaults</h3>
+          <div class="settings-row">
+            <span>Canvas Noise</span>
+            <label class="toggle"><input type="checkbox" id="settingCanvas" checked/><span class="toggle-slider"></span></label>
+          </div>
+          <div class="settings-row">
+            <span>WebGL Spoof</span>
+            <label class="toggle"><input type="checkbox" id="settingWebGL" checked/><span class="toggle-slider"></span></label>
+          </div>
+          <div class="settings-row">
+            <span>Battery API Fake</span>
+            <label class="toggle"><input type="checkbox" id="settingBattery" checked/><span class="toggle-slider"></span></label>
+          </div>
+          <div class="settings-row">
+            <span>Humanize Mouse</span>
+            <label class="toggle"><input type="checkbox" id="settingHuman" checked/><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+        
+        <div class="settings-group">
+          <h3>☁️ Cấu hình Supabase Cloud Sync</h3>
+          <p class="small muted" style="margin-bottom:12px">
+            Đồng bộ hồ sơ (Profiles) và dữ liệu tài khoản tự động qua hệ thống đám mây Supabase.
+          </p>
+          <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+            <label style="font-weight:500;font-size:12px">Supabase Project URL</label>
+            <input type="text" id="settingSupabaseUrl" class="form-input" style="width:100%" placeholder="https://xxxxxxxxxxxx.supabase.co"/>
+          </div>
+          <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px;margin-top:10px">
+            <label style="font-weight:500;font-size:12px">Supabase Anon Key (Public API Key)</label>
+            <input type="password" id="settingSupabaseKey" class="form-input" style="width:100%" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."/>
+          </div>
+          <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center">
+            <span id="supabaseConnStatus" class="small muted">Chưa kiểm tra</span>
+            <div style="display:flex;gap:8px">
+              <button class="btn-secondary" id="btnTestSupabase">🔍 Kiểm tra kết nối</button>
+              <button class="btn-primary" id="btnSaveSupabase">💾 Lưu Cấu hình</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h3>Verification Links</h3>
+          <button class="btn-link" onclick="window.electronAPI?.openUrl('https://bot.sannysoft.com')">🔍 bot.sannysoft.com</button>
+          <button class="btn-link" onclick="window.electronAPI?.openUrl('https://whatismybrowser.com')">🌐 whatismybrowser.com</button>
+          <button class="btn-link" onclick="window.electronAPI?.openUrl('https://fingerprintjs.github.io/fingerprintjs/')">👆 FingerprintJS Demo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: API Docs -->
+    <div class="page" id="page-apidocs">
+      <div class="page-header">
+        <div>
+          <h1>HTTP REST API</h1>
+          <p class="page-sub">Tích hợp N/A Browser với tool ngoài qua Local API</p>
+        </div>
+        <div class="page-actions">
+          <div id="apiStatusBadge" style="display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);font-size:12px;font-weight:500">
+            <span id="apiStatusDot" style="width:8px;height:8px;border-radius:50%;background:#666;display:inline-block"></span>
+            <span id="apiStatusText">Đang kiểm tra...</span>
+          </div>
+          <button class="btn-secondary" id="btnApiCheck" onclick="checkApiStatus()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+            Kiểm tra
+          </button>
+        </div>
+      </div>
+
+      <div class="api-docs-content">
+
+        <!-- Base URL Banner -->
+        <div class="api-base-url-card">
+          <div class="api-base-label">🔌 Base URL</div>
+          <div class="api-base-value mono" id="apiBaseUrl">http://127.0.0.1:9399</div>
+          <button class="api-copy-btn" onclick="copyText('http://127.0.0.1:9399', this)" title="Sao chép">⎘ Copy</button>
+        </div>
+
+        <!-- Note -->
+        <div class="api-note">
+          <span>ℹ️</span>
+          <span>API chỉ lắng nghe trên <code class="mono">127.0.0.1</code> (localhost) — hoàn toàn an toàn, không lộ ra internet. Khởi động tự động khi mở N/A Browser.</span>
+        </div>
+
+        <!-- Endpoints Table -->
+        <div class="api-section">
+          <h3 class="api-section-title">📋 Danh sách Endpoints</h3>
+          <div class="api-table-wrap">
+            <table class="api-table">
+              <thead><tr><th>Method</th><th>Endpoint</th><th>Mô tả</th></tr></thead>
+              <tbody>
+                <tr><td><span class="method-badge get">GET</span></td><td class="mono">/api/status</td><td>Kiểm tra server, đếm profiles/running</td></tr>
+                <tr><td><span class="method-badge get">GET</span></td><td class="mono">/api/profiles</td><td>Lấy toàn bộ danh sách profile</td></tr>
+                <tr><td><span class="method-badge get">GET</span></td><td class="mono">/api/profiles/:id</td><td>Lấy 1 profile theo ID</td></tr>
+                <tr><td><span class="method-badge post">POST</span></td><td class="mono">/api/profiles</td><td>Tạo mới profile</td></tr>
+                <tr><td><span class="method-badge delete">DELETE</span></td><td class="mono">/api/profiles/:id</td><td>Xóa profile + thư mục data</td></tr>
+                <tr><td><span class="method-badge get">GET</span></td><td class="mono">/api/devices</td><td>Lấy danh sách device hỗ trợ</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- POST /api/profiles -->
+        <div class="api-section">
+          <h3 class="api-section-title">✨ POST /api/profiles — Tạo Profile</h3>
+          <div class="api-params">
+            <h4 class="api-params-title">Request Body (JSON)</h4>
+            <table class="api-table">
+              <thead><tr><th>Field</th><th>Type</th><th>Bắt buộc</th><th>Mô tả</th></tr></thead>
+              <tbody>
+                <tr><td class="mono">name</td><td class="mono">string</td><td><span class="badge-required">✓ Bắt buộc</span></td><td>Tên profile</td></tr>
+                <tr><td class="mono">deviceId</td><td class="mono">string</td><td><span class="badge-optional">Optional</span></td><td>ID device (random nếu bỏ qua)</td></tr>
+                <tr><td class="mono">proxy</td><td class="mono">string|object</td><td><span class="badge-optional">Optional</span></td><td>Proxy dạng <code class="mono">host:port:user:pass</code> hoặc object</td></tr>
+                <tr><td class="mono">cityKey</td><td class="mono">string</td><td><span class="badge-optional">Optional</span></td><td>Mã tỉnh thành (<code class="mono">hcm</code>, <code class="mono">hn</code>, <code class="mono">dn</code>...) — random nếu bỏ qua</td></tr>
+                <tr><td class="mono">startUrl</td><td class="mono">string</td><td><span class="badge-optional">Optional</span></td><td>URL mở khi launch browser</td></tr>
+                <tr><td class="mono">notes</td><td class="mono">string</td><td><span class="badge-optional">Optional</span></td><td>Ghi chú</td></tr>
+                <tr><td class="mono">selectedExtensions</td><td class="mono">string[]</td><td><span class="badge-optional">Optional</span></td><td>Mảng ID extension muốn gán</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- cURL example -->
+          <div class="api-code-block">
+            <div class="api-code-header">
+              <span class="api-code-lang">cURL</span>
+              <button class="api-copy-btn" onclick="copyCode('curlCreate', this)">⎘ Copy</button>
+            </div>
+            <pre class="api-code" id="curlCreate">curl -X POST http://127.0.0.1:9399/api/profiles \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Profile Test 1",
+    "proxy": "113.187.249.230:20028:user:pass",
+    "cityKey": "hcm",
+    "startUrl": "https://bot.sannysoft.com",
+    "notes": "Tạo từ API"
+  }'</pre>
+          </div>
+
+          <!-- Python example -->
+          <div class="api-code-block">
+            <div class="api-code-header">
+              <span class="api-code-lang">Python</span>
+              <button class="api-copy-btn" onclick="copyCode('pyCreate', this)">⎘ Copy</button>
+            </div>
+            <pre class="api-code" id="pyCreate">import requests
+
+url = "http://127.0.0.1:9399/api/profiles"
+data = {
+    "name": "Profile Test 1",
+    "proxy": "113.187.249.230:20028:user:pass",
+    "cityKey": "hcm",
+    "startUrl": "https://bot.sannysoft.com",
+    "notes": "Tạo từ API"
+}
+response = requests.post(url, json=data)
+print(response.json())</pre>
+          </div>
+
+          <!-- Response example -->
+          <div class="api-code-block">
+            <div class="api-code-header">
+              <span class="api-code-lang">Response 201 Created</span>
+              <button class="api-copy-btn" onclick="copyCode('resCreate', this)">⎘ Copy</button>
+            </div>
+            <pre class="api-code" id="resCreate">{
+  "ok": true,
+  "message": "Profile đã được tạo thành công.",
+  "profile": {
+    "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+    "name": "Profile Test 1",
+    "deviceId": "samsung_s23",
+    "proxy": { "type": "http", "host": "113.187.249.230", "port": 20028, "user": "user", "pass": "pass" },
+    "cityKey": "hcm",
+    "cityName": "Hồ Chí Minh",
+    "timezone": "Asia/Ho_Chi_Minh",
+    "language": "vi-VN",
+    "createdAt": 1724486000000
+  }
+}</pre>
+          </div>
+        </div>
+
+        <!-- GET /api/profiles -->
+        <div class="api-section">
+          <h3 class="api-section-title">📋 GET /api/profiles — Lấy danh sách</h3>
+          <div class="api-code-block">
+            <div class="api-code-header">
+              <span class="api-code-lang">cURL</span>
+              <button class="api-copy-btn" onclick="copyCode('curlList', this)">⎘ Copy</button>
+            </div>
+            <pre class="api-code" id="curlList">curl http://127.0.0.1:9399/api/profiles</pre>
+          </div>
+          <div class="api-code-block">
+            <div class="api-code-header">
+              <span class="api-code-lang">Python</span>
+              <button class="api-copy-btn" onclick="copyCode('pyList', this)">⎘ Copy</button>
+            </div>
+            <pre class="api-code" id="pyList">import requests
+profiles = requests.get("http://127.0.0.1:9399/api/profiles").json()
+print(f"Tổng: {profiles['total']} profiles")
+for p in profiles['profiles']:
+    print(p['id'], p['name'])</pre>
+          </div>
+        </div>
+
+        <!-- DELETE /api/profiles/:id -->
+        <div class="api-section">
+          <h3 class="api-section-title">🗑️ DELETE /api/profiles/:id — Xóa Profile</h3>
+          <div class="api-code-block">
+            <div class="api-code-header">
+              <span class="api-code-lang">cURL</span>
+              <button class="api-copy-btn" onclick="copyCode('curlDel', this)">⎘ Copy</button>
+            </div>
+            <pre class="api-code" id="curlDel">curl -X DELETE http://127.0.0.1:9399/api/profiles/f47ac10b-58cc-4372-a567-0e02b2c3d479</pre>
+          </div>
+          <div class="api-code-block">
+            <div class="api-code-header">
+              <span class="api-code-lang">Python</span>
+              <button class="api-copy-btn" onclick="copyCode('pyDel', this)">⎘ Copy</button>
+            </div>
+            <pre class="api-code" id="pyDel">import requests
+profile_id = "f47ac10b-58cc-4372-a567-0e02b2c3d479"
+response = requests.delete(f"http://127.0.0.1:9399/api/profiles/{profile_id}")
+print(response.json())</pre>
+          </div>
+        </div>
+
+        <!-- GET /api/status -->
+        <div class="api-section">
+          <h3 class="api-section-title">💚 GET /api/status — Kiểm tra Server</h3>
+          <div class="api-code-block">
+            <div class="api-code-header">
+              <span class="api-code-lang">Response 200 OK</span>
+              <button class="api-copy-btn" onclick="copyCode('resStatus', this)">⎘ Copy</button>
+            </div>
+            <pre class="api-code" id="resStatus">{
+  "ok": true,
+  "app": "N/A Browser API",
+  "version": "1.0.0",
+  "port": 9399,
+  "profiles_count": 12,
+  "running_count": 3,
+  "timestamp": "2026-08-24T08:30:00.000Z"
+}</pre>
+          </div>
+        </div>
+
+        <!-- City Keys reference -->
+        <div class="api-section">
+          <h3 class="api-section-title">🗺️ Mã Tỉnh Thành (cityKey)</h3>
+          <div class="api-city-grid">
+            <div class="city-chip"><code>hcm</code> Hồ Chí Minh</div>
+            <div class="city-chip"><code>hn</code> Hà Nội</div>
+            <div class="city-chip"><code>dn</code> Đà Nẵng</div>
+            <div class="city-chip"><code>hp</code> Hải Phòng</div>
+            <div class="city-chip"><code>ct</code> Cần Thơ</div>
+            <div class="city-chip"><code>bd</code> Bình Dương</div>
+            <div class="city-chip"><code>bn</code> Bắc Ninh</div>
+            <div class="city-chip"><code>hue</code> Huế</div>
+            <div class="city-chip"><code>vt</code> Vũng Tàu</div>
+            <div class="city-chip"><code>qn</code> Quảng Ninh</div>
+          </div>
+        </div>
+
+        <!-- Proxy formats -->
+        <div class="api-section">
+          <h3 class="api-section-title">🔀 Định dạng Proxy hỗ trợ</h3>
+          <div class="api-code-block">
+            <div class="api-code-header"><span class="api-code-lang">Các format hợp lệ</span></div>
+            <pre class="api-code">// String format:
+"113.187.249.230:20028"                       // host:port
+"113.187.249.230:20028:user:pass"              // host:port:user:pass
+"http://user:pass@113.187.249.230:20028"       // URL format
+"socks5://user:pass@113.187.249.230:1080"      // SOCKS5
+
+// Object format:
+{ "type": "http", "host": "113.187.249.230", "port": 20028, "user": "u", "pass": "p" }</pre>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  
+    <!-- PAGE: Account -->
+    <div class="page" id="page-account">
+      <div class="page-header">
+        <div>
+          <h1>Tài khoản & Bảo mật</h1>
+          <p class="page-sub">Quản lý phiên truy cập và bảo vệ ứng dụng N/A Browser</p>
+        </div>
+      </div>
+
+      <div style="max-width: 650px; display: flex; flex-direction: column; gap: 20px;">
+        <!-- User Info Card -->
+        <div style="background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; align-items: center; gap: 20px;">
+          <div style="width: 64px; height: 64px; border-radius: 18px; background: linear-gradient(135deg, #6366f1, #06d6a0); display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800; color: #fff; box-shadow: 0 8px 24px rgba(99,102,241,0.3); flex-shrink: 0;">
+            N
+          </div>
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 6px;">
+              <h2 style="font-size: 18px; font-weight: 700; color: #fff; margin: 0;">N/A Browser</h2>
+              <span style="display: inline-flex; align-items: center; gap: 5px; background: rgba(6,214,160,0.12); border: 1px solid rgba(6,214,160,0.3); color: #06d6a0; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;">
+                <span style="width: 6px; height: 6px; border-radius: 50%; background: #06d6a0;"></span>
+                Đã mở khóa
+              </span>
+            </div>
+            <p style="color: var(--txt3); font-size: 12px; margin: 0 0 8px;">Bản quyền phần mềm N/A Browser • Phiên bản v1.0.0</p>
+            <div style="font-size: 12px; color: var(--txt2); font-family: monospace;">Mã bảo mật: <span style="background: rgba(255,255,255,0.06); padding: 2px 8px; border-radius: 6px; color: #c7d2fe;">151206</span></div>
+          </div>
+        </div>
+
+        <!-- Hot-Patch & Updates Card -->
+        <div style="background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div>
+              <h3 style="font-size: 15px; font-weight: 700; color: #fff; margin: 0 0 6px; display: flex; align-items: center; gap: 8px;">
+                ⚡ Cập nhật & Bản vá hệ thống
+                <span id="patchBadge" style="font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 12px; background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); color: #c7d2fe;">Bản gốc v1.0.0</span>
+              </h3>
+              <p style="color: var(--txt3); font-size: 12px; margin: 0;">Kiểm tra và tải các bản vá sửa lỗi nhanh (chỉ tải vài trăm KB, không cần cài lại app).</p>
+            </div>
+          </div>
+
+          <!-- Update status / result banner -->
+          <div id="updateStatusBanner" style="display: none; padding: 14px 16px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); font-size: 12px;">
+            <div id="updateTitle" style="font-weight: 600; color: #fff; margin-bottom: 4px;"></div>
+            <div id="updateChangelog" style="color: var(--txt2); font-size: 11px; margin-bottom: 12px; line-height: 1.5;"></div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+              <button id="btnApplyUpdate" class="btn-primary" style="padding: 7px 14px; font-size: 12px; display: none;">
+                ⚡ Tải & Áp dụng bản vá ngay
+              </button>
+              <button id="btnRelaunchApp" class="btn-primary" style="padding: 7px 14px; font-size: 12px; background: #06d6a0; border-color: #06d6a0; color: #070711; display: none;">
+                🔄 Khởi động lại ứng dụng
+              </button>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; gap: 10px;">
+              <button id="btnCheckUpdate" class="btn-secondary" style="display: flex; align-items: center; gap: 7px; padding: 10px 16px; border-radius: 10px; font-size: 12px; font-weight: 600; cursor: pointer;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+                Kiểm tra bản vá mới
+              </button>
+              <button id="btnResetPatch" class="btn-secondary" style="font-size: 11px; padding: 10px 14px; border-radius: 10px; color: var(--txt3); display: none;" title="Gỡ bỏ bản vá và khôi phục mã nguồn gốc ban đầu">
+                Khôi phục bản gốc
+              </button>
+            </div>
+            <span id="checkUpdateMsg" style="font-size: 11px; color: var(--txt3);"></span>
+          </div>
+        </div>
+
+        <!-- Security & Actions Card -->
+        <div style="background: var(--bg2); border: 1px solid var(--border); border-radius: 16px; padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+          <div>
+            <h3 style="font-size: 15px; font-weight: 700; color: #fff; margin: 0 0 6px;">Tùy chọn phiên làm việc</h3>
+            <p style="color: var(--txt3); font-size: 12px; margin: 0;">Khi đăng xuất, ứng dụng sẽ xóa phiên ghi nhớ và khóa ứng dụng ngay lập tức.</p>
+          </div>
+
+          <div style="display: flex; gap: 12px; margin-top: 8px;">
+            <button id="btnPageLogout" style="display: flex; align-items: center; gap: 8px; padding: 12px 20px; background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.35); border-radius: 10px; color: #ef4444; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='rgba(239,68,68,0.25)'" onmouseout="this.style.background='rgba(239,68,68,0.15)'">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              Đăng xuất / Khóa ứng dụng
+            </button>
+            <button id="btnPageLockScreen" class="btn-secondary" style="display: flex; align-items: center; gap: 8px; padding: 12px 18px; border-radius: 10px; font-size: 13px; cursor: pointer;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              Khóa tạm thời
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ══ MODAL: New/Edit Profile ══ -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">New Profile</h2>
+      <button class="modal-close" id="modalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Profile Name -->
+      <div class="form-group">
+        <label>Profile Name <span class="optional">(bỏ trống tự đặt Profile 1, 2, 3...)</span></label>
+        <input type="text" id="fName" placeholder="Profile 1" class="form-input"/>
+      </div>
+      <!-- Device Selection -->
+      <div class="form-group">
+        <label>Android Device *</label>
+        <div class="device-picker" id="devicePicker"></div>
+      </div>
+      <!-- Proxy -->
+      <div class="form-group">
+        <label>Proxy <span class="optional">(optional)</span></label>
+        <div class="proxy-row">
+          <select id="fProxyType" class="form-select">
+            <option value="">No Proxy</option>
+            <option value="http">HTTP</option>
+            <option value="socks5">SOCKS5</option>
+            <option value="socks4">SOCKS4</option>
+          </select>
+          <input type="text" id="fProxyHost" placeholder="Dán thẳng IP:Port:User:Pass..." class="form-input"/>
+        </div>
+        <div class="proxy-auth-row" id="proxyAuthRow" style="display:none">
+          <input type="text" id="fProxyUser" placeholder="Username" class="form-input"/>
+          <input type="password" id="fProxyPass" placeholder="Password" class="form-input"/>
+        </div>
+      </div>
+      <!-- Vietnam City / Province Selection -->
+      <div class="form-group">
+        <label>Tỉnh Thành Việt Nam <span class="optional">(Giả lập vị trí Geo)</span></label>
+        <select id="fCity" class="form-select">
+          <option value="random">🎲 Random Tỉnh Thành (Tự động ngẫu nhiên)</option>
+          <option value="hcm">🇻🇳 TP. Hồ Chí Minh</option>
+          <option value="hanoi">🇻🇳 Hà Nội</option>
+          <option value="danang">🇻🇳 Đà Nẵng</option>
+          <option value="haiphong">🇻🇳 Hải Phòng</option>
+          <option value="cantho">🇻🇳 Cần Thơ</option>
+          <option value="binhduong">🇻🇳 Bình Dương</option>
+          <option value="dongnai">🇻🇳 Đồng Nai</option>
+          <option value="nhatrang">🇻🇳 Khánh Hòa (Nha Trang)</option>
+          <option value="hue">🇻🇳 Thừa Thiên Huế</option>
+          <option value="quangninh">🇻🇳 Quảng Ninh (Hạ Long)</option>
+          <option value="vungtau">🇻🇳 Bà Rịa - Vũng Tàu</option>
+          <option value="dalat">🇻🇳 Lâm Đồng (Đà Lạt)</option>
+          <option value="nghean">🇻🇳 Nghệ An (Vinh)</option>
+          <option value="angiang">🇻🇳 An Giang</option>
+        </select>
+      </div>
+      <!-- Custom Window Size for Profile -->
+      <div class="form-group">
+        <label>Kích Thước Cửa Sổ Trình Duyệt <span class="optional">(Chỉnh khung hình riêng cho Profile này)</span></label>
+        <div style="display:flex;gap:10px;align-items:center">
+          <select id="fWinPreset" class="form-select" style="flex:1">
+            <option value="default">🌐 Mặc định theo Cài đặt chung (App Settings)</option>
+            <option value="380x675">📱 4.0 inch (380 × 675 px)</option>
+            <option value="412x732">📱 4.7 inch (412 × 732 px)</option>
+            <option value="450x800">📱 5.5 inch (450 × 800 px)</option>
+            <option value="640x1136">🖥️ Full 640 × 1136 px</option>
+            <option value="custom">⚙️ Tùy chỉnh (Custom Width × Height)</option>
+          </select>
+        </div>
+        <div class="win-custom-row" id="fWinCustomRow" style="display:none;margin-top:8px;gap:10px;align-items:center">
+          <input type="number" id="fWinWidth" placeholder="Width (px)" class="form-input" style="flex:1;text-align:center" value="380"/>
+          <span style="color:var(--txt3)">×</span>
+          <input type="number" id="fWinHeight" placeholder="Height (px)" class="form-input" style="flex:1;text-align:center" value="675"/>
+        </div>
+      </div>
+      <!-- Extensions Selection -->
+      <div class="form-group">
+        <label>Chrome Extensions <span class="optional">(Chọn tiện ích gán vào Profile)</span></label>
+        <div class="ext-select-list" id="fExtSelectList">
+          <div class="small muted">Chưa có extension nào trong thư viện. Thêm ở mục Extensions bên menu.</div>
+        </div>
+      </div>
+      <!-- Start URL -->
+      <div class="form-group">
+        <label>Start URL <span class="optional">(optional)</span></label>
+        <input type="text" id="fStartUrl" placeholder="https://..." class="form-input"/>
+      </div>
+      <!-- Notes -->
+      <div class="form-group">
+        <label>Notes <span class="optional">(optional)</span></label>
+        <input type="text" id="fNotes" placeholder="Ghi chú..." class="form-input"/>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="modalCancel">Cancel</button>
+      <button class="btn-primary" id="modalSave">Save Profile</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ BATCH CREATE PROFILES MODAL ══ -->
+<div class="modal-overlay" id="batchModalOverlay">
+  <div class="modal-card" style="max-width: 540px">
+    <div class="modal-header">
+      <h3 id="batchModalTitle">⚡ Batch Create Profiles (Tạo nhiều Profile)</h3>
+      <button class="modal-close" id="batchModalClose">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- Name Prefix -->
+      <div class="form-group">
+        <label>Tiền tố Tên Profile <span class="optional">(Mặc định: Profile 1, 2, 3...)</span></label>
+        <input type="text" id="bNamePrefix" placeholder="Profile" class="form-input"/>
+      </div>
+      <!-- Proxy List Textarea -->
+      <div class="form-group">
+        <label>Danh sách Proxy <span class="optional">(Mỗi dòng 1 Proxy — 1 Dòng = 1 Profile mới)</span></label>
+        <textarea id="bProxyList" rows="6" placeholder="Dán danh sách Proxy ở đây (Mỗi dòng 1 Proxy):
+113.187.249.230:20028:UU7651:7KsHB
+113.187.249.231:20028:UU7652:7KsHB
+user:pass@113.187.249.232:20028" class="form-input mono" style="font-size:11px;line-height:1.5;resize:vertical;height:120px"></textarea>
+      </div>
+      <div class="form-group" style="display:flex;gap:10px">
+        <div style="flex:1">
+          <label>Loại Proxy</label>
+          <select id="bProxyType" class="form-select">
+            <option value="http">HTTP / HTTPS</option>
+            <option value="socks5">SOCKS5</option>
+            <option value="socks4">SOCKS4</option>
+          </select>
+        </div>
+        <div style="flex:1">
+          <label>Thiết bị Android</label>
+          <select id="bDeviceMode" class="form-select">
+            <option value="random">🎲 Random Thiết bị (Xoay vòng)</option>
+          </select>
+        </div>
+      </div>
+      <!-- City & Extensions -->
+      <div class="form-group">
+        <label>Tỉnh Thành Việt Nam</label>
+        <select id="bCity" class="form-select">
+          <option value="random">🎲 Random Tỉnh Thành cho từng Profile</option>
+          <option value="hcm">🇻🇳 TP. Hồ Chí Minh</option>
+          <option value="hanoi">🇻🇳 Hà Nội</option>
+          <option value="danang">🇻🇳 Đà Nẵng</option>
+          <option value="haiphong">🇻🇳 Hải Phòng</option>
+          <option value="cantho">🇻🇳 Cần Thơ</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Chrome Extensions <span class="optional">(Gán vào tất cả profile tạo mới)</span></label>
+        <div class="ext-select-list" id="bExtSelectList">
+          <div class="small muted">Chưa có extension nào trong thư viện. Thêm ở mục Extensions bên menu.</div>
+        </div>
+      </div>
+      <!-- Start URL -->
+      <div class="form-group">
+        <label>Start URL <span class="optional">(optional)</span></label>
+        <input type="text" id="bStartUrl" placeholder="https://bot.sannysoft.com" class="form-input"/>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="batchModalCancel">Hủy bỏ</button>
+      <button class="btn-primary" id="batchModalSave">⚡ Tạo Hàng Loạt Profile</button>
+    </div>
+</div>
+
+<!-- ══ ARRANGE WINDOWS LAYOUT MODAL (Tùy chỉnh cài đặt bố cục) ══ -->
+<div class="modal-overlay" id="arrangeModalOverlay">
+  <div class="modal-card" style="max-width: 560px">
+    <div class="modal-header">
+      <h3 id="arrangeModalTitle">Tùy chỉnh cài đặt</h3>
+      <button class="modal-close" id="arrangeModalClose">✕</button>
+    </div>
+    <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
+      <!-- Màn hình -->
+      <div class="form-group-row">
+        <label class="fg-label">Màn hình</label>
+        <select id="arrScreen" class="form-select" style="flex:1">
+          <option value="0">Màn hình chính</option>
+        </select>
+      </div>
+      <!-- Cách trình bày -->
+      <div class="form-group-row">
+        <label class="fg-label">Cách trình bày</label>
+        <div class="segmented-toggle">
+          <button class="seg-btn active" id="arrBtnModeGrid" data-mode="grid">Bố cục lưới</button>
+          <button class="seg-btn" id="arrBtnModeCascade" data-mode="cascade">Chồng chéo</button>
+        </div>
+      </div>
+      <!-- Thích nghi -->
+      <div class="form-group-row">
+        <label class="fg-label">Thích nghi</label>
+        <div style="flex:1;display:flex;align-items:center;gap:10px">
+          <label class="toggle">
+            <input type="checkbox" id="arrAutoAdapt"/>
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="small muted">Tự động sắp xếp các cấu hình đã chọn theo độ phân giải màn hình của bạn</span>
+        </div>
+      </div>
+      <!-- Vị trí bắt đầu -->
+      <div class="form-group-row">
+        <label class="fg-label">Vị trí bắt đầu</label>
+        <div class="inline-inputs">
+          <span class="input-tag">X</span>
+          <input type="number" id="arrStartX" value="10" class="form-input num-sm"/>
+          <span class="input-tag">Y</span>
+          <input type="number" id="arrStartY" value="10" class="form-input num-sm"/>
+        </div>
+      </div>
+      <!-- Kích thước hồ sơ -->
+      <div class="form-group-row">
+        <label class="fg-label">Kích thước hồ sơ</label>
+        <div class="inline-inputs">
+          <span class="input-tag">Chiều rộng</span>
+          <input type="number" id="arrWinWidth" value="380" class="form-input num-sm"/>
+          <span class="input-tag">Cao</span>
+          <input type="number" id="arrWinHeight" value="675" class="form-input num-sm"/>
+        </div>
+      </div>
+      <!-- Khoảng cách hồ sơ -->
+      <div class="form-group-row">
+        <label class="fg-label">Khoảng cách hồ sơ</label>
+        <div class="inline-inputs">
+          <span class="input-tag">Nằm ngang</span>
+          <input type="number" id="arrGapX" value="10" class="form-input num-sm"/>
+          <span class="input-tag">Thẳng đứng</span>
+          <input type="number" id="arrGapY" value="10" class="form-input num-sm"/>
+        </div>
+      </div>
+      <!-- Số hồ sơ trên mỗi dòng -->
+      <div class="form-group-row" id="rowColsPerRow">
+        <label class="fg-label">Số hồ sơ</label>
+        <div class="inline-inputs">
+          <input type="number" id="arrColsPerRow" value="3" class="form-input num-sm"/>
+          <span class="small muted">(các) hồ sơ trên mỗi dòng</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn-secondary" id="arrBtnReset">Cài lại</button>
+      <div style="display:flex;gap:10px">
+        <button class="btn-secondary" id="arrBtnCancel">Hủy bỏ</button>
+        <button class="btn-primary" id="arrBtnApply">Bắt đầu bố cục</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ CONFIRM MODAL ══ -->
+<div class="confirm-overlay" id="confirmOverlay">
+  <div class="confirm-card">
+    <div class="confirm-icon" id="confirmIcon">🧹</div>
+    <h3 class="confirm-title" id="confirmTitle">Xác nhận</h3>
+    <p class="confirm-msg" id="confirmMsg">Bạn có chắc chắn muốn thực hiện?</p>
+    <p class="confirm-sub" id="confirmSub"></p>
+    <div class="confirm-actions">
+      <button class="btn-secondary" id="confirmCancelBtn">Hủy bỏ</button>
+      <button class="btn-primary" id="confirmOkBtn">Xác nhận</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ TOAST ══ -->
+
+
+
+<div class="toast-container" id="toastContainer"></div>
+
+
+<!-- Account Modal Popup -->
+<div class="confirm-overlay" id="accountModalOverlay">
+  <div class="confirm-card" style="max-width:340px;text-align:center;padding:24px 20px;">
+    <div style="width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,#6366f1,#06d6a0);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:22px;font-weight:700;color:#fff;box-shadow:0 8px 24px rgba(99,102,241,0.35);">
+      N
+    </div>
+    <h3 style="font-size:16px;font-weight:700;color:#fff;margin:0 0 4px;">N/A Browser</h3>
+    <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(6,214,160,0.12);border:1px solid rgba(6,214,160,0.3);color:#06d6a0;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;margin-bottom:12px;">
+      <span style="width:6px;height:6px;border-radius:50%;background:#06d6a0;"></span>
+      Đã xác thực
+    </div>
+    <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-bottom:18px;">
+      Mã PIN: 151206
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button id="btnLogoutApp" style="width:100%;padding:11px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);border-radius:10px;color:#ef4444;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s;" onmouseover="this.style.background='rgba(239,68,68,0.22)'" onmouseout="this.style.background='rgba(239,68,68,0.12)'">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="pointer-events:none;"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Khóa / Đăng xuất
+      </button>
+      <button id="btnCloseAccountModal" class="btn-secondary" style="width:100%;padding:9px;border-radius:10px;font-size:12px;cursor:pointer;">
+        Đóng
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
