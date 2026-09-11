@@ -1,9 +1,9 @@
 {
-  "version": "1.0.2",
-  "patchNumber": 2,
-  "title": "Bản vá Hot-Patch #2",
-  "changelog": "Khoi tao he thong Ban va Hot-Patch OTA NA Browser",
-  "updatedAt": "2026-09-11T12:07:11.134Z",
+  "version": "1.0.3",
+  "patchNumber": 3,
+  "title": "Bản vá Hot-Patch #3",
+  "changelog": "Sua triet de loi xoa profile: xoa vinh vien tren Supabase Cloud va ngan profile cu tai sinh khi dong bo",
+  "updatedAt": "2026-09-11T12:21:22.102Z",
   "files": [
     {
       "filename": "app.js",

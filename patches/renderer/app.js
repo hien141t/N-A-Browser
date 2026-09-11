@@ -464,9 +464,8 @@ async function deleteProfileData(profileId) {
     // 1. Xóa khỏi danh sách & cập nhật UI ngay
     profiles = profiles.filter(p => p.id !== profileId);
     renderProfiles();
-    await API.saveProfiles(profiles);
 
-    // 2. Gọi backend: kill process + xóa thư mục ổ đĩa
+    // 2. Gọi backend: kill process + xóa thư mục ổ đĩa + xóa vĩnh viễn trên Cloud
     const res = await API.deleteProfile(profileId);
     if (res && res.ok) {
       toast(`🗑️ Đã xóa hoàn toàn "${name}" & thư mục dữ liệu!`, 'info');
