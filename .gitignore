@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Electron build outputs
+dist/
+release/
+build/
+*.exe
+*.app
+*.AppImage
+*.deb
+*.zip
+
+# Profile & Runtime data (Dữ liệu cá nhân của người dùng)
+profile_icons/
+profiles/
+profiles.json
+settings.json
+extensions.json
+custom_extensions/
+patches/
+
+# Credentials & Private Config
+supabase_config.json
+
+# AI Assistant configs & OS metadata
+.claude/
+.gemini/
+.mcp.json
+.DS_Store
+Thumbs.db
+*.log

@@ -1,0 +1,13 @@
+{
+  "version": "1.0.1",
+  "patchNumber": 1,
+  "releaseDate": "2026-09-11",
+  "title": "Bản vá v1.0.1: Cải tiến hệ thống Tài khoản",
+  "changelog": "• Cập nhật giao diện Tài khoản & Bảo mật\n• Sửa lỗi click nút tài khoản\n• Tích hợp tính năng cập nhật bản vá nóng (OTA)",
+  "files": [
+    {
+      "filename": "test_patch.txt",
+      "content": "Hot-patch test successful!"
+    }
+  ]
+}

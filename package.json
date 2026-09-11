@@ -1,0 +1,51 @@
+{
+  "name": "na-browser",
+  "version": "1.0.0",
+  "description": "Android Fingerprint Browser Manager",
+  "main": "main.js",
+  "scripts": {
+    "start": "LD_LIBRARY_PATH=./libs:$LD_LIBRARY_PATH electron . --no-sandbox",
+    "start:win": "electron .",
+    "dev": "electron .",
+    "build:linux": "electron-builder --linux",
+    "build:deb": "electron-builder --linux deb",
+    "build:appimage": "electron-builder --linux AppImage",
+    "build:win": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.nabrowser.app",
+    "productName": "N/A Browser",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Utility",
+      "icon": "src/assets/icon.png"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "src/assets/icon.png"
+    }
+  },
+  "devDependencies": {
+    "electron": "^36.4.0",
+    "electron-builder": "^26.0.12"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
+    "cloakbrowser": "^0.5.3",
+    "puppeteer-core": "^25.5.0"
+  }
+}
