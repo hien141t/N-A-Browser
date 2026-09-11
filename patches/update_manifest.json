@@ -1,9 +1,9 @@
 {
-  "version": "1.0.4",
-  "patchNumber": 4,
-  "title": "Bản vá Hot-Patch #4",
-  "changelog": "Dong bo triet de: May chu Cloud lam nguon chuan, xoa o may chinh thi may phu dong bo se bien mat ngay lap tuc",
-  "updatedAt": "2026-09-11T12:31:49.571Z",
+  "version": "1.0.5",
+  "patchNumber": 5,
+  "title": "Bản vá Hot-Patch #5: Cập nhật Tool i9 Auto Register",
+  "changelog": "Cap nhat tien ich Tool i9 Auto Register cho may Linux va Windows",
+  "updatedAt": "2026-09-11T12:38:57.582Z",
   "files": [
     {
       "filename": "app.js",
@@ -16,6 +16,91 @@
     {
       "filename": "style.css",
       "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/renderer/style.css"
+    },
+    {
+      "filename": "background.js",
+      "dest": "custom_extensions/ext_1786469361479/background.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/background.js"
+    },
+    {
+      "filename": "content.js",
+      "dest": "custom_extensions/ext_1786469361479/content.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/content.js"
+    },
+    {
+      "filename": "copy_diem.py",
+      "dest": "custom_extensions/ext_1786469361479/copy_diem.py",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/copy_diem.py"
+    },
+    {
+      "filename": "get_points.py",
+      "dest": "custom_extensions/ext_1786469361479/get_points.py",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/get_points.py"
+    },
+    {
+      "filename": "get_points_200.py",
+      "dest": "custom_extensions/ext_1786469361479/get_points_200.py",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/get_points_200.py"
+    },
+    {
+      "filename": "get_points_bulk.py",
+      "dest": "custom_extensions/ext_1786469361479/get_points_bulk.py",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/get_points_bulk.py"
+    },
+    {
+      "filename": "get_points_kiot.py",
+      "dest": "custom_extensions/ext_1786469361479/get_points_kiot.py",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/get_points_kiot.py"
+    },
+    {
+      "filename": "get_points_stealth.py",
+      "dest": "custom_extensions/ext_1786469361479/get_points_stealth.py",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/get_points_stealth.py"
+    },
+    {
+      "filename": "icon128.png",
+      "dest": "custom_extensions/ext_1786469361479/icon128.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/icon128.png"
+    },
+    {
+      "filename": "kiot_proxy.py",
+      "dest": "custom_extensions/ext_1786469361479/kiot_proxy.py",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/kiot_proxy.py"
+    },
+    {
+      "filename": "local_ocr_server.py",
+      "dest": "custom_extensions/ext_1786469361479/local_ocr_server.py",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/local_ocr_server.py"
+    },
+    {
+      "filename": "manifest.json",
+      "dest": "custom_extensions/ext_1786469361479/manifest.json",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/manifest.json"
+    },
+    {
+      "filename": "popup.html",
+      "dest": "custom_extensions/ext_1786469361479/popup.html",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/popup.html"
+    },
+    {
+      "filename": "popup.js",
+      "dest": "custom_extensions/ext_1786469361479/popup.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/popup.js"
+    },
+    {
+      "filename": "README.md",
+      "dest": "custom_extensions/ext_1786469361479/README.md",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/README.md"
+    },
+    {
+      "filename": "run_local_ocr.bat",
+      "dest": "custom_extensions/ext_1786469361479/run_local_ocr.bat",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/run_local_ocr.bat"
+    },
+    {
+      "filename": "extensions.json",
+      "dest": "extensions.json",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/extensions.json"
     }
   ]
 }

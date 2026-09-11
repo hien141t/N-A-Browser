@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "tool hi88 N/A",
+  "version": "2.0",
+  "description": "Tự động đăng ký, điền form, giải captcha OCR qua ddddocr server",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "tabs",
+    "storage"
+  ],
+  "icons": {
+    "128": "icon128.png"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "128": "icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "host_permissions": [
+    "*://*.hi2033.com/*",
+    "*://*.hi1955.com/*",
+    "*://*.hi2777.com/*",
+    "*://*.hi889999.com/*",
+    "http://127.0.0.1:5588/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.hi2033.com/*",
+        "*://*.hi1955.com/*",
+        "*://*.hi2777.com/*",
+        "*://*.hi889999.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

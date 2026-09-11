@@ -1,7 +1,7 @@
 {
-  "patchNumber": 3,
-  "version": "1.0.3",
-  "title": "Bản vá Hot-Patch #3",
-  "changelog": "Sua triet de loi xoa profile: xoa vinh vien tren Supabase Cloud va ngan profile cu tai sinh khi dong bo",
-  "appliedAt": "2026-09-11T12:26:53.723Z"
+  "patchNumber": 4,
+  "version": "1.0.4",
+  "title": "Bản vá Hot-Patch #4",
+  "changelog": "Dong bo triet de: May chu Cloud lam nguon chuan, xoa o may chinh thi may phu dong bo se bien mat ngay lap tuc",
+  "appliedAt": "2026-09-11T12:33:05.770Z"
 }
