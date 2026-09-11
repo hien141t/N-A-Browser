@@ -723,32 +723,50 @@ function setChromiumWindowPreferences(profileDir, posX, posY, winW, winH, profil
   }
 }
 
-// Generate custom PNG icon with N/A Browser logo + profile number badge at bottom
-function generateProfileIcon(profileNum) {
+// Generate custom PNG & ICO icon with N/A Browser logo + profile number badge
+function generateProfileIcon(profileNum, chromeBin) {
   try {
     const iconDir = path.join(APP_DATA_DIR, 'profile_icons');
     fs.mkdirSync(iconDir, { recursive: true });
 
     const pngPath = path.join(iconDir, `profile_${profileNum}.png`);
+    const icoPath = path.join(iconDir, `profile_${profileNum}.ico`);
     const baseIconPath = path.join(__dirname, 'assets', 'icon.png');
-    const labelText = `#${profileNum}`;
 
+    if (process.platform === 'win32') {
+      const psScript = path.join(__dirname, 'generate_profile_icon.ps1');
+      if (!fs.existsSync(icoPath) && fs.existsSync(psScript)) {
+        try {
+          const { execSync } = require('child_process');
+          execSync(`powershell -NoProfile -ExecutionPolicy Bypass -File "${psScript}" -baseIconPath "${baseIconPath}" -profileNum ${profileNum} -outputDir "${iconDir}" -chromeBin "${chromeBin || ''}"`, { stdio: 'ignore' });
+        } catch(e) {
+          console.error('[Generate Windows Profile Icon Error]', e);
+        }
+      }
+      return {
+        pngPath: fs.existsSync(pngPath) ? pngPath : baseIconPath,
+        icoPath: fs.existsSync(icoPath) ? icoPath : baseIconPath
+      };
+    }
+
+    // Linux
+    const labelText = `#${profileNum}`;
     const { execSync } = require('child_process');
     try {
       const convertBin = fs.existsSync('/usr/bin/magick') ? 'magick convert' : 'convert';
       const cmd = `${convertBin} "${baseIconPath}" -resize 256x256 -stroke "#00f0ff" -strokewidth 4 -fill "#0a0a24" -draw "roundrectangle 72,194 184,242 24,24" -stroke none -fill "#ffffff" -pointsize 26 -gravity center -draw "text 0,95 '${labelText}'" "${pngPath}"`;
       execSync(cmd, { stdio: 'ignore' });
-      if (fs.existsSync(pngPath) && fs.statSync(pngPath).size > 1000) {
-        return pngPath;
-      }
-    } catch(e) {
-      console.error('[ImageMagick convert error]', e);
-    }
-
-    return baseIconPath;
+    } catch(e) {}
+    return {
+      pngPath: fs.existsSync(pngPath) ? pngPath : baseIconPath,
+      icoPath: pngPath
+    };
   } catch(err) {
     console.error('[Generate Profile Icon Error]', err);
-    return path.join(__dirname, 'assets', 'icon.png');
+    return {
+      pngPath: path.join(__dirname, 'assets', 'icon.png'),
+      icoPath: path.join(__dirname, 'assets', 'icon.png')
+    };
   }
 }
 
@@ -1012,8 +1030,8 @@ ipcMain.handle('browser:launch', async (event, profile) => {
       profileNum = match ? parseInt(match[0]) : 1;
     }
 
-    const profileIconPath = generateProfileIcon(profileNum);
-    const wmClass = createProfileDesktopFile(profile, profileNum, profileIconPath);
+    const profileIcon = generateProfileIcon(profileNum);
+    const wmClass = process.platform === 'linux' ? createProfileDesktopFile(profile, profileNum, profileIcon.pngPath) : '';
 
     // Auto-calculate position on screen grid so windows don't overlap
     const runningCount = launchedBrowsers.size;
@@ -1076,6 +1094,8 @@ ipcMain.handle('browser:launch', async (event, profile) => {
 
     if (process.platform === 'linux') {
       chromeArgs.unshift(`--class=${wmClass}`, `--name=${wmClass}`);
+    } else if (process.platform === 'win32') {
+      chromeArgs.unshift(`--app-id=NABrowser.Profile.${profileNum}`);
     }
 
     if (profile.device && profile.device.timezone) {
@@ -1168,6 +1188,21 @@ ipcMain.handle('browser:launch', async (event, profile) => {
     }
 
     const proc = spawn(chromeBin, chromeArgs, { detached: true, stdio: 'ignore' });
+
+    // Windows: Apply badged taskbar icon to Chrome window
+    if (process.platform === 'win32' && proc.pid) {
+      const applyScript = path.join(__dirname, 'apply_window_icon.ps1');
+      if (fs.existsSync(applyScript)) {
+        const { spawn: spawnBg } = require('child_process');
+        spawnBg('powershell', [
+          '-NoProfile',
+          '-ExecutionPolicy', 'Bypass',
+          '-File', applyScript,
+          '-targetPid', String(proc.pid),
+          '-icoPath', profileIcon.icoPath
+        ], { detached: true, stdio: 'ignore' }).unref();
+      }
+    }
 
     return new Promise((resolve) => {
       proc.on('error', (err) => {
