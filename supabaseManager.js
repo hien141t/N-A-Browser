@@ -248,6 +248,17 @@ class SupabaseManager {
     return { ok: true, configured: true, loggedIn: false };
   }
 
+  async ensureAuth() {
+    if (!this.client) this.initClient();
+    if (!this.currentUser) {
+      await this.restoreSession();
+    }
+    if (!this.currentUser) {
+      await this.loginWithPin('151206');
+    }
+    return !!this.currentUser;
+  }
+
   // --- Profile Synchronization ---
   toRemoteRow(p, userId) {
     let remoteNotes = p.notes || '';
@@ -314,6 +325,7 @@ class SupabaseManager {
   }
 
   async pullProfiles() {
+    await this.ensureAuth();
     if (!this.client || !this.currentUser) {
       return { ok: false, error: 'Chưa đăng nhập tài khoản Supabase!' };
     }
@@ -336,6 +348,7 @@ class SupabaseManager {
   }
 
   async pushSingleProfile(profile) {
+    await this.ensureAuth();
     if (!this.client || !this.currentUser) {
       return { ok: false, error: 'Chưa đăng nhập' };
     }
@@ -353,6 +366,7 @@ class SupabaseManager {
   }
 
   async deleteRemoteProfile(profileId) {
+    await this.ensureAuth();
     if (!this.client || !this.currentUser) {
       return { ok: false, error: 'Chưa đăng nhập' };
     }
@@ -363,7 +377,11 @@ class SupabaseManager {
         .eq('id', String(profileId))
         .eq('user_id', this.currentUser.id);
 
-      if (error) return { ok: false, error: error.message };
+      if (error) {
+        console.error('[SupabaseManager] deleteRemoteProfile error:', error);
+        return { ok: false, error: error.message };
+      }
+      console.log(`[SupabaseManager] ✅ Đã xóa vĩnh viễn profile ${profileId} trên Supabase Cloud!`);
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -371,6 +389,7 @@ class SupabaseManager {
   }
 
   async pushAllProfiles(localProfiles) {
+    await this.ensureAuth();
     if (!this.client || !this.currentUser) {
       return { ok: false, error: 'Chưa đăng nhập' };
     }

@@ -607,19 +607,19 @@ ipcMain.handle('sync:pullProfiles', async () => {
       } catch (e) { localProfiles = []; }
     }
 
-    const localMap = new Map();
-    localProfiles.forEach(p => localMap.set(String(p.id), p));
+    const remoteProfiles = result.profiles || [];
+    const remoteIdSet = new Set(remoteProfiles.map(p => String(p.id)));
 
-    for (const rp of result.profiles) {
-      localMap.set(String(rp.id), {
-        ...(localMap.get(String(rp.id)) || {}),
-        ...rp
-      });
-    }
+    // Giữ lại local profile chỉ nếu vừa mới tạo trong vòng 2 phút (chưa kịp push)
+    const recentlyCreatedLocal = localProfiles.filter(p => {
+      const isNew = p.createdAt && (Date.now() - p.createdAt < 120000);
+      return !remoteIdSet.has(String(p.id)) && isNew;
+    });
 
-    const merged = Array.from(localMap.values());
-    fs.writeFileSync(profilePath, JSON.stringify(merged, null, 2), 'utf-8');
-    return { ok: true, profiles: merged, count: result.profiles.length };
+    // Cloud là nguồn chân lý: hồ sơ đã xóa trên Cloud sẽ không hồi sinh
+    const finalProfiles = [...remoteProfiles, ...recentlyCreatedLocal];
+    fs.writeFileSync(profilePath, JSON.stringify(finalProfiles, null, 2), 'utf-8');
+    return { ok: true, profiles: finalProfiles, count: finalProfiles.length };
   } catch (err) {
     return { ok: false, error: err.message };
   }
@@ -1391,13 +1391,21 @@ ipcMain.handle('profile:delete', async (event, profileId) => {
     // 2. Chờ thêm 800ms để Windows xả File Lock
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    // 3. Xóa cấu hình trong profiles.json
+    // 3. Xóa vĩnh viễn trên Supabase Cloud
+    try {
+      if (supabaseManager) {
+        await supabaseManager.deleteRemoteProfile(profileId);
+      }
+    } catch(e) {
+      console.warn('[Cloud Delete Warning]', e.message);
+    }
+
+    // 4. Xóa cấu hình trong profiles.json
     const profilesPath = path.join(APP_DATA_DIR, 'profiles.json');
     if (fs.existsSync(profilesPath)) {
       try {
         let profiles = JSON.parse(fs.readFileSync(profilesPath, 'utf-8'));
         profiles = profiles.filter(p => p.id !== profileId);
-        supabaseManager.deleteRemoteProfile(profileId).catch(()=>{});
         fs.writeFileSync(profilesPath, JSON.stringify(profiles, null, 2));
       } catch(e){}
     }
