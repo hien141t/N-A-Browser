@@ -1540,12 +1540,7 @@ ipcMain.handle('updater:checkPatch', async (event, customUrl) => {
     }
 
     if (!manifestUrl) {
-      const localManifest = path.join(APP_DATA_DIR, 'update_manifest.json');
-      if (fs.existsSync(localManifest)) {
-        const data = JSON.parse(fs.readFileSync(localManifest, 'utf-8'));
-        return { ok: true, source: 'local', ...data };
-      }
-      return { ok: false, error: 'Chưa cấu hình đường dẫn máy chủ kiểm tra bản vá (Update URL)!' };
+      manifestUrl = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/update_manifest.json';
     }
 
     const resp = await fetch(manifestUrl, { headers: { 'Cache-Control': 'no-cache' } });

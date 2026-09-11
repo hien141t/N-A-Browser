@@ -21,8 +21,6 @@ profiles.json
 settings.json
 extensions.json
 custom_extensions/
-patches/
-
 # Credentials & Private Config
 supabase_config.json
 

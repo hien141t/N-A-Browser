@@ -10,7 +10,8 @@
     "build:linux": "electron-builder --linux",
     "build:deb": "electron-builder --linux deb",
     "build:appimage": "electron-builder --linux AppImage",
-    "build:win": "electron-builder --win"
+    "build:win": "electron-builder --win",
+    "patch": "node publish_patch.js"
   },
   "build": {
     "appId": "com.nabrowser.app",
@@ -21,7 +22,12 @@
     "files": [
       "main.js",
       "preload.js",
-      "src/**/*"
+      "supabaseManager.js",
+      "generate_profile_icon.ps1",
+      "apply_window_icon.ps1",
+      "src/**/*",
+      "assets/**/*",
+      "libs/**/*"
     ],
     "linux": {
       "target": [
