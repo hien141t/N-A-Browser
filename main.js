@@ -636,6 +636,115 @@ ipcMain.handle('sync:pushProfiles', async () => {
   return supabaseManager.pushAllProfiles(localProfiles);
 });
 
+// --- Hot-Patch & OTA Auto-Updater IPC ---
+const PATCHES_DIR = path.join(APP_DATA_DIR, 'patches');
+const PATCH_INFO_FILE = path.join(PATCHES_DIR, 'patch_info.json');
+
+ipcMain.handle('updater:getPatchInfo', async () => {
+  const currentPatch = fs.existsSync(PATCH_INFO_FILE) ? JSON.parse(fs.readFileSync(PATCH_INFO_FILE, 'utf-8')) : null;
+  return {
+    appVersion: app.getVersion(),
+    hasPatch: fs.existsSync(path.join(APP_DATA_DIR, 'patches', 'renderer', 'index.html')),
+    currentPatch: currentPatch,
+    patchesDir: PATCHES_DIR
+  };
+});
+
+ipcMain.handle('updater:checkPatch', async (event, customUrl) => {
+  try {
+    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
+    let manifestUrl = customUrl;
+    if (!manifestUrl && fs.existsSync(settingsPath)) {
+      try {
+        const s = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+        manifestUrl = s.updateManifestUrl;
+      } catch(e) {}
+    }
+
+    if (!manifestUrl) {
+      manifestUrl = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/update_manifest.json';
+    }
+
+    const resp = await fetch(manifestUrl, { headers: { 'Cache-Control': 'no-cache' } });
+    if (!resp.ok) return { ok: false, error: 'Máy chủ phản hồi mã lỗi HTTP: ' + resp.status };
+    const manifest = await resp.json();
+    return { ok: true, source: 'remote', ...manifest };
+  } catch (err) {
+    return { ok: false, error: 'Không thể kết nối máy chủ kiểm tra bản vá: ' + err.message };
+  }
+});
+
+ipcMain.handle('updater:applyPatch', async (event, patchData) => {
+  try {
+    if (!patchData || !Array.isArray(patchData.files) || patchData.files.length === 0) {
+      return { ok: false, error: 'Dữ liệu bản vá không hợp lệ hoặc danh sách file rỗng!' };
+    }
+
+    const targetRendererDir = path.join(APP_DATA_DIR, 'patches', 'renderer');
+    fs.mkdirSync(targetRendererDir, { recursive: true });
+
+    // Copy base renderer files if not existing in patches dir yet
+    const baseRendererDir = path.join(__dirname, 'src', 'renderer');
+    if (fs.existsSync(baseRendererDir)) {
+      const baseFiles = fs.readdirSync(baseRendererDir);
+      for (const bf of baseFiles) {
+        const dest = path.join(targetRendererDir, bf);
+        const src = path.join(baseRendererDir, bf);
+        if (!fs.existsSync(dest) && fs.statSync(src).isFile()) {
+          fs.copyFileSync(src, dest);
+        }
+      }
+    }
+
+    // Download/write each patch file
+    for (const f of patchData.files) {
+      const destPath = path.join(targetRendererDir, f.filename);
+      if (f.content) {
+        fs.writeFileSync(destPath, f.content, 'utf-8');
+      } else if (f.url) {
+        const fileResp = await fetch(f.url, { headers: { 'Cache-Control': 'no-cache' } });
+        if (!fileResp.ok) throw new Error('Lỗi tải file ' + f.filename + ': HTTP ' + fileResp.status);
+        const text = await fileResp.text();
+        fs.writeFileSync(destPath, text, 'utf-8');
+      }
+    }
+
+    // Save patch_info.json
+    const info = {
+      patchNumber: patchData.patchNumber || 1,
+      version: patchData.version || app.getVersion(),
+      title: patchData.title || 'Bản vá cập nhật',
+      changelog: patchData.changelog || '',
+      appliedAt: new Date().toISOString()
+    };
+    fs.writeFileSync(PATCH_INFO_FILE, JSON.stringify(info, null, 2), 'utf-8');
+
+    return { ok: true, message: 'Đã áp dụng bản vá thành công!' };
+  } catch (err) {
+    return { ok: false, error: 'Áp dụng bản vá thất bại: ' + err.message };
+  }
+});
+
+ipcMain.handle('updater:relaunch', async () => {
+  app.relaunch();
+  app.exit(0);
+});
+
+ipcMain.handle('updater:resetPatches', async () => {
+  try {
+    if (fs.existsSync(PATCHES_DIR)) {
+      fs.rmSync(PATCHES_DIR, { recursive: true, force: true });
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      const origHtml = path.join(__dirname, 'src', 'renderer', 'index.html');
+      mainWindow.loadFile(origHtml);
+    }
+    return { ok: true, message: 'Đã khôi phục về bản gốc của phần mềm!' };
+  } catch(err) {
+    return { ok: false, error: err.message };
+  }
+});
+
 
 
 
@@ -1521,116 +1630,6 @@ function generateFingerprintScript(device) {
     nativeToStrings.set(fn, str);
     try {
       Object.defineProperty(fn, 'name', { value: fnName, configurable: true });
-
-// --- Hot-Patch & OTA Auto-Updater IPC ---
-const PATCHES_DIR = path.join(APP_DATA_DIR, 'patches');
-const PATCH_INFO_FILE = path.join(PATCHES_DIR, 'patch_info.json');
-
-ipcMain.handle('updater:getPatchInfo', async () => {
-  const currentPatch = fs.existsSync(PATCH_INFO_FILE) ? JSON.parse(fs.readFileSync(PATCH_INFO_FILE, 'utf-8')) : null;
-  return {
-    appVersion: app.getVersion(),
-    hasPatch: fs.existsSync(path.join(APP_DATA_DIR, 'patches', 'renderer', 'index.html')),
-    currentPatch: currentPatch,
-    patchesDir: PATCHES_DIR
-  };
-});
-
-ipcMain.handle('updater:checkPatch', async (event, customUrl) => {
-  try {
-    const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
-    let manifestUrl = customUrl;
-    if (!manifestUrl && fs.existsSync(settingsPath)) {
-      try {
-        const s = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-        manifestUrl = s.updateManifestUrl;
-      } catch(e) {}
-    }
-
-    if (!manifestUrl) {
-      manifestUrl = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/update_manifest.json';
-    }
-
-    const resp = await fetch(manifestUrl, { headers: { 'Cache-Control': 'no-cache' } });
-    if (!resp.ok) return { ok: false, error: 'Máy chủ phản hồi mã lỗi HTTP: ' + resp.status };
-    const manifest = await resp.json();
-    return { ok: true, source: 'remote', ...manifest };
-  } catch (err) {
-    return { ok: false, error: 'Không thể kết nối máy chủ kiểm tra bản vá: ' + err.message };
-  }
-});
-
-ipcMain.handle('updater:applyPatch', async (event, patchData) => {
-  try {
-    if (!patchData || !Array.isArray(patchData.files) || patchData.files.length === 0) {
-      return { ok: false, error: 'Dữ liệu bản vá không hợp lệ hoặc danh sách file rỗng!' };
-    }
-
-    const targetRendererDir = path.join(APP_DATA_DIR, 'patches', 'renderer');
-    fs.mkdirSync(targetRendererDir, { recursive: true });
-
-    // Copy base renderer files if not existing in patches dir yet
-    const baseRendererDir = path.join(__dirname, 'src', 'renderer');
-    if (fs.existsSync(baseRendererDir)) {
-      const baseFiles = fs.readdirSync(baseRendererDir);
-      for (const bf of baseFiles) {
-        const dest = path.join(targetRendererDir, bf);
-        const src = path.join(baseRendererDir, bf);
-        if (!fs.existsSync(dest) && fs.statSync(src).isFile()) {
-          fs.copyFileSync(src, dest);
-        }
-      }
-    }
-
-    // Download/write each patch file
-    for (const f of patchData.files) {
-      const destPath = path.join(targetRendererDir, f.filename);
-      if (f.content) {
-        fs.writeFileSync(destPath, f.content, 'utf-8');
-      } else if (f.url) {
-        const fileResp = await fetch(f.url, { headers: { 'Cache-Control': 'no-cache' } });
-        if (!fileResp.ok) throw new Error('Lỗi tải file ' + f.filename + ': HTTP ' + fileResp.status);
-        const text = await fileResp.text();
-        fs.writeFileSync(destPath, text, 'utf-8');
-      }
-    }
-
-    // Save patch_info.json
-    const info = {
-      patchNumber: patchData.patchNumber || 1,
-      version: patchData.version || app.getVersion(),
-      title: patchData.title || 'Bản vá cập nhật',
-      changelog: patchData.changelog || '',
-      appliedAt: new Date().toISOString()
-    };
-    fs.writeFileSync(PATCH_INFO_FILE, JSON.stringify(info, null, 2), 'utf-8');
-
-    return { ok: true, message: 'Đã áp dụng bản vá thành công!' };
-  } catch (err) {
-    return { ok: false, error: 'Áp dụng bản vá thất bại: ' + err.message };
-  }
-});
-
-ipcMain.handle('updater:relaunch', async () => {
-  app.relaunch();
-  app.exit(0);
-});
-
-ipcMain.handle('updater:resetPatches', async () => {
-  try {
-    if (fs.existsSync(PATCHES_DIR)) {
-      fs.rmSync(PATCHES_DIR, { recursive: true, force: true });
-    }
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      const origHtml = path.join(__dirname, 'src', 'renderer', 'index.html');
-      mainWindow.loadFile(origHtml);
-    }
-    return { ok: true, message: 'Đã khôi phục về bản gốc của phần mềm!' };
-  } catch(err) {
-    return { ok: false, error: err.message };
-  }
-});
-
     } catch(e){}
     return fn;
   }
