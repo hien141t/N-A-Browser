@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   supabaseGetConfig:      ()            => ipcRenderer.invoke('supabase:getConfig'),
   supabaseSaveConfig:     (cfg)         => ipcRenderer.invoke('supabase:saveConfig', cfg),
   supabaseTestConnection: (cfg)         => ipcRenderer.invoke('supabase:testConnection', cfg),
+  authLoginWithPin:       (pin)         => ipcRenderer.invoke('auth:loginWithPin', pin),
   authSignUp:             (email, pass) => ipcRenderer.invoke('auth:signUp', email, pass),
   authSignIn:             (email, pass) => ipcRenderer.invoke('auth:signIn', email, pass),
   authSignOut:            ()            => ipcRenderer.invoke('auth:signOut'),

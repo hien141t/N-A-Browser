@@ -534,6 +534,9 @@ ipcMain.handle('profiles:save', async (event, profiles) => {
   try {
     const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
     fs.writeFileSync(profilePath, JSON.stringify(profiles, null, 2));
+    if (supabaseManager && supabaseManager.currentUser) {
+      supabaseManager.pushAllProfiles(profiles).catch(e => console.warn('[Cloud Auto-Push error]:', e.message));
+    }
     return true;
   } catch (err) {
     console.error('[Save Profiles Error]', err);
@@ -552,6 +555,10 @@ ipcMain.handle('supabase:saveConfig', async (event, config) => {
 
 ipcMain.handle('supabase:testConnection', async (event, config) => {
   return supabaseManager.testConnection(config?.url, config?.anonKey);
+});
+
+ipcMain.handle('auth:loginWithPin', async (event, pin) => {
+  return supabaseManager.loginWithPin(pin);
 });
 
 ipcMain.handle('auth:signUp', async (event, email, password) => {

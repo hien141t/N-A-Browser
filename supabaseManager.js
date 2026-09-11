@@ -30,8 +30,8 @@ class SupabaseManager {
       console.error('[SupabaseManager] Failed to read config:', e);
     }
     return {
-      url: '',
-      anonKey: ''
+      url: 'https://atherarelnclynttiymg.supabase.co',
+      anonKey: 'sb_publishable_8rYj6x9gDdIxG-V0LojNow_fNQlzQge'
     };
   }
 
@@ -132,6 +132,37 @@ class SupabaseManager {
     this.currentUser = null;
     this.currentSession = null;
     return null;
+  }
+
+  // --- Authentication with PIN/Account Code ---
+  async loginWithPin(pin) {
+    if (!this.client) this.initClient();
+    if (!this.client) return { ok: false, error: 'Chưa khởi tạo Supabase Client' };
+
+    const cleanPin = String(pin || '151206').trim();
+    const email = `user${cleanPin}@nabrowser.cloud`;
+    const password = `NABrowser#${cleanPin}`;
+
+    try {
+      let { data, error } = await this.client.auth.signInWithPassword({ email, password });
+      if (error && (error.message.includes('Invalid login credentials') || error.message.includes('not found') || error.status === 400)) {
+        const upRes = await this.client.auth.signUp({ email, password });
+        if (upRes.data?.session) {
+          data = upRes.data;
+          error = null;
+        }
+      }
+      if (data?.session) {
+        this.currentSession = data.session;
+        this.currentUser = data.user;
+        this.saveSessionToDisk(data.session);
+        return { ok: true, user: data.user, session: data.session };
+      }
+      return { ok: false, error: error?.message || 'Đăng nhập đám mây thất bại' };
+    } catch (e) {
+      console.error('[SupabaseManager] loginWithPin error:', e);
+      return { ok: false, error: e.message };
+    }
   }
 
   // --- Authentication ---

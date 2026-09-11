@@ -149,7 +149,8 @@ function setupToolbar() {
   document.getElementById('btnNewProfile').addEventListener('click', openNewProfileModal);
   document.getElementById('btnRefreshStatus').addEventListener('click', async () => {
     await refreshStatus();
-    toast('🔄 Status refreshed', 'info');
+    if (typeof syncWithCloud === 'function') await syncWithCloud(ACCESS_CODE);
+    toast('🔄 Đã làm mới & đồng bộ hồ sơ', 'info');
   });
   document.getElementById('btnArrangeWindows')?.addEventListener('click', openArrangeModal);
 
@@ -1253,6 +1254,10 @@ async function setupSettings() {
       const btnSaveSbc = document.getElementById('btnSaveSupabase');
       const btnTestSbc = document.getElementById('btnTestSupabase');
       const statusTxt = document.getElementById('supabaseConnStatus');
+      if (statusTxt) {
+        statusTxt.textContent = '🟢 Sẵn sàng (Tự động đồng bộ theo mã PIN 151206)';
+        statusTxt.style.color = '#06d6a0';
+      }
 
       if (btnSaveSbc) {
         btnSaveSbc.addEventListener('click', async () => {
@@ -1635,6 +1640,30 @@ async function handlePushProfiles() {
 // ============================================================
 const ACCESS_CODE = '151206';
 const LOCK_STORAGE_KEY = 'na_browser_unlocked';
+// ── Supabase Cloud Sync with PIN / Account Code ──
+async function syncWithCloud(pin) {
+  try {
+    const cleanPin = pin || ACCESS_CODE;
+    if (API.authLoginWithPin) {
+      const logRes = await API.authLoginWithPin(cleanPin);
+      if (logRes && logRes.ok) {
+        currentUser = logRes.user;
+        updateAuthUI(true);
+      }
+    }
+    if (API.syncPullProfiles) {
+      const pullRes = await API.syncPullProfiles();
+      if (pullRes && pullRes.ok && pullRes.count > 0) {
+        await loadProfiles();
+        renderProfiles();
+        toast(`☁️ Đã đồng bộ ${pullRes.count} hồ sơ từ Cloud!`, 'success');
+      }
+    }
+  } catch (err) {
+    console.warn('[syncWithCloud Error]', err);
+  }
+}
+
 
 function setupLockAndAccount() {
   // --- Lockscreen buttons ---
@@ -1692,6 +1721,7 @@ function initLockScreen() {
   const remembered = localStorage.getItem(LOCK_STORAGE_KEY);
   if (remembered === 'true') {
     lockEl.style.display = 'none';
+    setTimeout(() => syncWithCloud(ACCESS_CODE), 300);
     return;
   }
 
@@ -1712,6 +1742,7 @@ function handleUnlock() {
     if (errEl) errEl.style.display = 'none';
     if (btnEl) { btnEl.textContent = 'Đang mở...'; btnEl.disabled = true; }
     if (rememberEl?.checked) localStorage.setItem(LOCK_STORAGE_KEY, 'true');
+    setTimeout(() => syncWithCloud(entered), 100);
     if (lockEl) {
       lockEl.style.transition = 'opacity 0.3s ease';
       lockEl.style.opacity = '0';
