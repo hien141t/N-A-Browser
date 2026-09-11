@@ -151,6 +151,23 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
     const page = pages[0] || await browser.newPage();
     const client = await page.createCDPSession();
 
+    // Khôi phục Cookies & Dữ liệu Web từ Cloud nếu có
+    try {
+      const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
+      let targetProfile = profile;
+      if (fs.existsSync(profilePath)) {
+        const all = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+        const found = all.find(x => x.id === profile.id);
+        if (found) targetProfile = found;
+      }
+      if (targetProfile && targetProfile.webData && Array.isArray(targetProfile.webData.cookies) && targetProfile.webData.cookies.length > 0) {
+        await client.send('Network.setCookies', { cookies: targetProfile.webData.cookies });
+        console.log(`[CDP] 🍪 Đã khôi phục ${targetProfile.webData.cookies.length} cookies từ Cloud cho profile "${profile.name}"!`);
+      }
+    } catch (errCookies) {
+      console.warn('[CDP] Lỗi khi nạp cookies từ Cloud:', errCookies.message);
+    }
+
     const dpr   = device.device_scale_factor || 3.0;
     const ua    = device.user_agent || '';
     const tz    = device.timezone  || 'Asia/Ho_Chi_Minh';
@@ -1264,6 +1281,27 @@ ipcMain.handle('browser:status', async () => {
 // 2. Gọi Browser.close() → Chrome đóng toàn bộ tab + flush sớSession gracefully
 // 3. Chờ tối đa 2s để Chrome tự thoát
 // 4. Nếu vẫn còn → force kill (taskkill /F /T)
+
+function saveProfileWebData(profileId, webData) {
+  try {
+    const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
+    if (!fs.existsSync(profilePath)) return;
+    let profiles = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+    const p = profiles.find(x => x.id === profileId);
+    if (p) {
+      p.webData = webData;
+      fs.writeFileSync(profilePath, JSON.stringify(profiles, null, 2), 'utf-8');
+      if (supabaseManager && supabaseManager.currentUser) {
+        supabaseManager.pushSingleProfile(p).then(() => {
+          console.log(`[Cloud Sync] ☁️ Đã tự động đồng bộ Web Data của profile "${p.name}" lên Cloud!`);
+        }).catch(e => console.warn('[Cloud Sync Error]', e.message));
+      }
+    }
+  } catch (e) {
+    console.error('[saveProfileWebData Error]', e);
+  }
+}
+
 async function gracefulCloseProfile(profileId) {
   const info = launchedBrowsers.get(profileId);
   stopLocalProxy(profileId);
@@ -1275,7 +1313,23 @@ async function gracefulCloseProfile(profileId) {
         browserURL: `http://127.0.0.1:${info.debugPort}`,
         defaultViewport: null,
       });
-      // Browser.close() ra lệnh cho Chrome tự đóng đóng toàn bộ tab rồi thoát
+
+      // Trích xuất Cookies và dữ liệu web trước khi tắt
+      try {
+        const pages = await b.pages();
+        if (pages.length > 0) {
+          const client = await pages[0].createCDPSession();
+          const { cookies } = await client.send('Network.getAllCookies');
+          if (cookies && cookies.length > 0) {
+            console.log(`[Sync] 🍪 Thu thập được ${cookies.length} cookies của profile ${profileId}`);
+            saveProfileWebData(profileId, { cookies, updatedAt: Date.now() });
+          }
+        }
+      } catch (errCookies) {
+        console.warn(`[Sync] Không thể trích xuất cookies trước khi đóng: ${errCookies.message}`);
+      }
+
+      // Browser.close() ra lệnh cho Chrome tự đóng toàn bộ tab rồi thoát
       await b.close();
       console.log(`[Close] 🎯 CDP Browser.close() gửi tới profile ${profileId}`);
     } catch(e) {

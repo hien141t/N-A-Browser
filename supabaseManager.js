@@ -250,6 +250,19 @@ class SupabaseManager {
 
   // --- Profile Synchronization ---
   toRemoteRow(p, userId) {
+    let remoteNotes = p.notes || '';
+    if (p.webData) {
+      try {
+        remoteNotes = JSON.stringify({
+          _is_web_data_container: true,
+          note: p.notes || '',
+          webData: p.webData
+        });
+      } catch (e) {
+        remoteNotes = p.notes || '';
+      }
+    }
+
     return {
       id: String(p.id),
       user_id: userId,
@@ -264,13 +277,23 @@ class SupabaseManager {
       selected_extensions: p.selectedExtensions || [],
       custom_window: p.customWindow || null,
       start_url: p.startUrl || '',
-      notes: p.notes || '',
+      notes: remoteNotes,
       created_at: typeof p.createdAt === 'number' ? p.createdAt : Date.now(),
       updated_at: new Date().toISOString()
     };
   }
 
   toLocalProfile(r) {
+    let noteText = r.notes || '';
+    let webData = null;
+    if (typeof noteText === 'string' && noteText.startsWith('{') && noteText.includes('_is_web_data_container')) {
+      try {
+        const parsed = JSON.parse(noteText);
+        noteText = parsed.note || '';
+        webData = parsed.webData || null;
+      } catch (e) {}
+    }
+
     return {
       id: r.id,
       name: r.name,
@@ -284,7 +307,8 @@ class SupabaseManager {
       selectedExtensions: r.selected_extensions || [],
       customWindow: r.custom_window || null,
       startUrl: r.start_url || '',
-      notes: r.notes || '',
+      notes: noteText,
+      webData: webData,
       createdAt: r.created_at || Date.now()
     };
   }

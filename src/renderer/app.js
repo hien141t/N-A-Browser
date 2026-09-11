@@ -147,6 +147,25 @@ function setupToolbar() {
   document.getElementById('filterStatus').addEventListener('change', renderProfiles);
   document.getElementById('filterBrand').addEventListener('change', renderProfiles);
   document.getElementById('btnNewProfile').addEventListener('click', openNewProfileModal);
+  document.getElementById('btnManualSyncCloud')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btnManualSyncCloud');
+    const oldHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.innerHTML = '⏳ Đang đồng bộ...';
+      btn.style.opacity = '0.7';
+      btn.disabled = true;
+    }
+    try {
+      await syncWithCloud(ACCESS_CODE, true);
+    } finally {
+      if (btn) {
+        btn.innerHTML = oldHtml;
+        btn.style.opacity = '1';
+        btn.disabled = false;
+      }
+    }
+  });
+
   document.getElementById('btnRefreshStatus').addEventListener('click', async () => {
     await refreshStatus();
     if (typeof syncWithCloud === 'function') await syncWithCloud(ACCESS_CODE);
@@ -1641,7 +1660,7 @@ async function handlePushProfiles() {
 const ACCESS_CODE = '151206';
 const LOCK_STORAGE_KEY = 'na_browser_unlocked';
 // ── Supabase Cloud Sync with PIN / Account Code ──
-async function syncWithCloud(pin) {
+async function syncWithCloud(pin, isManual = false) {
   try {
     const cleanPin = pin || ACCESS_CODE;
     if (API.authLoginWithPin) {
@@ -1651,16 +1670,28 @@ async function syncWithCloud(pin) {
         updateAuthUI(true);
       }
     }
+    if (isManual && API.syncPushProfiles) {
+      await API.syncPushProfiles();
+    }
     if (API.syncPullProfiles) {
       const pullRes = await API.syncPullProfiles();
-      if (pullRes && pullRes.ok && pullRes.count > 0) {
+      if (pullRes && pullRes.ok) {
         await loadProfiles();
         renderProfiles();
-        toast(`☁️ Đã đồng bộ ${pullRes.count} hồ sơ từ Cloud!`, 'success');
+        if (isManual) {
+          toast(`☁️ Đã đồng bộ hoàn tất ${pullRes.count || profiles.length} hồ sơ & dữ liệu web!`, 'success');
+        } else if (pullRes.count > 0) {
+          toast(`☁️ Đã đồng bộ ${pullRes.count} hồ sơ từ Cloud!`, 'info');
+        }
+        return;
       }
+    }
+    if (isManual) {
+      toast('☁️ Đồng bộ đám mây hoàn tất!', 'success');
     }
   } catch (err) {
     console.warn('[syncWithCloud Error]', err);
+    if (isManual) toast('⚠️ Lỗi đồng bộ: ' + err.message, 'error');
   }
 }
 
