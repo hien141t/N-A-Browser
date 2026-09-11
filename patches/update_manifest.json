@@ -1,9 +1,9 @@
 {
-  "version": "1.0.5",
-  "patchNumber": 5,
-  "title": "Bản vá Hot-Patch #5: Cập nhật Tool i9 Auto Register",
-  "changelog": "Cap nhat tien ich Tool i9 Auto Register cho may Linux va Windows",
-  "updatedAt": "2026-09-11T12:38:57.582Z",
+  "version": "1.0.6",
+  "patchNumber": 6,
+  "title": "Bản vá Hot-Patch #6: Cập nhật Tool i9 Auto Register",
+  "changelog": "Dong bo extensions.json tich hop day du Tool i9 Auto Register va tool hi88",
+  "updatedAt": "2026-09-11T12:48:37.640Z",
   "files": [
     {
       "filename": "app.js",
