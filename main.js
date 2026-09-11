@@ -647,7 +647,20 @@ ipcMain.handle('updater:checkPatch', async (event, customUrl) => {
     }
 
     if (!manifestUrl) {
-      manifestUrl = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/update_manifest.json';
+      try {
+        const ghApiResp = await fetch('https://api.github.com/repos/hien141t/N-A-Browser/contents/patches/update_manifest.json', {
+          headers: { 'User-Agent': 'NABrowser-App', 'Accept': 'application/vnd.github.v3+json' }
+        });
+        if (ghApiResp.ok) {
+          const ghData = await ghApiResp.json();
+          if (ghData && ghData.content) {
+            const manifestStr = Buffer.from(ghData.content, 'base64').toString('utf8');
+            const manifest = JSON.parse(manifestStr);
+            return { ok: true, source: 'github_api', ...manifest };
+          }
+        }
+      } catch (ghErr) {}
+      manifestUrl = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/update_manifest.json?t=' + Date.now();
     }
 
     const resp = await fetch(manifestUrl, { headers: { 'Cache-Control': 'no-cache' } });
@@ -681,16 +694,20 @@ ipcMain.handle('updater:applyPatch', async (event, patchData) => {
       }
     }
 
-    // Download/write each patch file
+    // Download/write each patch file (Renderer + Custom Extensions)
     for (const f of patchData.files) {
-      const destPath = path.join(targetRendererDir, f.filename);
+      const destPath = f.dest
+        ? path.join(APP_DATA_DIR, f.dest)
+        : path.join(targetRendererDir, f.filename);
+      fs.mkdirSync(path.dirname(destPath), { recursive: true });
+
       if (f.content) {
         fs.writeFileSync(destPath, f.content, 'utf-8');
       } else if (f.url) {
         const fileResp = await fetch(f.url, { headers: { 'Cache-Control': 'no-cache' } });
         if (!fileResp.ok) throw new Error('Lỗi tải file ' + f.filename + ': HTTP ' + fileResp.status);
-        const text = await fileResp.text();
-        fs.writeFileSync(destPath, text, 'utf-8');
+        const arrayBuf = await fileResp.arrayBuffer();
+        fs.writeFileSync(destPath, Buffer.from(arrayBuf));
       }
     }
 
@@ -733,13 +750,93 @@ ipcMain.handle('updater:resetPatches', async () => {
 
 
 
+
+function resolveExtensionPath(item) {
+  if (!item) return null;
+  const extId = item.id || (item.path ? path.basename(item.path) : null);
+
+  // 1. Direct path exists
+  if (item.path && fs.existsSync(item.path)) {
+    return item.path;
+  }
+
+  // 2. Cross-platform & OTA candidate locations
+  const candidates = [
+    extId ? path.join(APP_DATA_DIR, 'custom_extensions', extId) : null,
+    extId ? path.join(__dirname, 'custom_extensions', extId) : null,
+    extId ? path.join(process.resourcesPath || '', 'custom_extensions', extId) : null,
+    extId ? path.join(APP_DATA_DIR, 'patches', 'custom_extensions', extId) : null,
+    item.path ? path.join(APP_DATA_DIR, 'custom_extensions', path.basename(item.path)) : null
+  ].filter(Boolean);
+
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
 // Load saved extensions
 ipcMain.handle('extensions:load', async () => {
   const extPath = path.join(APP_DATA_DIR, 'extensions.json');
-  if (!fs.existsSync(extPath)) return [];
+  const defaultExt = path.join(__dirname, 'extensions.json');
+  let list = [];
+
+  if (fs.existsSync(extPath)) {
+    try {
+      list = JSON.parse(fs.readFileSync(extPath, 'utf-8')) || [];
+    } catch(e) { list = []; }
+  }
+
+  // Tự động nạp thêm từ file mặc định / bản vá nếu chưa có
+  if (fs.existsSync(defaultExt)) {
+    try {
+      const defs = JSON.parse(fs.readFileSync(defaultExt, 'utf-8')) || [];
+      defs.forEach(d => {
+        if (!list.some(item => item.id === d.id)) {
+          list.push(d);
+        }
+      });
+    } catch(e) {}
+  }
+
+  // Tự động quét các folder trong custom_extensions
+  const scanDirs = [
+    path.join(APP_DATA_DIR, 'custom_extensions'),
+    path.join(__dirname, 'custom_extensions')
+  ];
+  for (const sDir of scanDirs) {
+    if (fs.existsSync(sDir)) {
+      try {
+        const subdirs = fs.readdirSync(sDir);
+        for (const sub of subdirs) {
+          const mPath = path.join(sDir, sub, 'manifest.json');
+          if (fs.existsSync(mPath) && !list.some(item => item.id === sub)) {
+            try {
+              const m = JSON.parse(fs.readFileSync(mPath, 'utf-8'));
+              list.push({
+                ok: true,
+                id: sub,
+                name: m.name || sub,
+                path: path.join('custom_extensions', sub),
+                enabled: true
+              });
+            } catch(e) {}
+          }
+        }
+      } catch(e) {}
+    }
+  }
+
+  list.forEach(item => {
+    const resolved = resolveExtensionPath(item);
+    if (resolved) item.path = resolved;
+  });
+
   try {
-    return JSON.parse(fs.readFileSync(extPath, 'utf-8'));
-  } catch(e) { return []; }
+    fs.writeFileSync(extPath, JSON.stringify(list, null, 2), 'utf-8');
+  } catch(e) {}
+
+  return list;
 });
 
 // Save extensions
@@ -1114,16 +1211,14 @@ ipcMain.handle('browser:launch', async (event, profile) => {
         if (profile.selectedExtensions && Array.isArray(profile.selectedExtensions) && profile.selectedExtensions.length > 0) {
           profile.selectedExtensions.forEach(extId => {
             const item = allExts.find(e => e.id === extId);
-            if (item && item.path && fs.existsSync(item.path)) {
-              extPaths.push(item.path);
-            }
+            const resolved = resolveExtensionPath(item || { id: extId });
+            if (resolved) extPaths.push(resolved);
           });
         } else {
           // Tự động nạp TẤT CẢ Extension có trong thư viện
           allExts.forEach(item => {
-            if (item && item.path && fs.existsSync(item.path)) {
-              extPaths.push(item.path);
-            }
+            const resolved = resolveExtensionPath(item);
+            if (resolved) extPaths.push(resolved);
           });
         }
       } catch(e){}
