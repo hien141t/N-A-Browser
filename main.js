@@ -1094,8 +1094,6 @@ ipcMain.handle('browser:launch', async (event, profile) => {
 
     if (process.platform === 'linux') {
       chromeArgs.unshift(`--class=${wmClass}`, `--name=${wmClass}`);
-    } else if (process.platform === 'win32') {
-      chromeArgs.unshift(`--app-id=NABrowser.Profile.${profileNum}`);
     }
 
     if (profile.device && profile.device.timezone) {
