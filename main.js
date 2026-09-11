@@ -600,26 +600,11 @@ ipcMain.handle('sync:pullProfiles', async () => {
 
   try {
     const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
-    let localProfiles = [];
-    if (fs.existsSync(profilePath)) {
-      try {
-        localProfiles = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
-      } catch (e) { localProfiles = []; }
-    }
-
+    // Máy chủ Cloud là nguồn chân lý duy nhất:
+    // Profile nào đã bị máy chính xóa thì Cloud không có -> máy phụ cũng xóa sạch ngay lập tức!
     const remoteProfiles = result.profiles || [];
-    const remoteIdSet = new Set(remoteProfiles.map(p => String(p.id)));
-
-    // Giữ lại local profile chỉ nếu vừa mới tạo trong vòng 2 phút (chưa kịp push)
-    const recentlyCreatedLocal = localProfiles.filter(p => {
-      const isNew = p.createdAt && (Date.now() - p.createdAt < 120000);
-      return !remoteIdSet.has(String(p.id)) && isNew;
-    });
-
-    // Cloud là nguồn chân lý: hồ sơ đã xóa trên Cloud sẽ không hồi sinh
-    const finalProfiles = [...remoteProfiles, ...recentlyCreatedLocal];
-    fs.writeFileSync(profilePath, JSON.stringify(finalProfiles, null, 2), 'utf-8');
-    return { ok: true, profiles: finalProfiles, count: finalProfiles.length };
+    fs.writeFileSync(profilePath, JSON.stringify(remoteProfiles, null, 2), 'utf-8');
+    return { ok: true, profiles: remoteProfiles, count: remoteProfiles.length };
   } catch (err) {
     return { ok: false, error: err.message };
   }
