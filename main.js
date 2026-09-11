@@ -755,22 +755,24 @@ function resolveExtensionPath(item) {
   if (!item) return null;
   const extId = item.id || (item.path ? path.basename(item.path) : null);
 
-  // 1. Direct path exists
-  if (item.path && fs.existsSync(item.path)) {
-    return item.path;
-  }
-
-  // 2. Cross-platform & OTA candidate locations
+  // Danh sách các vị trí ứng viên tuyệt đối
   const candidates = [
+    item.path && path.isAbsolute(item.path) ? item.path : null,
     extId ? path.join(APP_DATA_DIR, 'custom_extensions', extId) : null,
     extId ? path.join(__dirname, 'custom_extensions', extId) : null,
     extId ? path.join(process.resourcesPath || '', 'custom_extensions', extId) : null,
     extId ? path.join(APP_DATA_DIR, 'patches', 'custom_extensions', extId) : null,
-    item.path ? path.join(APP_DATA_DIR, 'custom_extensions', path.basename(item.path)) : null
+    item.path ? path.resolve(APP_DATA_DIR, item.path) : null,
+    item.path ? path.resolve(__dirname, item.path) : null,
+    extId ? path.resolve('D:/NABrowser/cloakdroid-app/custom_extensions', extId) : null
   ].filter(Boolean);
 
   for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
+    const absPath = path.resolve(c);
+    // BẮT BUỘC: Thư mục phải tồn tại VÀ có file manifest.json thì Chrome mới load được!
+    if (fs.existsSync(absPath) && fs.existsSync(path.join(absPath, 'manifest.json'))) {
+      return absPath;
+    }
   }
   return null;
 }
@@ -785,58 +787,27 @@ ipcMain.handle('extensions:load', async () => {
     try {
       list = JSON.parse(fs.readFileSync(extPath, 'utf-8')) || [];
     } catch(e) { list = []; }
-  }
-
-  // Tự động nạp thêm từ file mặc định / bản vá nếu chưa có
-  if (fs.existsSync(defaultExt)) {
+  } else if (fs.existsSync(defaultExt)) {
     try {
-      const defs = JSON.parse(fs.readFileSync(defaultExt, 'utf-8')) || [];
-      defs.forEach(d => {
-        if (!list.some(item => item.id === d.id)) {
-          list.push(d);
-        }
-      });
-    } catch(e) {}
+      list = JSON.parse(fs.readFileSync(defaultExt, 'utf-8')) || [];
+      fs.writeFileSync(extPath, JSON.stringify(list, null, 2), 'utf-8');
+    } catch(e) { list = []; }
   }
 
-  // Tự động quét các folder trong custom_extensions
-  const scanDirs = [
-    path.join(APP_DATA_DIR, 'custom_extensions'),
-    path.join(__dirname, 'custom_extensions')
-  ];
-  for (const sDir of scanDirs) {
-    if (fs.existsSync(sDir)) {
-      try {
-        const subdirs = fs.readdirSync(sDir);
-        for (const sub of subdirs) {
-          const mPath = path.join(sDir, sub, 'manifest.json');
-          if (fs.existsSync(mPath) && !list.some(item => item.id === sub)) {
-            try {
-              const m = JSON.parse(fs.readFileSync(mPath, 'utf-8'));
-              list.push({
-                ok: true,
-                id: sub,
-                name: m.name || sub,
-                path: path.join('custom_extensions', sub),
-                enabled: true
-              });
-            } catch(e) {}
-          }
-        }
-      } catch(e) {}
-    }
-  }
-
+  // Resolve đường dẫn tuyệt đối hợp lệ và lọc bỏ các extension rác không tồn tại
+  const validList = [];
   list.forEach(item => {
     const resolved = resolveExtensionPath(item);
-    if (resolved) item.path = resolved;
+    if (resolved) {
+      item.path = resolved;
+      // Tránh trùng lặp id
+      if (!validList.some(v => v.id === item.id)) {
+        validList.push(item);
+      }
+    }
   });
 
-  try {
-    fs.writeFileSync(extPath, JSON.stringify(list, null, 2), 'utf-8');
-  } catch(e) {}
-
-  return list;
+  return validList;
 });
 
 // Save extensions
