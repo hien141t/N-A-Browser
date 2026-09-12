@@ -123,11 +123,38 @@ function stopLocalProxy(profileId) {
   }
 }
 
+// ── CDP Cookie Sanitizer Helper ──
+// Loại bỏ các trường không hợp lệ mà Chrome DevTools Protocol từ chối trong Network.setCookies (size, session, expires <= 0)
+function sanitizeCookiesForCDP(rawCookies) {
+  if (!Array.isArray(rawCookies)) return [];
+  return rawCookies.map(c => {
+    const clean = {
+      name: String(c.name || '').trim(),
+      value: String(c.value || ''),
+      path: c.path || '/'
+    };
+    if (c.domain) clean.domain = c.domain;
+    if (c.url) clean.url = c.url;
+    if (typeof c.secure === 'boolean') clean.secure = c.secure;
+    if (typeof c.httpOnly === 'boolean') clean.httpOnly = c.httpOnly;
+    if (c.sameSite && ['Strict', 'Lax', 'None'].includes(c.sameSite)) {
+      clean.sameSite = c.sameSite;
+    }
+    if (typeof c.expires === 'number' && c.expires > 0) {
+      clean.expires = Math.floor(c.expires);
+    }
+    if (c.priority && ['Low', 'Medium', 'High'].includes(c.priority)) {
+      clean.priority = c.priority;
+    }
+    return clean;
+  }).filter(c => c.name && (c.domain || c.url));
+}
+
 // ── CDP Device Emulation Helper ──
 // startUrl: URL thật để navigate SAU KHI proxy auth đã được thiết lập.
 // Chrome được spawn với about:blank, sau đó CDP navigate đến startUrl.
 // Cách này đảm bảo Fetch.authRequired handler sẵn sàng TRƯỚC khi Chrome tải bất kỳ request nào qua proxy.
-async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 380, winH = 675, startUrl = null) {
+async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 380, winH = 675, startUrl = null, profile = null) {
   let browser = null;
   try {
     // Thử kết nối CDP tối đa 20 lần (Chrome mất vài giây để khởi động)
@@ -153,16 +180,22 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
 
     // Khôi phục Cookies & Dữ liệu Web từ Cloud nếu có
     try {
-      const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
       let targetProfile = profile;
-      if (fs.existsSync(profilePath)) {
-        const all = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
-        const found = all.find(x => x.id === profile.id);
-        if (found) targetProfile = found;
+      if (profile && profile.id) {
+        const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
+        if (fs.existsSync(profilePath)) {
+          const all = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+          const found = all.find(x => x.id === profile.id);
+          if (found) targetProfile = found;
+        }
       }
       if (targetProfile && targetProfile.webData && Array.isArray(targetProfile.webData.cookies) && targetProfile.webData.cookies.length > 0) {
-        await client.send('Network.setCookies', { cookies: targetProfile.webData.cookies });
-        console.log(`[CDP] 🍪 Đã khôi phục ${targetProfile.webData.cookies.length} cookies từ Cloud cho profile "${profile.name}"!`);
+        await client.send('Network.enable');
+        const cleanCookies = sanitizeCookiesForCDP(targetProfile.webData.cookies);
+        if (cleanCookies.length > 0) {
+          await client.send('Network.setCookies', { cookies: cleanCookies });
+          console.log(`[CDP] 🍪 Đã khôi phục thành công ${cleanCookies.length}/${targetProfile.webData.cookies.length} cookies từ Cloud cho profile "${targetProfile.name || targetProfile.id}"!`);
+        }
       }
     } catch (errCookies) {
       console.warn('[CDP] Lỗi khi nạp cookies từ Cloud:', errCookies.message);
@@ -619,6 +652,91 @@ ipcMain.handle('sync:pushProfiles', async () => {
     } catch (e) { localProfiles = []; }
   }
   return supabaseManager.pushAllProfiles(localProfiles);
+});
+
+// --- Cookies Sync IPC Handlers ---
+ipcMain.handle('cookies:syncProfile', async (event, profileId) => {
+  try {
+    const res = await extractProfileCookies(profileId);
+    const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
+    let profileName = profileId;
+    if (fs.existsSync(profilePath)) {
+      try {
+        const all = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+        const p = all.find(x => x.id === profileId);
+        if (p) {
+          profileName = p.name || profileId;
+          if (res.cookies && res.cookies.length > 0) {
+            p.webData = { cookies: res.cookies, count: res.cookies.length, updatedAt: Date.now() };
+            fs.writeFileSync(profilePath, JSON.stringify(all, null, 2), 'utf-8');
+          }
+          if (supabaseManager) {
+            await supabaseManager.pushSingleProfile(p);
+          }
+        }
+      } catch(e) {}
+    }
+    return {
+      ok: true,
+      count: res.count || 0,
+      profileId,
+      profileName,
+      source: res.source,
+      message: (res.count > 0)
+        ? `Đã đồng bộ ${res.count} cookies của "${profileName}" lên Cloud thành công!`
+        : `Profile "${profileName}" chưa có cookie nào để tải lên.`
+    };
+  } catch(err) {
+    return { ok: false, error: err.message };
+  }
+});
+
+ipcMain.handle('cookies:syncAll', async () => {
+  try {
+    const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
+    if (!fs.existsSync(profilePath)) return { ok: false, error: 'Chưa có profile nào' };
+
+    let profiles = [];
+    try {
+      profiles = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+    } catch(e) {
+      return { ok: false, error: 'Lỗi đọc profiles.json' };
+    }
+
+    if (!profiles.length) return { ok: true, count: 0, message: 'Danh sách profile rỗng.' };
+
+    let totalCookies = 0;
+    let syncedProfiles = 0;
+
+    for (const p of profiles) {
+      try {
+        const res = await extractProfileCookies(p.id);
+        if (res.ok && res.cookies && res.cookies.length > 0) {
+          p.webData = { cookies: res.cookies, count: res.cookies.length, updatedAt: Date.now() };
+          totalCookies += res.cookies.length;
+          syncedProfiles++;
+        }
+      } catch(e) {
+        console.warn(`[SyncAllCookies] Lỗi trích xuất profile ${p.id}:`, e.message);
+      }
+    }
+
+    fs.writeFileSync(profilePath, JSON.stringify(profiles, null, 2), 'utf-8');
+
+    if (supabaseManager) {
+      await supabaseManager.pushAllProfiles(profiles);
+    }
+
+    return {
+      ok: true,
+      totalProfiles: profiles.length,
+      syncedProfiles,
+      totalCookies,
+      message: `Đã đồng bộ ${totalCookies} cookies của ${syncedProfiles}/${profiles.length} profiles lên Cloud!`
+    };
+  } catch(err) {
+    return { ok: false, error: err.message };
+  }
 });
 
 // --- Hot-Patch & OTA Auto-Updater IPC ---
@@ -1175,6 +1293,49 @@ ipcMain.handle('browser:arrangeWindows', async (event, customOpts = {}) => {
   return { ok: true, count: N, mode: customOpts.mode || 'grid' };
 });
 
+// ── Helper xác định đường dẫn trình duyệt Chromium / Chrome / CloakHQ ──
+function getSystemBrowserBinary() {
+  let cloakBin = null;
+  const cloakDir = path.join(os.homedir(), '.cloakbrowser');
+  if (fs.existsSync(cloakDir)) {
+    try {
+      const subdirs = fs.readdirSync(cloakDir);
+      for (const sub of subdirs) {
+        const exe = path.join(cloakDir, sub, 'chrome.exe');
+        const linuxExe = path.join(cloakDir, sub, 'chrome');
+        if (fs.existsSync(exe)) { cloakBin = exe; break; }
+        if (fs.existsSync(linuxExe)) { cloakBin = linuxExe; break; }
+      }
+    } catch(e){}
+  }
+
+  const chromePaths = [
+    cloakBin,
+    'C:\\Program Files\\Opera\\launcher.exe',
+    'C:\\Program Files (x86)\\Opera\\launcher.exe',
+    path.join(process.env.LOCALAPPDATA || '', 'Programs\\Opera\\launcher.exe'),
+    path.join(process.env.LOCALAPPDATA || '', 'Programs\\Opera GX\\launcher.exe'),
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe'),
+    '/usr/bin/opera',
+    '/snap/bin/opera',
+    '/usr/local/bin/opera',
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome-stable',
+    '/usr/bin/google-chrome',
+    '/usr/bin/chromium-browser',
+    '/usr/bin/brave-browser',
+    '/snap/bin/chromium',
+    '/usr/local/bin/chromium',
+  ];
+  const chromeBin = chromePaths.find(p => p && fs.existsSync(p)) || null;
+  return {
+    chromeBin,
+    isCloak: !!(cloakBin && chromeBin === cloakBin)
+  };
+}
+
 // Launch browser with fingerprint
 // Tạo port debug ngẫu nhiên tránh xung đột khi mở nhiều cửa sổ
 function getRandomDebugPort() {
@@ -1258,43 +1419,8 @@ ipcMain.handle('browser:launch', async (event, profile) => {
     }
 
     // Find CloakHQ Stealth Chromium or system Chrome
-    let cloakBin = null;
-    const cloakDir = path.join(os.homedir(), '.cloakbrowser');
-    if (fs.existsSync(cloakDir)) {
-      try {
-        const subdirs = fs.readdirSync(cloakDir);
-        for (const sub of subdirs) {
-          const exe = path.join(cloakDir, sub, 'chrome.exe');
-          const linuxExe = path.join(cloakDir, sub, 'chrome');
-          if (fs.existsSync(exe)) { cloakBin = exe; break; }
-          if (fs.existsSync(linuxExe)) { cloakBin = linuxExe; break; }
-        }
-      } catch(e){}
-    }
-
-    const chromePaths = [
-      cloakBin,
-      'C:\\Program Files\\Opera\\launcher.exe',
-      'C:\\Program Files (x86)\\Opera\\launcher.exe',
-      path.join(process.env.LOCALAPPDATA || '', 'Programs\\Opera\\launcher.exe'),
-      path.join(process.env.LOCALAPPDATA || '', 'Programs\\Opera GX\\launcher.exe'),
-      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-      path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe'),
-      '/usr/bin/opera',
-      '/snap/bin/opera',
-      '/usr/local/bin/opera',
-      '/usr/bin/chromium',
-      '/usr/bin/google-chrome-stable',
-      '/usr/bin/google-chrome',
-      '/usr/bin/chromium-browser',
-      '/usr/bin/brave-browser',
-      '/snap/bin/chromium',
-      '/usr/local/bin/chromium',
-    ];
-    const chromeBin = chromePaths.find(p => p && fs.existsSync(p));
-
-    if (chromeBin === cloakBin && cloakBin) {
+    const { chromeBin, isCloak } = getSystemBrowserBinary();
+    if (isCloak) {
       console.log('[N/A Browser] 🥷 Using CloakHQ C++ Engine Patched Stealth Chromium:', chromeBin);
     } else {
       console.log('[N/A Browser] Using System Browser:', chromeBin);
@@ -1443,7 +1569,7 @@ ipcMain.handle('browser:launch', async (event, profile) => {
 
         // ── CDP: apply emulation → navigate URL thật ──
         const targetUrl = profile.startUrl || 'https://bot.sannysoft.com';
-        applyCDPDeviceEmulation(debugPort, profile.device, profile.proxy, winW, winH, targetUrl).catch(e => {
+        applyCDPDeviceEmulation(debugPort, profile.device, profile.proxy, winW, winH, targetUrl, profile).catch(e => {
           console.error('[CDP Apply Error]', e.message);
         });
       }, 500);
@@ -1480,13 +1606,106 @@ ipcMain.handle('browser:status', async () => {
   return result;
 });
 
-// ── Đóng Chrome đúng cách: dùng CDP Browser.close() trước, mới force kill ──
-// Giống cách AdsPower/Hidemium đóng trình duyệt:
-// 1. Kết nối CDP (nếu được)
-// 2. Gọi Browser.close() → Chrome đóng toàn bộ tab + flush sớSession gracefully
-// 3. Chờ tối đa 2s để Chrome tự thoát
-// 4. Nếu vẫn còn → force kill (taskkill /F /T)
+// ── Trích xuất Cookies toàn diện cho Profile (Hỗ trợ cả khi profile đang MỞ hoặc đã ĐÓNG) ──
+async function extractProfileCookies(profileId) {
+  const runningInfo = launchedBrowsers.get(profileId);
 
+  // 1. Nếu trình duyệt đang mở: Kết nối CDP trực tiếp trích xuất ngay tức thì
+  if (runningInfo && runningInfo.debugPort) {
+    try {
+      const b = await puppeteer.connect({
+        browserURL: `http://127.0.0.1:${runningInfo.debugPort}`,
+        defaultViewport: null,
+      });
+      const pages = await b.pages();
+      if (pages.length > 0) {
+        const client = await pages[0].createCDPSession();
+        await client.send('Network.enable');
+        const { cookies } = await client.send('Network.getAllCookies');
+        b.disconnect();
+        if (cookies && Array.isArray(cookies)) {
+          const clean = sanitizeCookiesForCDP(cookies);
+          saveProfileWebData(profileId, { cookies: clean, count: clean.length, updatedAt: Date.now() });
+          return { ok: true, cookies: clean, count: clean.length, source: 'active' };
+        }
+      }
+      b.disconnect();
+    } catch (errActive) {
+      console.warn(`[CookieSync] CDP active extraction failed for ${profileId}:`, errActive.message);
+    }
+  }
+
+  // 2. Nếu profile đang đóng: Kiểm tra dữ liệu SQLite trên ổ cứng và chạy headless ngắn để Chrome giải mã
+  const profileDir = path.join(APP_DATA_DIR, 'profiles', String(profileId));
+  const cookieDbFile = path.join(profileDir, 'Default', 'Network', 'Cookies');
+  const cookieDbOld = path.join(profileDir, 'Default', 'Cookies');
+  if (fs.existsSync(cookieDbFile) || fs.existsSync(cookieDbOld)) {
+    const { chromeBin } = getSystemBrowserBinary();
+    if (chromeBin) {
+      const tempPort = getRandomDebugPort();
+      const { spawn } = require('child_process');
+      const tempProc = spawn(chromeBin, [
+        `--user-data-dir=${profileDir}`,
+        '--profile-directory=Default',
+        '--headless=new',
+        `--remote-debugging-port=${tempPort}`,
+        '--remote-debugging-address=127.0.0.1',
+        '--remote-allow-origins=*',
+        '--disable-gpu',
+        '--no-first-run',
+        '--no-default-browser-check',
+        'about:blank'
+      ], { detached: true, stdio: 'ignore' });
+
+      try {
+        await new Promise(r => setTimeout(r, 1200));
+        const b = await puppeteer.connect({
+          browserURL: `http://127.0.0.1:${tempPort}`,
+          defaultViewport: null
+        });
+        const pages = await b.pages();
+        if (pages.length > 0) {
+          const client = await pages[0].createCDPSession();
+          await client.send('Network.enable');
+          const { cookies } = await client.send('Network.getAllCookies');
+          await b.close();
+          if (tempProc && !tempProc.killed) {
+            try { process.kill(tempProc.pid); } catch(e){}
+          }
+          if (cookies && Array.isArray(cookies) && cookies.length > 0) {
+            const clean = sanitizeCookiesForCDP(cookies);
+            saveProfileWebData(profileId, { cookies: clean, count: clean.length, updatedAt: Date.now() });
+            return { ok: true, cookies: clean, count: clean.length, source: 'headless' };
+          }
+        } else {
+          await b.close();
+        }
+      } catch (errHeadless) {
+        console.warn(`[CookieSync] Headless extraction failed for ${profileId}:`, errHeadless.message);
+      } finally {
+        if (tempProc && !tempProc.killed) {
+          try { process.kill(tempProc.pid); } catch(e){}
+        }
+      }
+    }
+  }
+
+  // 3. Fallback: Dùng cookies đã lưu trong file profiles.json (nếu có)
+  const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
+  if (fs.existsSync(profilePath)) {
+    try {
+      const all = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+      const p = all.find(x => x.id === profileId);
+      if (p?.webData?.cookies && Array.isArray(p.webData.cookies) && p.webData.cookies.length > 0) {
+        return { ok: true, cookies: p.webData.cookies, count: p.webData.cookies.length, source: 'cache' };
+      }
+    } catch(e){}
+  }
+
+  return { ok: true, cookies: [], count: 0, source: 'empty' };
+}
+
+// ── Đóng Chrome đúng cách: dùng CDP Browser.close() trước, mới force kill ──
 function saveProfileWebData(profileId, webData) {
   try {
     const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
@@ -1524,10 +1743,12 @@ async function gracefulCloseProfile(profileId) {
         const pages = await b.pages();
         if (pages.length > 0) {
           const client = await pages[0].createCDPSession();
+          await client.send('Network.enable');
           const { cookies } = await client.send('Network.getAllCookies');
           if (cookies && cookies.length > 0) {
-            console.log(`[Sync] 🍪 Thu thập được ${cookies.length} cookies của profile ${profileId}`);
-            saveProfileWebData(profileId, { cookies, updatedAt: Date.now() });
+            const clean = sanitizeCookiesForCDP(cookies);
+            console.log(`[Sync] 🍪 Thu thập được ${clean.length} cookies của profile ${profileId}`);
+            saveProfileWebData(profileId, { cookies: clean, count: clean.length, updatedAt: Date.now() });
           }
         }
       } catch (errCookies) {

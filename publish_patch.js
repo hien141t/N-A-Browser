@@ -93,8 +93,8 @@ filesToPatch.forEach(f => {
 });
 console.log('✅ Đã nạp giao diện Renderer vào bản vá');
 
-// 2. Copy Core Main Process Scripts (main.js, generate_profile_icon.ps1, apply_window_icon.ps1)
-const coreScripts = ['main.js', 'generate_profile_icon.ps1', 'apply_window_icon.ps1'];
+// 2. Copy Core Main Process Scripts (main.js, preload.js, supabaseManager.js, generate_profile_icon.ps1, apply_window_icon.ps1)
+const coreScripts = ['main.js', 'preload.js', 'supabaseManager.js', 'generate_profile_icon.ps1', 'apply_window_icon.ps1'];
 coreScripts.forEach(f => {
   const src = path.join(rootDir, f);
   const dest = path.join(patchesDir, f);

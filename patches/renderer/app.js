@@ -28,6 +28,8 @@ const API = window.electronAPI || {
   authGetSession: async () => ({ ok: false, loggedIn: false }),
   syncPullProfiles: async () => ({ ok: false }),
   syncPushProfiles: async () => ({ ok: false }),
+  syncProfileCookies: async () => ({ ok: false, error: 'No Electron' }),
+  syncAllCookies: async () => ({ ok: false, error: 'No Electron' }),
   updaterGetPatchInfo: async () => ({ appVersion: '1.0.0', hasPatch: false, currentPatch: null }),
   updaterCheckPatch: async () => ({ ok: false, error: 'No Electron' }),
   updaterApplyPatch: async () => ({ ok: false, error: 'No Electron' }),
@@ -166,6 +168,8 @@ function setupToolbar() {
     }
   });
 
+  document.getElementById('btnSyncAllCookies')?.addEventListener('click', handleSyncAllCookies);
+
   document.getElementById('btnRefreshStatus').addEventListener('click', async () => {
     await refreshStatus();
     if (typeof syncWithCloud === 'function') await syncWithCloud(ACCESS_CODE);
@@ -254,6 +258,11 @@ function createProfileCard(profile, device, running) {
     ? `${profile.proxy.type}://${profile.proxy.host}`
     : 'No proxy';
 
+  const cookieCount = (profile.webData && Array.isArray(profile.webData.cookies)) ? profile.webData.cookies.length : (profile.webData?.count || 0);
+  const cookieTag = cookieCount > 0
+    ? `<span class="fp-tag ok" title="${cookieCount} cookies đã lưu trên Cloud" style="border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#fbbf24">🍪 ${cookieCount}</span>`
+    : '';
+
   card.innerHTML = `
     <div class="card-top">
       <div class="card-device-icon">${device?.icon || '📱'}</div>
@@ -270,6 +279,7 @@ function createProfileCard(profile, device, running) {
       <span class="fp-tag ok">✓ Client Hints</span>
       <span class="fp-tag">${device?.os_version || 'Android'}</span>
       <span class="fp-tag">${device?.opera_version ? `Opera ${device.opera_version.split('.')[0]}` : `Chrome ${device?.chrome_version?.split('.')[0] || '?'}`}</span>
+      ${cookieTag}
     </div>
     <div class="card-proxy">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
@@ -282,6 +292,7 @@ function createProfileCard(profile, device, running) {
           : '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Launch'
         }
       </button>
+      <button class="btn-icon" data-action="sync-cookie" data-id="${profile.id}" title="Đồng bộ Cookie của profile này lên Cloud" style="color:#fbbf24">🍪</button>
       <button class="btn-icon" data-action="clear-cache" data-id="${profile.id}" title="Làm sạch Cookie & Cache (Xóa dữ liệu duyệt web)">🧹</button>
       <button class="btn-icon" data-action="edit" data-id="${profile.id}" title="Chỉnh sửa Profile">✏️</button>
       <button class="btn-icon btn-danger" data-action="delete" data-id="${profile.id}" title="Xóa hoàn toàn Profile & Thư mục ổ đĩa">🗑️</button>
@@ -289,6 +300,7 @@ function createProfileCard(profile, device, running) {
   `;
 
   card.querySelector('.btn-launch').addEventListener('click', () => toggleBrowser(profile.id, running));
+  card.querySelector('[data-action="sync-cookie"]').addEventListener('click', () => syncProfileCookie(profile.id));
   card.querySelector('[data-action="clear-cache"]').addEventListener('click', () => clearProfileCache(profile.id));
   card.querySelector('[data-action="edit"]').addEventListener('click', () => openEditProfileModal(profile.id));
   card.querySelector('[data-action="delete"]').addEventListener('click', () => deleteProfileData(profile.id));
@@ -301,9 +313,14 @@ function createProfileListRow(profile, device, running) {
   row.className = 'profile-list-row';
   row.style.setProperty('--row-accent', device?.color || '#6366f1');
 
+  const cookieCount = (profile.webData && Array.isArray(profile.webData.cookies)) ? profile.webData.cookies.length : (profile.webData?.count || 0);
+  const cookieBadge = cookieCount > 0
+    ? `<span title="${cookieCount} cookies đã lưu trên Cloud" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;border:1px solid rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#fbbf24;margin-left:6px">🍪 ${cookieCount}</span>`
+    : '';
+
   row.innerHTML = `
     <div class="row-icon">${device?.icon || '📱'}</div>
-    <div class="row-name" title="${profile.name}">${profile.name}</div>
+    <div class="row-name" title="${profile.name}">${profile.name} ${cookieBadge}</div>
     <div class="row-device">${device?.name || '—'}</div>
     <div class="row-ua mono">${device?.model || '—'} · ${device?.opera_version ? `Opera ${device.opera_version.split('.')[0]}` : `Chrome ${device?.chrome_version?.split('.')[0] || '?'}`}</div>
     <div class="row-status">
@@ -313,6 +330,7 @@ function createProfileListRow(profile, device, running) {
       <button class="btn-launch ${running ? 'stop' : ''}" data-id="${profile.id}" style="padding:6px 12px;font-size:11px">
         ${running ? '■ Stop' : '▶ Launch'}
       </button>
+      <button class="btn-icon" data-action="sync-cookie" data-id="${profile.id}" title="Đồng bộ Cookie của profile này lên Cloud" style="width:28px;height:28px;border-radius:7px;color:#fbbf24">🍪</button>
       <button class="btn-icon" data-action="clear-cache" data-id="${profile.id}" title="Làm sạch Cookie & Cache" style="width:28px;height:28px;border-radius:7px">🧹</button>
       <button class="btn-icon" data-action="edit" data-id="${profile.id}" title="Edit" style="width:28px;height:28px;border-radius:7px">✏️</button>
       <button class="btn-icon btn-danger" data-action="delete" data-id="${profile.id}" title="Xóa hoàn toàn Profile & Ổ đĩa" style="width:28px;height:28px;border-radius:7px">🗑️</button>
@@ -320,6 +338,7 @@ function createProfileListRow(profile, device, running) {
   `;
 
   row.querySelector('.btn-launch').addEventListener('click', () => toggleBrowser(profile.id, running));
+  row.querySelector('[data-action="sync-cookie"]').addEventListener('click', () => syncProfileCookie(profile.id));
   row.querySelector('[data-action="clear-cache"]').addEventListener('click', () => clearProfileCache(profile.id));
   row.querySelector('[data-action="edit"]').addEventListener('click', () => openEditProfileModal(profile.id));
   row.querySelector('[data-action="delete"]').addEventListener('click', () => deleteProfileData(profile.id));
@@ -419,6 +438,69 @@ function showConfirmModal({ icon = '❓', title, message, sub = '', confirmText 
       });
     });
   });
+}
+
+// 🍪 0. Đồng bộ Cookie của 1 Profile cụ thể lên Cloud
+async function syncProfileCookie(profileId) {
+  const p = profiles.find(x => x.id === profileId);
+  const name = p ? p.name : 'Profile';
+  toast(`⏳ Đang trích xuất & đẩy Cookie của "${name}" lên Cloud...`, 'info');
+  try {
+    if (API.syncProfileCookies) {
+      const res = await API.syncProfileCookies(profileId);
+      if (res && res.ok) {
+        if (p) {
+          if (!p.webData) p.webData = {};
+          if (res.cookies) p.webData.cookies = res.cookies;
+          p.webData.count = res.count || (res.cookies ? res.cookies.length : 0);
+        }
+        renderProfiles();
+        toast(`✅ ${res.message || `Đã đồng bộ ${res.count} cookies của "${name}" lên Cloud!`}`, 'success');
+      } else {
+        toast(`❌ Lỗi đồng bộ: ${res?.error || 'Thất bại'}`, 'error');
+      }
+    } else {
+      toast('⚠️ API đồng bộ chưa sẵn sàng, vui lòng khởi động lại ứng dụng!', 'error');
+    }
+  } catch (err) {
+    toast(`❌ Lỗi: ${err.message}`, 'error');
+  }
+}
+
+// 🍪 Đồng bộ Cookie của TẤT CẢ Profile lên Cloud
+async function handleSyncAllCookies() {
+  const btn = document.getElementById('btnSyncAllCookies');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '⏳ Đang đồng bộ...';
+  }
+  toast('⏳ Đang quét & trích xuất Cookie của toàn bộ profile...', 'info');
+  try {
+    if (API.syncAllCookies) {
+      const res = await API.syncAllCookies();
+      if (res && res.ok) {
+        toast(`✅ ${res.message || `Đã đồng bộ ${res.totalCookies} cookies lên Cloud!`}`, 'success');
+        if (API.loadProfiles) {
+          const fresh = await API.loadProfiles();
+          if (Array.isArray(fresh)) {
+            profiles = fresh;
+            renderProfiles();
+          }
+        }
+      } else {
+        toast(`❌ Lỗi: ${res?.error || 'Thất bại'}`, 'error');
+      }
+    } else {
+      toast('⚠️ API đồng bộ chưa sẵn sàng, vui lòng khởi động lại ứng dụng!', 'error');
+    }
+  } catch(err) {
+    toast(`❌ Lỗi: ${err.message}`, 'error');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<span style="font-size:14px;line-height:1;">🍪</span> Đồng bộ Cookie';
+    }
+  }
 }
 
 // 🧹 1. Clear Browsing Cache / Cookies Only
@@ -718,6 +800,7 @@ async function saveProfile() {
       customWindow,
       startUrl: document.getElementById('fStartUrl').value.trim(),
       notes: document.getElementById('fNotes').value.trim(),
+      webData: editingId ? (profiles.find(p => p.id === editingId)?.webData || null) : null,
       createdAt: editingId ? (profiles.find(p => p.id === editingId)?.createdAt || Date.now()) : Date.now(),
     };
 
