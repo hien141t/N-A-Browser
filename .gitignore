@@ -15,10 +15,11 @@ build/
 *.zip
 
 # Profile & Runtime data (Dữ liệu cá nhân của người dùng)
-profile_icons/
-profiles/
-profiles.json
-settings.json
+/profile_icons/
+!patches/profile_icons/
+/profiles/
+/profiles.json
+/settings.json
 # Credentials & Private Config
 supabase_config.json
 

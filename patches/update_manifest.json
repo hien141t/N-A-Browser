@@ -1,9 +1,9 @@
 {
-  "version": "1.0.7",
-  "patchNumber": 7,
-  "title": "Bản vá Hot-Patch #7: Nâng cấp Profile Icons & Huy hiệu Taskbar",
-  "changelog": "Nang cap Profile Icons 256x256, huy hieu Taskbar Overlay Badge va don dep tep rac",
-  "updatedAt": "2026-09-12T04:36:52.750Z",
+  "version": "1.0.8",
+  "patchNumber": 8,
+  "title": "Bản vá Hot-Patch #8: Nâng cấp Profile Icons & Huy hiệu Taskbar",
+  "changelog": "Dong bo toan dien Profile Icons, Huy hieu Taskbar va sua loi duong dan cap nhat",
+  "updatedAt": "2026-09-12T04:54:31.544Z",
   "files": [
     {
       "filename": "app.js",
