@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Tool i9 Auto Register",
-  "version": "1.0",
-  "description": "Tự động đăng ký, điền form i9 (9922999.com, 9922044.com), giải captcha OCR qua ddddocr server",
+  "name": "tool hi88 N/A",
+  "version": "2.0",
+  "description": "Tự động đăng ký, điền form, giải captcha OCR qua ddddocr server",
   "permissions": [
     "activeTab",
     "scripting",
@@ -22,19 +22,19 @@
     "service_worker": "background.js"
   },
   "host_permissions": [
-    "*://*.9922999.com/*",
-    "*://*.9922044.com/*",
-    "*://*.9922*.com/*",
-    "http://180.93.106.208:5588/*",
-    "http://127.0.0.1:5588/*",
-    "<all_urls>"
+    "*://*.hi2033.com/*",
+    "*://*.hi1955.com/*",
+    "*://*.hi2777.com/*",
+    "*://*.hi889999.com/*",
+    "http://127.0.0.1:5588/*"
   ],
   "content_scripts": [
     {
       "matches": [
-        "*://*.9922999.com/*",
-        "*://*.9922044.com/*",
-        "*://*.9922*.com/*"
+        "*://*.hi2033.com/*",
+        "*://*.hi1955.com/*",
+        "*://*.hi2777.com/*",
+        "*://*.hi889999.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"

@@ -1,9 +1,9 @@
 {
-  "version": "1.0.6",
-  "patchNumber": 6,
-  "title": "Bản vá Hot-Patch #6: Cập nhật Tool i9 Auto Register",
-  "changelog": "Dong bo extensions.json tich hop day du Tool i9 Auto Register va tool hi88",
-  "updatedAt": "2026-09-11T12:48:37.640Z",
+  "version": "1.0.7",
+  "patchNumber": 7,
+  "title": "Bản vá Hot-Patch #7: Nâng cấp Profile Icons & Huy hiệu Taskbar",
+  "changelog": "Nang cap Profile Icons 256x256, huy hieu Taskbar Overlay Badge va don dep tep rac",
+  "updatedAt": "2026-09-12T04:36:52.750Z",
   "files": [
     {
       "filename": "app.js",
@@ -16,6 +16,171 @@
     {
       "filename": "style.css",
       "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/renderer/style.css"
+    },
+    {
+      "filename": "main.js",
+      "dest": "main.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/main.js"
+    },
+    {
+      "filename": "generate_profile_icon.ps1",
+      "dest": "generate_profile_icon.ps1",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/generate_profile_icon.ps1"
+    },
+    {
+      "filename": "apply_window_icon.ps1",
+      "dest": "apply_window_icon.ps1",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/apply_window_icon.ps1"
+    },
+    {
+      "filename": "badge_1.png",
+      "dest": "profile_icons/badge_1.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_1.png"
+    },
+    {
+      "filename": "badge_10.png",
+      "dest": "profile_icons/badge_10.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_10.png"
+    },
+    {
+      "filename": "badge_2.png",
+      "dest": "profile_icons/badge_2.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_2.png"
+    },
+    {
+      "filename": "badge_3.png",
+      "dest": "profile_icons/badge_3.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_3.png"
+    },
+    {
+      "filename": "badge_4.png",
+      "dest": "profile_icons/badge_4.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_4.png"
+    },
+    {
+      "filename": "badge_5.png",
+      "dest": "profile_icons/badge_5.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_5.png"
+    },
+    {
+      "filename": "badge_6.png",
+      "dest": "profile_icons/badge_6.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_6.png"
+    },
+    {
+      "filename": "badge_7.png",
+      "dest": "profile_icons/badge_7.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_7.png"
+    },
+    {
+      "filename": "badge_8.png",
+      "dest": "profile_icons/badge_8.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_8.png"
+    },
+    {
+      "filename": "badge_9.png",
+      "dest": "profile_icons/badge_9.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_9.png"
+    },
+    {
+      "filename": "profile_1.ico",
+      "dest": "profile_icons/profile_1.ico",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_1.ico"
+    },
+    {
+      "filename": "profile_1.png",
+      "dest": "profile_icons/profile_1.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_1.png"
+    },
+    {
+      "filename": "profile_10.ico",
+      "dest": "profile_icons/profile_10.ico",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_10.ico"
+    },
+    {
+      "filename": "profile_10.png",
+      "dest": "profile_icons/profile_10.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_10.png"
+    },
+    {
+      "filename": "profile_2.ico",
+      "dest": "profile_icons/profile_2.ico",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_2.ico"
+    },
+    {
+      "filename": "profile_2.png",
+      "dest": "profile_icons/profile_2.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_2.png"
+    },
+    {
+      "filename": "profile_3.ico",
+      "dest": "profile_icons/profile_3.ico",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_3.ico"
+    },
+    {
+      "filename": "profile_3.png",
+      "dest": "profile_icons/profile_3.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_3.png"
+    },
+    {
+      "filename": "profile_4.ico",
+      "dest": "profile_icons/profile_4.ico",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_4.ico"
+    },
+    {
+      "filename": "profile_4.png",
+      "dest": "profile_icons/profile_4.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_4.png"
+    },
+    {
+      "filename": "profile_5.ico",
+      "dest": "profile_icons/profile_5.ico",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_5.ico"
+    },
+    {
+      "filename": "profile_5.png",
+      "dest": "profile_icons/profile_5.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_5.png"
+    },
+    {
+      "filename": "profile_6.ico",
+      "dest": "profile_icons/profile_6.ico",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_6.ico"
+    },
+    {
+      "filename": "profile_6.png",
+      "dest": "profile_icons/profile_6.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_6.png"
+    },
+    {
+      "filename": "profile_7.ico",
+      "dest": "profile_icons/profile_7.ico",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_7.ico"
+    },
+    {
+      "filename": "profile_7.png",
+      "dest": "profile_icons/profile_7.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_7.png"
+    },
+    {
+      "filename": "profile_8.ico",
+      "dest": "profile_icons/profile_8.ico",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_8.ico"
+    },
+    {
+      "filename": "profile_8.png",
+      "dest": "profile_icons/profile_8.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_8.png"
+    },
+    {
+      "filename": "profile_9.ico",
+      "dest": "profile_icons/profile_9.ico",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_9.ico"
+    },
+    {
+      "filename": "profile_9.png",
+      "dest": "profile_icons/profile_9.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_9.png"
     },
     {
       "filename": "background.js",
@@ -96,6 +261,41 @@
       "filename": "run_local_ocr.bat",
       "dest": "custom_extensions/ext_1786469361479/run_local_ocr.bat",
       "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/run_local_ocr.bat"
+    },
+    {
+      "filename": "background.js",
+      "dest": "custom_extensions/ext_1786515448618/background.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/background.js"
+    },
+    {
+      "filename": "content.js",
+      "dest": "custom_extensions/ext_1786515448618/content.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/content.js"
+    },
+    {
+      "filename": "icon128.jpeg",
+      "dest": "custom_extensions/ext_1786515448618/icon128.jpeg",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/icon128.jpeg"
+    },
+    {
+      "filename": "icon128.png",
+      "dest": "custom_extensions/ext_1786515448618/icon128.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/icon128.png"
+    },
+    {
+      "filename": "manifest.json",
+      "dest": "custom_extensions/ext_1786515448618/manifest.json",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/manifest.json"
+    },
+    {
+      "filename": "popup.html",
+      "dest": "custom_extensions/ext_1786515448618/popup.html",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/popup.html"
+    },
+    {
+      "filename": "popup.js",
+      "dest": "custom_extensions/ext_1786515448618/popup.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/popup.js"
     },
     {
       "filename": "extensions.json",

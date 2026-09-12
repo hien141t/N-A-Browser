@@ -464,9 +464,8 @@ async function deleteProfileData(profileId) {
     // 1. Xóa khỏi danh sách & cập nhật UI ngay
     profiles = profiles.filter(p => p.id !== profileId);
     renderProfiles();
-    await API.saveProfiles(profiles);
 
-    // 2. Gọi backend: kill process + xóa thư mục ổ đĩa
+    // 2. Gọi backend: kill process + xóa thư mục ổ đĩa + xóa vĩnh viễn trên Cloud
     const res = await API.deleteProfile(profileId);
     if (res && res.ok) {
       toast(`🗑️ Đã xóa hoàn toàn "${name}" & thư mục dữ liệu!`, 'info');
@@ -1670,18 +1669,29 @@ async function syncWithCloud(pin, isManual = false) {
         updateAuthUI(true);
       }
     }
-    if (isManual && API.syncPushProfiles) {
-      await API.syncPushProfiles();
-    }
+
+    // TUYỆT ĐỐI KHÔNG gọi syncPushProfiles ở đây:
+    // Tránh trường hợp máy phụ có danh sách cũ đẩy ngược lại làm hồi sinh profile đã xóa!
+
     if (API.syncPullProfiles) {
       const pullRes = await API.syncPullProfiles();
       if (pullRes && pullRes.ok) {
-        await loadProfiles();
-        renderProfiles();
+        if (Array.isArray(pullRes.profiles)) {
+          profiles = pullRes.profiles;
+          renderProfiles();
+          // Cập nhật lưu trữ local đồng nhất với Cloud
+          if (API.saveProfiles) {
+            await API.saveProfiles(profiles);
+          }
+        } else {
+          await loadProfiles();
+          renderProfiles();
+        }
+
         if (isManual) {
-          toast(`☁️ Đã đồng bộ hoàn tất ${pullRes.count || profiles.length} hồ sơ & dữ liệu web!`, 'success');
-        } else if (pullRes.count > 0) {
-          toast(`☁️ Đã đồng bộ ${pullRes.count} hồ sơ từ Cloud!`, 'info');
+          toast(`☁️ Đã đồng bộ với Cloud (${profiles.length} hồ sơ)!`, 'success');
+        } else if (profiles.length > 0) {
+          toast(`☁️ Đã đồng bộ ${profiles.length} hồ sơ từ Cloud!`, 'info');
         }
         return;
       }

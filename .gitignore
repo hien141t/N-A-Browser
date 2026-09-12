@@ -19,8 +19,6 @@ profile_icons/
 profiles/
 profiles.json
 settings.json
-extensions.json
-custom_extensions/
 # Credentials & Private Config
 supabase_config.json
 

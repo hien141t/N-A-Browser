@@ -1,0 +1,51 @@
+{
+  "access_token": "eyJhbGciOiJFUzI1NiIsImtpZCI6IjQ4MzBjODA1LTU4Y2UtNDFhOS04YTQ2LWJlOWZiOTcyNDc5YyIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2F0aGVyYXJlbG5jbHludHRpeW1nLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI5YWEwYTQ1NS1kZTRmLTQyM2YtOTUwMi0wOWE4MTVjZWQ2NTAiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzg5MTkxMjQxLCJpYXQiOjE3ODkxODc2NDEsImVtYWlsIjoidXNlcjE1MTIwNkBuYWJyb3dzZXIuY2xvdWQiLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsIjoidXNlcjE1MTIwNkBuYWJyb3dzZXIuY2xvdWQiLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicGhvbmVfdmVyaWZpZWQiOmZhbHNlLCJzdWIiOiI5YWEwYTQ1NS1kZTRmLTQyM2YtOTUwMi0wOWE4MTVjZWQ2NTAifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc4OTE4NzY0MX1dLCJzZXNzaW9uX2lkIjoiZjg5NTAzNTEtMjE5ZS00ODQ5LWIyYWQtNjJhODJhNmNmYmI4IiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.Xoj5AzH0zGqzhRRwPXQy0sw2LHk2LvUavHX3isJnIB7NA97UfFDo5TVOXnOJpKjywU1yOpubabyB31_vpvch5w",
+  "token_type": "bearer",
+  "expires_in": 3600,
+  "expires_at": 1789191241,
+  "refresh_token": "thsutn2obvoh",
+  "user": {
+    "id": "9aa0a455-de4f-423f-9502-09a815ced650",
+    "aud": "authenticated",
+    "role": "authenticated",
+    "email": "user151206@nabrowser.cloud",
+    "email_confirmed_at": "2026-09-11T11:45:30.892705Z",
+    "phone": "",
+    "confirmed_at": "2026-09-11T11:45:30.892705Z",
+    "last_sign_in_at": "2026-09-12T04:34:01.024212348Z",
+    "app_metadata": {
+      "provider": "email",
+      "providers": [
+        "email"
+      ]
+    },
+    "user_metadata": {
+      "email": "user151206@nabrowser.cloud",
+      "email_verified": true,
+      "phone_verified": false,
+      "sub": "9aa0a455-de4f-423f-9502-09a815ced650"
+    },
+    "identities": [
+      {
+        "identity_id": "e132d9a8-5b4c-4f22-b119-faeae5d8a801",
+        "id": "9aa0a455-de4f-423f-9502-09a815ced650",
+        "user_id": "9aa0a455-de4f-423f-9502-09a815ced650",
+        "identity_data": {
+          "email": "user151206@nabrowser.cloud",
+          "email_verified": false,
+          "phone_verified": false,
+          "sub": "9aa0a455-de4f-423f-9502-09a815ced650"
+        },
+        "provider": "email",
+        "last_sign_in_at": "2026-09-11T11:45:30.881241Z",
+        "created_at": "2026-09-11T11:45:30.8813Z",
+        "updated_at": "2026-09-11T11:45:30.8813Z",
+        "email": "user151206@nabrowser.cloud"
+      }
+    ],
+    "created_at": "2026-09-11T11:45:30.848601Z",
+    "updated_at": "2026-09-12T04:34:01.043445Z",
+    "is_anonymous": false
+  },
+  "weak_password": null
+}

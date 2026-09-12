@@ -27,7 +27,9 @@
       "apply_window_icon.ps1",
       "src/**/*",
       "assets/**/*",
-      "libs/**/*"
+      "libs/**/*",
+      "custom_extensions/**/*",
+      "extensions.json"
     ],
     "linux": {
       "target": [
