@@ -259,8 +259,9 @@ function createProfileCard(profile, device, running) {
     : 'No proxy';
 
   const cookieCount = (profile.webData && Array.isArray(profile.webData.cookies)) ? profile.webData.cookies.length : (profile.webData?.count || 0);
-  const cookieTag = cookieCount > 0
-    ? `<span class="fp-tag ok" title="${cookieCount} cookies đã lưu trên Cloud" style="border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#fbbf24">🍪 ${cookieCount}</span>`
+  const hasHistory = !!(profile.webData && profile.webData.historyGz);
+  const cookieTag = (cookieCount > 0 || hasHistory)
+    ? `<span class="fp-tag ok" title="${cookieCount} cookies ${hasHistory ? '+ Lịch sử Ctrl+H ' : ''}đã lưu trên Cloud" style="border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#fbbf24">🍪 ${cookieCount}${hasHistory ? ' · 📜 History' : ''}</span>`
     : '';
 
   card.innerHTML = `
@@ -292,7 +293,7 @@ function createProfileCard(profile, device, running) {
           : '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Launch'
         }
       </button>
-      <button class="btn-icon" data-action="sync-cookie" data-id="${profile.id}" title="Đồng bộ Cookie của profile này lên Cloud" style="color:#fbbf24">🍪</button>
+      <button class="btn-icon" data-action="sync-cookie" data-id="${profile.id}" title="Đồng bộ Cookie & Lịch sử (Ctrl+H) của profile này lên Cloud" style="color:#fbbf24">🍪</button>
       <button class="btn-icon" data-action="clear-cache" data-id="${profile.id}" title="Làm sạch Cookie & Cache (Xóa dữ liệu duyệt web)">🧹</button>
       <button class="btn-icon" data-action="edit" data-id="${profile.id}" title="Chỉnh sửa Profile">✏️</button>
       <button class="btn-icon btn-danger" data-action="delete" data-id="${profile.id}" title="Xóa hoàn toàn Profile & Thư mục ổ đĩa">🗑️</button>
@@ -314,8 +315,9 @@ function createProfileListRow(profile, device, running) {
   row.style.setProperty('--row-accent', device?.color || '#6366f1');
 
   const cookieCount = (profile.webData && Array.isArray(profile.webData.cookies)) ? profile.webData.cookies.length : (profile.webData?.count || 0);
-  const cookieBadge = cookieCount > 0
-    ? `<span title="${cookieCount} cookies đã lưu trên Cloud" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;border:1px solid rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#fbbf24;margin-left:6px">🍪 ${cookieCount}</span>`
+  const hasHistory = !!(profile.webData && profile.webData.historyGz);
+  const cookieBadge = (cookieCount > 0 || hasHistory)
+    ? `<span title="${cookieCount} cookies ${hasHistory ? '+ Lịch sử Ctrl+H ' : ''}đã lưu trên Cloud" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;border:1px solid rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#fbbf24;margin-left:6px">🍪 ${cookieCount}${hasHistory ? ' · 📜 History' : ''}</span>`
     : '';
 
   row.innerHTML = `
@@ -330,7 +332,7 @@ function createProfileListRow(profile, device, running) {
       <button class="btn-launch ${running ? 'stop' : ''}" data-id="${profile.id}" style="padding:6px 12px;font-size:11px">
         ${running ? '■ Stop' : '▶ Launch'}
       </button>
-      <button class="btn-icon" data-action="sync-cookie" data-id="${profile.id}" title="Đồng bộ Cookie của profile này lên Cloud" style="width:28px;height:28px;border-radius:7px;color:#fbbf24">🍪</button>
+      <button class="btn-icon" data-action="sync-cookie" data-id="${profile.id}" title="Đồng bộ Cookie & Lịch sử (Ctrl+H) của profile này lên Cloud" style="width:28px;height:28px;border-radius:7px;color:#fbbf24">🍪</button>
       <button class="btn-icon" data-action="clear-cache" data-id="${profile.id}" title="Làm sạch Cookie & Cache" style="width:28px;height:28px;border-radius:7px">🧹</button>
       <button class="btn-icon" data-action="edit" data-id="${profile.id}" title="Edit" style="width:28px;height:28px;border-radius:7px">✏️</button>
       <button class="btn-icon btn-danger" data-action="delete" data-id="${profile.id}" title="Xóa hoàn toàn Profile & Ổ đĩa" style="width:28px;height:28px;border-radius:7px">🗑️</button>

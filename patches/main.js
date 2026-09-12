@@ -4,6 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const net = require('net');
 const http = require('http');
+const zlib = require('zlib');
 const puppeteer = require('puppeteer-core');
 
 // ── Thư mục gốc dự án — lưu profiles, extensions, settings ──
@@ -637,6 +638,27 @@ ipcMain.handle('sync:pullProfiles', async () => {
     // Profile nào đã bị máy chính xóa thì Cloud không có -> máy phụ cũng xóa sạch ngay lập tức!
     const remoteProfiles = result.profiles || [];
     fs.writeFileSync(profilePath, JSON.stringify(remoteProfiles, null, 2), 'utf-8');
+
+    // Khôi phục Lịch sử duyệt web (Ctrl+H) và Favicons cho từng profile nếu Cloud có lưu
+    for (const p of remoteProfiles) {
+      if (p.webData && p.webData.historyGz) {
+        try {
+          const defaultDir = path.join(APP_DATA_DIR, 'profiles', String(p.id), 'Default');
+          fs.mkdirSync(defaultDir, { recursive: true });
+          const historyFile = path.join(defaultDir, 'History');
+          const buf = zlib.gunzipSync(Buffer.from(p.webData.historyGz, 'base64'));
+          fs.writeFileSync(historyFile, buf);
+          if (p.webData.faviconsGz) {
+            const fBuf = zlib.gunzipSync(Buffer.from(p.webData.faviconsGz, 'base64'));
+            fs.writeFileSync(path.join(defaultDir, 'Favicons'), fBuf);
+          }
+          console.log(`[Sync Pull] 📜 Đã khôi phục thành công Lịch sử (Ctrl+H) cho profile "${p.name}"!`);
+        } catch(e) {
+          console.warn(`[Sync Pull] Lỗi giải nén History cho ${p.name}:`, e.message);
+        }
+      }
+    }
+
     return { ok: true, profiles: remoteProfiles, count: remoteProfiles.length };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -676,15 +698,17 @@ ipcMain.handle('cookies:syncProfile', async (event, profileId) => {
         }
       } catch(e) {}
     }
+    const hasHistory = !!(res.hasHistory || (p && p.webData && p.webData.historyGz));
     return {
       ok: true,
       count: res.count || 0,
       profileId,
       profileName,
+      hasHistory,
       source: res.source,
-      message: (res.count > 0)
-        ? `Đã đồng bộ ${res.count} cookies của "${profileName}" lên Cloud thành công!`
-        : `Profile "${profileName}" chưa có cookie nào để tải lên.`
+      message: (res.count > 0 || hasHistory)
+        ? `Đã đồng bộ ${res.count} cookies ${hasHistory ? '+ Lịch sử duyệt web (Ctrl+H) ' : ''}của "${profileName}" lên Cloud!`
+        : `Profile "${profileName}" chưa có dữ liệu duyệt web nào để tải lên.`
     };
   } catch(err) {
     return { ok: false, error: err.message };
@@ -711,9 +735,8 @@ ipcMain.handle('cookies:syncAll', async () => {
     for (const p of profiles) {
       try {
         const res = await extractProfileCookies(p.id);
-        if (res.ok && res.cookies && res.cookies.length > 0) {
-          p.webData = { cookies: res.cookies, count: res.cookies.length, updatedAt: Date.now() };
-          totalCookies += res.cookies.length;
+        if (res.ok && ((res.cookies && res.cookies.length > 0) || res.hasHistory)) {
+          totalCookies += (res.cookies ? res.cookies.length : 0);
           syncedProfiles++;
         }
       } catch(e) {
@@ -721,7 +744,10 @@ ipcMain.handle('cookies:syncAll', async () => {
       }
     }
 
-    fs.writeFileSync(profilePath, JSON.stringify(profiles, null, 2), 'utf-8');
+    // Nạp lại profiles mới nhất từ file (vì extractProfileCookies đã ghi webData và historyGz)
+    try {
+      profiles = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+    } catch(e) {}
 
     if (supabaseManager) {
       await supabaseManager.pushAllProfiles(profiles);
@@ -732,7 +758,7 @@ ipcMain.handle('cookies:syncAll', async () => {
       totalProfiles: profiles.length,
       syncedProfiles,
       totalCookies,
-      message: `Đã đồng bộ ${totalCookies} cookies của ${syncedProfiles}/${profiles.length} profiles lên Cloud!`
+      message: `Đã đồng bộ ${totalCookies} cookies và Lịch sử duyệt web (Ctrl+H) của ${syncedProfiles}/${profiles.length} profiles lên Cloud!`
     };
   } catch(err) {
     return { ok: false, error: err.message };
@@ -1348,6 +1374,36 @@ ipcMain.handle('browser:launch', async (event, profile) => {
     const profileDir = path.join(APP_DATA_DIR, 'profiles', profile.id);
     fs.mkdirSync(profileDir, { recursive: true });
 
+    // ── Khôi phục Lịch sử duyệt web (Ctrl+H) và Favicons từ Cloud nếu có ──
+    const defaultDir = path.join(profileDir, 'Default');
+    fs.mkdirSync(defaultDir, { recursive: true });
+    if (profile.webData && profile.webData.historyGz) {
+      try {
+        const historyFile = path.join(defaultDir, 'History');
+        let shouldRestore = !fs.existsSync(historyFile);
+        if (!shouldRestore && profile.webData.historyUpdatedAt) {
+          const stats = fs.statSync(historyFile);
+          if (profile.webData.historyUpdatedAt > stats.mtimeMs) shouldRestore = true;
+        }
+        if (shouldRestore) {
+          const buf = zlib.gunzipSync(Buffer.from(profile.webData.historyGz, 'base64'));
+          fs.writeFileSync(historyFile, buf);
+          console.log(`[Launch] 📜 Đã nạp thành công Lịch sử duyệt web (Ctrl+H) cho "${profile.name}"!`);
+        }
+      } catch (errH) {
+        console.warn('[Launch] Lỗi khôi phục History:', errH.message);
+      }
+    }
+    if (profile.webData && profile.webData.faviconsGz) {
+      try {
+        const faviconsFile = path.join(defaultDir, 'Favicons');
+        if (!fs.existsSync(faviconsFile)) {
+          const buf = zlib.gunzipSync(Buffer.from(profile.webData.faviconsGz, 'base64'));
+          fs.writeFileSync(faviconsFile, buf);
+        }
+      } catch (e) {}
+    }
+
     // Write fingerprint inject script & Chrome extension (MV2 for Blocking Proxy Auth)
     const injectScript = generateFingerprintScript(profile.device);
 
@@ -1606,9 +1662,36 @@ ipcMain.handle('browser:status', async () => {
   return result;
 });
 
-// ── Trích xuất Cookies toàn diện cho Profile (Hỗ trợ cả khi profile đang MỞ hoặc đã ĐÓNG) ──
+// ── Helper trích xuất file History và Favicons của profile ──
+function getProfileHistoryData(profileId) {
+  let historyGz = null;
+  let faviconsGz = null;
+  try {
+    const defaultDir = path.join(APP_DATA_DIR, 'profiles', String(profileId), 'Default');
+    const historyFile = path.join(defaultDir, 'History');
+    if (fs.existsSync(historyFile)) {
+      const hBuf = fs.readFileSync(historyFile);
+      if (hBuf.length > 0) {
+        historyGz = zlib.gzipSync(hBuf).toString('base64');
+      }
+    }
+    const faviconsFile = path.join(defaultDir, 'Favicons');
+    if (fs.existsSync(faviconsFile)) {
+      const fBuf = fs.readFileSync(faviconsFile);
+      if (fBuf.length > 0) {
+        faviconsGz = zlib.gzipSync(fBuf).toString('base64');
+      }
+    }
+  } catch (err) {
+    console.warn(`[Sync History] Không thể đọc History/Favicons cho ${profileId}:`, err.message);
+  }
+  return { historyGz, faviconsGz };
+}
+
+// ── Trích xuất Cookies & Lịch sử (Ctrl+H) toàn diện cho Profile (Hỗ trợ cả khi profile đang MỞ hoặc đã ĐÓNG) ──
 async function extractProfileCookies(profileId) {
   const runningInfo = launchedBrowsers.get(profileId);
+  const { historyGz, faviconsGz } = getProfileHistoryData(profileId);
 
   // 1. Nếu trình duyệt đang mở: Kết nối CDP trực tiếp trích xuất ngay tức thì
   if (runningInfo && runningInfo.debugPort) {
@@ -1625,8 +1708,18 @@ async function extractProfileCookies(profileId) {
         b.disconnect();
         if (cookies && Array.isArray(cookies)) {
           const clean = sanitizeCookiesForCDP(cookies);
-          saveProfileWebData(profileId, { cookies: clean, count: clean.length, updatedAt: Date.now() });
-          return { ok: true, cookies: clean, count: clean.length, source: 'active' };
+          const payload = {
+            cookies: clean,
+            count: clean.length,
+            updatedAt: Date.now()
+          };
+          if (historyGz) {
+            payload.historyGz = historyGz;
+            payload.historyUpdatedAt = Date.now();
+          }
+          if (faviconsGz) payload.faviconsGz = faviconsGz;
+          saveProfileWebData(profileId, payload);
+          return { ok: true, cookies: clean, count: clean.length, hasHistory: !!historyGz, source: 'active' };
         }
       }
       b.disconnect();
@@ -1674,8 +1767,18 @@ async function extractProfileCookies(profileId) {
           }
           if (cookies && Array.isArray(cookies) && cookies.length > 0) {
             const clean = sanitizeCookiesForCDP(cookies);
-            saveProfileWebData(profileId, { cookies: clean, count: clean.length, updatedAt: Date.now() });
-            return { ok: true, cookies: clean, count: clean.length, source: 'headless' };
+            const payload = {
+              cookies: clean,
+              count: clean.length,
+              updatedAt: Date.now()
+            };
+            if (historyGz) {
+              payload.historyGz = historyGz;
+              payload.historyUpdatedAt = Date.now();
+            }
+            if (faviconsGz) payload.faviconsGz = faviconsGz;
+            saveProfileWebData(profileId, payload);
+            return { ok: true, cookies: clean, count: clean.length, hasHistory: !!historyGz, source: 'headless' };
           }
         } else {
           await b.close();
@@ -1697,12 +1800,23 @@ async function extractProfileCookies(profileId) {
       const all = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
       const p = all.find(x => x.id === profileId);
       if (p?.webData?.cookies && Array.isArray(p.webData.cookies) && p.webData.cookies.length > 0) {
-        return { ok: true, cookies: p.webData.cookies, count: p.webData.cookies.length, source: 'cache' };
+        if (historyGz) {
+          p.webData.historyGz = historyGz;
+          p.webData.historyUpdatedAt = Date.now();
+          if (faviconsGz) p.webData.faviconsGz = faviconsGz;
+          saveProfileWebData(profileId, p.webData);
+        }
+        return { ok: true, cookies: p.webData.cookies, count: p.webData.cookies.length, hasHistory: !!(historyGz || p.webData.historyGz), source: 'cache' };
       }
     } catch(e){}
   }
 
-  return { ok: true, cookies: [], count: 0, source: 'empty' };
+  if (historyGz) {
+    saveProfileWebData(profileId, { historyGz, faviconsGz, historyUpdatedAt: Date.now(), updatedAt: Date.now() });
+    return { ok: true, cookies: [], count: 0, hasHistory: true, source: 'history-only' };
+  }
+
+  return { ok: true, cookies: [], count: 0, hasHistory: false, source: 'empty' };
 }
 
 // ── Đóng Chrome đúng cách: dùng CDP Browser.close() trước, mới force kill ──
@@ -1713,11 +1827,15 @@ function saveProfileWebData(profileId, webData) {
     let profiles = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
     const p = profiles.find(x => x.id === profileId);
     if (p) {
-      p.webData = webData;
+      p.webData = {
+        ...(p.webData || {}),
+        ...webData,
+        updatedAt: Date.now()
+      };
       fs.writeFileSync(profilePath, JSON.stringify(profiles, null, 2), 'utf-8');
       if (supabaseManager && supabaseManager.currentUser) {
         supabaseManager.pushSingleProfile(p).then(() => {
-          console.log(`[Cloud Sync] ☁️ Đã tự động đồng bộ Web Data của profile "${p.name}" lên Cloud!`);
+          console.log(`[Cloud Sync] ☁️ Đã tự động đồng bộ Web Data & History của profile "${p.name}" lên Cloud!`);
         }).catch(e => console.warn('[Cloud Sync Error]', e.message));
       }
     }
@@ -1745,11 +1863,17 @@ async function gracefulCloseProfile(profileId) {
           const client = await pages[0].createCDPSession();
           await client.send('Network.enable');
           const { cookies } = await client.send('Network.getAllCookies');
-          if (cookies && cookies.length > 0) {
-            const clean = sanitizeCookiesForCDP(cookies);
-            console.log(`[Sync] 🍪 Thu thập được ${clean.length} cookies của profile ${profileId}`);
-            saveProfileWebData(profileId, { cookies: clean, count: clean.length, updatedAt: Date.now() });
-          }
+          const clean = (cookies && cookies.length > 0) ? sanitizeCookiesForCDP(cookies) : [];
+          const { historyGz, faviconsGz } = getProfileHistoryData(profileId);
+          console.log(`[Sync] 🍪 Thu thập được ${clean.length} cookies ${historyGz ? '+ Lịch sử Ctrl+H' : ''} của profile ${profileId}`);
+          saveProfileWebData(profileId, {
+            cookies: clean,
+            count: clean.length,
+            historyGz,
+            faviconsGz,
+            historyUpdatedAt: historyGz ? Date.now() : undefined,
+            updatedAt: Date.now()
+          });
         }
       } catch (errCookies) {
         console.warn(`[Sync] Không thể trích xuất cookies trước khi đóng: ${errCookies.message}`);

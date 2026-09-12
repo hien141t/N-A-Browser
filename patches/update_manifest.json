@@ -1,9 +1,9 @@
 {
-  "version": "1.0.9",
-  "patchNumber": 9,
-  "title": "Bản vá Hot-Patch #9: Nâng cấp Profile Icons & Huy hiệu Taskbar",
-  "changelog": "Bản vá bổ sung nút đồng bộ Cookie cho từng Profile và toàn bộ Profiles lên Cloud, chuẩn hóa nạp cookie CDP",
-  "updatedAt": "2026-09-12T09:47:32.398Z",
+  "version": "1.0.10",
+  "patchNumber": 10,
+  "title": "Bản vá Hot-Patch #10: Nâng cấp Profile Icons & Huy hiệu Taskbar",
+  "changelog": "Bản vá #10: Tự động trích xuất và đồng bộ toàn bộ Lịch sử duyệt web (Ctrl+H History SQLite) và Favicons lên Cloud",
+  "updatedAt": "2026-09-12T09:54:50.451Z",
   "files": [
     {
       "filename": "app.js",

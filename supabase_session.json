@@ -1,9 +1,9 @@
 {
-  "access_token": "eyJhbGciOiJFUzI1NiIsImtpZCI6IjQ4MzBjODA1LTU4Y2UtNDFhOS04YTQ2LWJlOWZiOTcyNDc5YyIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2F0aGVyYXJlbG5jbHludHRpeW1nLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI5YWEwYTQ1NS1kZTRmLTQyM2YtOTUwMi0wOWE4MTVjZWQ2NTAiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzg5MjA4ODkwLCJpYXQiOjE3ODkyMDUyOTAsImVtYWlsIjoidXNlcjE1MTIwNkBuYWJyb3dzZXIuY2xvdWQiLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsIjoidXNlcjE1MTIwNkBuYWJyb3dzZXIuY2xvdWQiLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicGhvbmVfdmVyaWZpZWQiOmZhbHNlLCJzdWIiOiI5YWEwYTQ1NS1kZTRmLTQyM2YtOTUwMi0wOWE4MTVjZWQ2NTAifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc4OTIwNTI5MH1dLCJzZXNzaW9uX2lkIjoiOGE4NDNlMDAtYWFjOC00NWM2LWI4OWMtNDIzODQ0NmVhZWIyIiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.8OVp_0_UGUjObmmSw9QKA3nWu6pkJyvHL4u6ivGx7VK2xUbawJn4DbNV1uUAjNH5bW6_g7S7ZJ-rHxMNWfx_jQ",
+  "access_token": "eyJhbGciOiJFUzI1NiIsImtpZCI6IjQ4MzBjODA1LTU4Y2UtNDFhOS04YTQ2LWJlOWZiOTcyNDc5YyIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2F0aGVyYXJlbG5jbHludHRpeW1nLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI5YWEwYTQ1NS1kZTRmLTQyM2YtOTUwMi0wOWE4MTVjZWQ2NTAiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzg5MjEwMTc4LCJpYXQiOjE3ODkyMDY1NzgsImVtYWlsIjoidXNlcjE1MTIwNkBuYWJyb3dzZXIuY2xvdWQiLCJwaG9uZSI6IiIsImFwcF9tZXRhZGF0YSI6eyJwcm92aWRlciI6ImVtYWlsIiwicHJvdmlkZXJzIjpbImVtYWlsIl19LCJ1c2VyX21ldGFkYXRhIjp7ImVtYWlsIjoidXNlcjE1MTIwNkBuYWJyb3dzZXIuY2xvdWQiLCJlbWFpbF92ZXJpZmllZCI6dHJ1ZSwicGhvbmVfdmVyaWZpZWQiOmZhbHNlLCJzdWIiOiI5YWEwYTQ1NS1kZTRmLTQyM2YtOTUwMi0wOWE4MTVjZWQ2NTAifSwicm9sZSI6ImF1dGhlbnRpY2F0ZWQiLCJhYWwiOiJhYWwxIiwiYW1yIjpbeyJtZXRob2QiOiJwYXNzd29yZCIsInRpbWVzdGFtcCI6MTc4OTIwNjU3OH1dLCJzZXNzaW9uX2lkIjoiNjhkMTFkNTItYTlmMC00YzlhLTgwOGItNWE5MTQ4Njg4YTcxIiwiaXNfYW5vbnltb3VzIjpmYWxzZX0.lf3X7pjaWCHG5_EFlCfKBOYOHfVaVgGOuyiL6h8XiP2g7rrKAr84JNFMIH8joLEuZusZjWg9_z-515BDsBO8hQ",
   "token_type": "bearer",
   "expires_in": 3600,
-  "expires_at": 1789208890,
-  "refresh_token": "3tbzehllpf73",
+  "expires_at": 1789210178,
+  "refresh_token": "eczk4s6a3tkz",
   "user": {
     "id": "9aa0a455-de4f-423f-9502-09a815ced650",
     "aud": "authenticated",
@@ -12,7 +12,7 @@
     "email_confirmed_at": "2026-09-11T11:45:30.892705Z",
     "phone": "",
     "confirmed_at": "2026-09-11T11:45:30.892705Z",
-    "last_sign_in_at": "2026-09-12T09:28:10.055388871Z",
+    "last_sign_in_at": "2026-09-12T09:49:38.817936241Z",
     "app_metadata": {
       "provider": "email",
       "providers": [
@@ -44,7 +44,7 @@
       }
     ],
     "created_at": "2026-09-11T11:45:30.848601Z",
-    "updated_at": "2026-09-12T09:28:10.058226Z",
+    "updated_at": "2026-09-12T09:49:38.820401Z",
     "is_anonymous": false
   },
   "weak_password": null
