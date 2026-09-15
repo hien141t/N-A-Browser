@@ -1,9 +1,9 @@
 {
-  "version": "1.0.10",
-  "patchNumber": 10,
-  "title": "Bản vá Hot-Patch #10: Nâng cấp Profile Icons & Huy hiệu Taskbar",
-  "changelog": "Bản vá #10: Tự động trích xuất và đồng bộ toàn bộ Lịch sử duyệt web (Ctrl+H History SQLite) và Favicons lên Cloud",
-  "updatedAt": "2026-09-12T09:54:50.451Z",
+  "version": "1.0.11",
+  "patchNumber": 11,
+  "title": "Bản vá Hot-Patch #11: Nâng cấp Profile Icons & Huy hiệu Taskbar",
+  "changelog": "Ban va #11: Them Thung Rac (Soft-Delete) - Xoa profile vao Thung Rac thay vi xoa ngay, co the Khoi phuc hoac Xoa vinh vien tren Cloud",
+  "updatedAt": "2026-09-15T10:08:08.326Z",
   "files": [
     {
       "filename": "app.js",

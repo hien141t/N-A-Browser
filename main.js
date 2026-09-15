@@ -636,7 +636,24 @@ ipcMain.handle('sync:pullProfiles', async () => {
     const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
     // Máy chủ Cloud là nguồn chân lý duy nhất:
     // Profile nào đã bị máy chính xóa thì Cloud không có -> máy phụ cũng xóa sạch ngay lập tức!
-    const remoteProfiles = result.profiles || [];
+    let remoteProfiles = result.profiles || [];
+
+    // ── Trash Filter: Bỏ qua các profile đang trong Thùng Rác (đã xóa cục bộ, chưa xóa Cloud)
+    try {
+      const trashPath = path.join(APP_DATA_DIR, 'trash.json');
+      if (fs.existsSync(trashPath)) {
+        const trashItems = JSON.parse(fs.readFileSync(trashPath, 'utf-8'));
+        const trashIds = new Set(trashItems.map(t => String(t.id)));
+        const beforeCount = remoteProfiles.length;
+        remoteProfiles = remoteProfiles.filter(p => !trashIds.has(String(p.id)));
+        if (remoteProfiles.length < beforeCount) {
+          console.log(`[Sync Pull] 🗑️ Đã bỏ qua ${beforeCount - remoteProfiles.length} profile trong Thùng Rác.`);
+        }
+      }
+    } catch(e) {
+      console.warn('[Sync Pull] Lỗi đọc trash.json:', e.message);
+    }
+
     fs.writeFileSync(profilePath, JSON.stringify(remoteProfiles, null, 2), 'utf-8');
 
     // Khôi phục Lịch sử duyệt web (Ctrl+H) và Favicons cho từng profile nếu Cloud có lưu
@@ -1932,7 +1949,18 @@ function killProfileProcessTree(profileId) {
   }
 }
 
-// Delete profile (Data file + disk directory)
+// ── Trash Helpers ──
+function loadTrashFromDisk() {
+  const trashPath = path.join(APP_DATA_DIR, 'trash.json');
+  if (!fs.existsSync(trashPath)) return [];
+  try { return JSON.parse(fs.readFileSync(trashPath, 'utf-8')); } catch(e) { return []; }
+}
+function saveTrashToDisk(items) {
+  const trashPath = path.join(APP_DATA_DIR, 'trash.json');
+  fs.writeFileSync(trashPath, JSON.stringify(items, null, 2), 'utf-8');
+}
+
+// Soft-Delete profile: xóa disk, ghi vào trash.json, KHÔNG xóa Supabase
 ipcMain.handle('profile:delete', async (event, profileId) => {
   try {
     // 1. Đóng Chrome graceful (CDP Browser.close → chờ → force kill nếu cần)
@@ -1941,35 +1969,41 @@ ipcMain.handle('profile:delete', async (event, profileId) => {
     // 2. Chờ thêm 800ms để Windows xả File Lock
     await new Promise(resolve => setTimeout(resolve, 800));
 
-    // 3. Xóa vĩnh viễn trên Supabase Cloud
-    try {
-      if (supabaseManager) {
-        await supabaseManager.deleteRemoteProfile(profileId);
-      }
-    } catch(e) {
-      console.warn('[Cloud Delete Warning]', e.message);
-    }
-
-    // 4. Xóa cấu hình trong profiles.json
+    // 3. Đọc metadata profile trước khi xóa khỏi profiles.json
     const profilesPath = path.join(APP_DATA_DIR, 'profiles.json');
+    let deletedProfile = null;
     if (fs.existsSync(profilesPath)) {
       try {
         let profiles = JSON.parse(fs.readFileSync(profilesPath, 'utf-8'));
-        profiles = profiles.filter(p => p.id !== profileId);
+        deletedProfile = profiles.find(p => String(p.id) === String(profileId)) || null;
+        profiles = profiles.filter(p => String(p.id) !== String(profileId));
         fs.writeFileSync(profilesPath, JSON.stringify(profiles, null, 2));
-      } catch(e){}
+      } catch(e){ console.warn('[Soft Delete] profiles.json error:', e.message); }
     }
 
-    // 4. Xóa toàn bộ thư mục profile trên ổ đĩa
-    const profileDir = path.join(APP_DATA_DIR, 'profiles', profileId);
+    // 4. Ghi vào Thùng Rác (trash.json) — giữ metadata để có thể Khôi phục hoặc Xóa Cloud sau
+    if (deletedProfile) {
+      try {
+        const trash = loadTrashFromDisk();
+        // Tránh trùng: nếu đã có trong trash thì cập nhật
+        const existing = trash.findIndex(t => String(t.id) === String(profileId));
+        const trashItem = { ...deletedProfile, deletedAt: Date.now() };
+        if (existing >= 0) trash[existing] = trashItem;
+        else trash.push(trashItem);
+        saveTrashToDisk(trash);
+        console.log(`[Trash] 🗑️ Đã đưa profile "${deletedProfile.name}" vào Thùng Rác.`);
+      } catch(e) { console.warn('[Trash] Lỗi ghi trash.json:', e.message); }
+    }
+
+    // 5. Xóa toàn bộ thư mục profile trên ổ đĩa
+    const profileDir = path.join(APP_DATA_DIR, 'profiles', String(profileId));
     if (fs.existsSync(profileDir)) {
       try {
         fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
       } catch(e) {
         console.error('[rmSync retry failed, attempting cmd rmdir]', e);
       }
-
-      // Nếu fs.rmSync vẫn chưa xóa được hoàn toàn (do tệp bị lock), dùng rmdir của Windows CMD với đường dẫn chuẩn hóa
+      // Fallback: dùng rmdir của Windows CMD
       if (fs.existsSync(profileDir)) {
         if (process.platform === 'win32') {
           try {
@@ -1992,6 +2026,114 @@ ipcMain.handle('profile:delete', async (event, profileId) => {
   } catch(err) {
     console.error('[Delete Profile Error]', err);
     return { ok: false, error: err.message };
+  }
+});
+
+// ── Trash IPC Handlers ──
+
+// Lấy danh sách Thùng Rác
+ipcMain.handle('trash:list', async () => {
+  try {
+    const items = loadTrashFromDisk();
+    return { ok: true, items };
+  } catch(e) {
+    return { ok: false, error: e.message, items: [] };
+  }
+});
+
+// Khôi phục profile từ Thùng Rác
+ipcMain.handle('trash:restore', async (event, profileId) => {
+  try {
+    const trash = loadTrashFromDisk();
+    const idx = trash.findIndex(t => String(t.id) === String(profileId));
+    if (idx < 0) return { ok: false, error: 'Không tìm thấy trong Thùng Rác.' };
+
+    const item = trash[idx];
+    // Xóa khỏi trash
+    trash.splice(idx, 1);
+    saveTrashToDisk(trash);
+
+    // Thêm lại vào profiles.json
+    const profilesPath = path.join(APP_DATA_DIR, 'profiles.json');
+    let profiles = [];
+    if (fs.existsSync(profilesPath)) {
+      try { profiles = JSON.parse(fs.readFileSync(profilesPath, 'utf-8')); } catch(e) {}
+    }
+    // Bỏ field deletedAt trước khi thêm lại
+    const { deletedAt, ...restoredProfile } = item;
+    // Tránh trùng id
+    if (!profiles.find(p => String(p.id) === String(profileId))) {
+      profiles.push(restoredProfile);
+      fs.writeFileSync(profilesPath, JSON.stringify(profiles, null, 2), 'utf-8');
+    }
+
+    // Notify renderer
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('profiles:reload');
+    }
+
+    console.log(`[Trash] ♻️ Đã khôi phục profile "${item.name}" từ Thùng Rác.`);
+    return { ok: true, profile: restoredProfile };
+  } catch(e) {
+    console.error('[Trash Restore Error]', e);
+    return { ok: false, error: e.message };
+  }
+});
+
+// Xóa vĩnh viễn 1 profile trong Thùng Rác (xóa Supabase Cloud)
+ipcMain.handle('trash:delete', async (event, profileId) => {
+  try {
+    const trash = loadTrashFromDisk();
+    const idx = trash.findIndex(t => String(t.id) === String(profileId));
+    if (idx < 0) return { ok: false, error: 'Không tìm thấy trong Thùng Rác.' };
+
+    const item = trash[idx];
+
+    // Xóa trên Supabase Cloud
+    try {
+      if (supabaseManager) {
+        await supabaseManager.deleteRemoteProfile(String(profileId));
+        console.log(`[Trash] ☁️ Đã xóa vĩnh viễn profile "${item.name}" trên Supabase Cloud.`);
+      }
+    } catch(e) {
+      console.warn('[Trash Cloud Delete Warning]', e.message);
+    }
+
+    // Xóa khỏi trash.json
+    trash.splice(idx, 1);
+    saveTrashToDisk(trash);
+
+    return { ok: true };
+  } catch(e) {
+    console.error('[Trash Delete Error]', e);
+    return { ok: false, error: e.message };
+  }
+});
+
+// Xóa toàn bộ Thùng Rác (xóa tất cả trên Supabase Cloud)
+ipcMain.handle('trash:clear', async () => {
+  try {
+    const trash = loadTrashFromDisk();
+    let cloudErrors = 0;
+
+    for (const item of trash) {
+      try {
+        if (supabaseManager) {
+          await supabaseManager.deleteRemoteProfile(String(item.id));
+        }
+      } catch(e) {
+        console.warn(`[Trash Clear] Lỗi xóa Cloud profile "${item.name}":`, e.message);
+        cloudErrors++;
+      }
+    }
+
+    // Clear trash.json dù có lỗi Cloud hay không
+    saveTrashToDisk([]);
+    console.log(`[Trash] 🧹 Đã dọn sạch Thùng Rác (${trash.length} profiles). Lỗi Cloud: ${cloudErrors}.`);
+    return { ok: true, count: trash.length, cloudErrors };
+  } catch(e) {
+    console.error('[Trash Clear Error]', e);
+    return { ok: false, error: e.message };
   }
 });
 
@@ -2434,7 +2576,7 @@ async function handleApiRequest(req, res) {
     return sendJSON(res, 201, { ok: true, message: 'Profile đã được tạo thành công.', profile: newProfile });
   }
 
-  // ── DELETE /api/profiles/:id ── xóa profile theo id
+  // ── DELETE /api/profiles/:id ── soft-delete profile vào Thùng Rác
   if (method === 'DELETE' && matchSingle) {
     const id = matchSingle[1];
     let profiles = loadProfilesFromDisk();
@@ -2443,6 +2585,16 @@ async function handleApiRequest(req, res) {
 
     profiles = profiles.filter(p => p.id !== id);
     saveProfilesToDisk(profiles);
+
+    // Ghi vào Thùng Rác (không xóa Supabase)
+    try {
+      const trash = loadTrashFromDisk();
+      const existing = trash.findIndex(t => String(t.id) === String(id));
+      const trashItem = { ...target, deletedAt: Date.now() };
+      if (existing >= 0) trash[existing] = trashItem;
+      else trash.push(trashItem);
+      saveTrashToDisk(trash);
+    } catch(e) { console.warn('[API Trash] Lỗi ghi trash.json:', e.message); }
 
     // Xóa thư mục data của profile nếu tồn tại
     const profileDir = path.join(APP_DATA_DIR, 'profiles', id);
@@ -2455,8 +2607,8 @@ async function handleApiRequest(req, res) {
       mainWindow.webContents.send('profiles:reload');
     }
 
-    console.log(`[API] 🗑️ Đã xóa profile: "${target.name}" (${id})`);
-    return sendJSON(res, 200, { ok: true, message: `Profile "${target.name}" đã được xóa.`, id });
+    console.log(`[API] 🗑️ Đã đưa profile "${target.name}" (${id}) vào Thùng Rác.`);
+    return sendJSON(res, 200, { ok: true, message: `Profile "${target.name}" đã được chuyển vào Thùng Rác.`, id });
   }
 
   // ── POST /api/profiles/:id/launch ── khởi động browser cho profile

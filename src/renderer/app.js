@@ -35,6 +35,10 @@ const API = window.electronAPI || {
   updaterApplyPatch: async () => ({ ok: false, error: 'No Electron' }),
   updaterRelaunch: async () => {},
   updaterResetPatches: async () => ({ ok: true }),
+  trashList:    async () => ({ ok: true, items: [] }),
+  trashRestore: async () => ({ ok: false, error: 'No Electron' }),
+  trashDelete:  async () => ({ ok: false, error: 'No Electron' }),
+  trashClear:   async () => ({ ok: false, error: 'No Electron' }),
 };
 
 // ── State ──
@@ -66,7 +70,9 @@ async function init() {
   await checkAuthStatus();
   setupLockAndAccount();
   setupUpdater();
+  setupTrashPage();
   renderProfiles();
+  refreshTrashBadge(); // Hiển thị badge Thùng Rác nếu có
 
   // Auto-refresh status every 5s
   setInterval(refreshStatus, 5000);
@@ -531,17 +537,17 @@ async function clearProfileCache(profileId) {
   }
 }
 
-// 🗑️ 2. Delete Entire Profile + xóa thư mục trên ổ đĩa
+// 🗑️ 2. Soft-Delete Profile → Thùng Rác
 async function deleteProfileData(profileId) {
   try {
     const profile = profiles.find(p => p.id === profileId);
     const name = profile ? profile.name : 'Profile';
 
     const { confirmed } = await API.showConfirm({
-      title: 'Xóa hoàn toàn Profile?',
-      message: `Bạn có chắc chắn muốn XÓA "${name}" không?`,
-      detail: '⚠️ Hành động này sẽ xóa vĩnh viễn profile và toàn bộ thư mục dữ liệu trên ổ đĩa. Không thể phục hồi!',
-      danger: true
+      title: 'Đưa vào Thùng Rác?',
+      message: `Bạn muốn xóa "${name}" khỏi danh sách?`,
+      detail: '🗑️ Profile sẽ vào Thùng Rác. Có thể khôi phục hoặc xóa vĩnh viễn trên Cloud từ Thùng Rác bất kỳ lúc nào.',
+      danger: false
     });
     if (!confirmed) return;
 
@@ -549,13 +555,15 @@ async function deleteProfileData(profileId) {
     profiles = profiles.filter(p => p.id !== profileId);
     renderProfiles();
 
-    // 2. Gọi backend: kill process + xóa thư mục ổ đĩa + xóa vĩnh viễn trên Cloud
+    // 2. Gọi backend: kill process + xóa thư mục ổ đĩa + ghi trash.json (KHÔNG xóa Cloud)
     const res = await API.deleteProfile(profileId);
     if (res && res.ok) {
-      toast(`🗑️ Đã xóa hoàn toàn "${name}" & thư mục dữ liệu!`, 'info');
+      toast(`🗑️ "Đã đưa "${name}" vào Thùng Rác!`, 'info');
     } else {
       toast(`🗑️ Đã xóa profile "${name}" khỏi danh sách!`, 'info');
     }
+    // Cập nhật badge Thùng Rác
+    await refreshTrashBadge();
   } catch(err) {
     console.error('[Delete Profile Error]', err);
     toast(`⚠️ Lỗi khi xóa profile: ${err.message}`, 'error');
@@ -2075,4 +2083,216 @@ async function setupUpdater() {
       toast(' Lỗi: ' + err.message, 'error');
     }
   });
+}
+
+// ══════════════════════════════════════════
+// 🗑️ THÙNG RÁC (TRASH BIN)
+// ══════════════════════════════════════════
+
+let trashItems = [];
+
+// Cập nhật badge đếm số item trong Thùng Rác trên nav icon
+async function refreshTrashBadge() {
+  try {
+    if (!API.trashList) return;
+    const res = await API.trashList();
+    const count = (res?.items?.length) || 0;
+    const badge = document.getElementById('trashBadge');
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : String(count);
+      badge.style.display = 'block';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch(e) { /* ignore */ }
+}
+
+// Tải danh sách Thùng Rác và render
+async function loadTrash() {
+  try {
+    if (!API.trashList) {
+      document.getElementById('trashEmpty').style.display = '';
+      return;
+    }
+    const res = await API.trashList();
+    trashItems = res?.items || [];
+    renderTrash();
+  } catch(err) {
+    console.error('[Trash Load Error]', err);
+    toast('⚠️ Lỗi tải Thùng Rác: ' + err.message, 'error');
+  }
+}
+
+// Render danh sách Thùng Rác
+function renderTrash() {
+  const container = document.getElementById('trashContainer');
+  const emptyState = document.getElementById('trashEmpty');
+  const clearBtn = document.getElementById('btnTrashClear');
+
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (trashItems.length === 0) {
+    if (emptyState) emptyState.style.display = '';
+    if (clearBtn) clearBtn.disabled = true;
+    return;
+  }
+
+  if (emptyState) emptyState.style.display = 'none';
+  if (clearBtn) clearBtn.disabled = false;
+
+  trashItems.forEach(item => {
+    const device = devices.find(d => d.id === item.deviceId);
+    const deletedDate = item.deletedAt ? new Date(item.deletedAt).toLocaleString('vi-VN') : 'Không rõ';
+    const proxy = item.proxy?.host ? `${item.proxy.type || 'http'}://${item.proxy.host}` : 'No proxy';
+
+    const row = document.createElement('div');
+    row.className = 'trash-row';
+    row.style.cssText = `
+      display:flex;align-items:center;gap:14px;
+      background:rgba(239,68,68,0.05);
+      border:1px solid rgba(239,68,68,0.15);
+      border-radius:12px;padding:14px 18px;
+      transition:all .2s;
+    `;
+    row.innerHTML = `
+      <div style="font-size:24px;flex-shrink:0;opacity:0.5;">${device?.icon || '📱'}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:14px;margin-bottom:3px;display:flex;align-items:center;gap:8px;">
+          ${item.name}
+          <span style="font-size:10px;font-weight:500;padding:2px 7px;border-radius:4px;background:rgba(239,68,68,0.15);color:#fca5a5;">Đã xóa</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);display:flex;gap:14px;flex-wrap:wrap;">
+          <span>📱 ${device?.name || 'Unknown'}</span>
+          <span>🌐 ${proxy}</span>
+          <span style="color:rgba(239,68,68,0.7)">🗑️ ${deletedDate}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;">
+        <button class="btn-restore" data-id="${item.id}" style="
+          padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;
+          background:rgba(6,214,160,0.15);color:#06d6a0;
+          border:1px solid rgba(6,214,160,0.3);border-radius:8px;
+          display:flex;align-items:center;gap:5px;transition:all .2s;
+        " title="Khôi phục về danh sách">
+          ♻️ Khôi phục
+        </button>
+        <button class="btn-delete-forever" data-id="${item.id}" data-name="${item.name}" style="
+          padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;
+          background:rgba(239,68,68,0.12);color:#ef4444;
+          border:1px solid rgba(239,68,68,0.3);border-radius:8px;
+          display:flex;align-items:center;gap:5px;transition:all .2s;
+        " title="Xóa vĩnh viễn khỏi Cloud">
+          🔥 Xóa vĩnh viễn
+        </button>
+      </div>
+    `;
+
+    // Hover effect
+    row.addEventListener('mouseenter', () => { row.style.borderColor = 'rgba(239,68,68,0.35)'; row.style.background = 'rgba(239,68,68,0.08)'; });
+    row.addEventListener('mouseleave', () => { row.style.borderColor = 'rgba(239,68,68,0.15)'; row.style.background = 'rgba(239,68,68,0.05)'; });
+
+    // Restore
+    row.querySelector('.btn-restore').addEventListener('click', () => trashRestoreProfile(item.id, item.name));
+    // Delete Forever
+    row.querySelector('.btn-delete-forever').addEventListener('click', () => trashDeleteForever(item.id, item.name));
+
+    container.appendChild(row);
+  });
+
+  // Cập nhật badge
+  const badge = document.getElementById('trashBadge');
+  if (badge) {
+    const count = trashItems.length;
+    if (count > 0) { badge.textContent = count > 99 ? '99+' : String(count); badge.style.display = 'block'; }
+    else badge.style.display = 'none';
+  }
+}
+
+// Khôi phục profile
+async function trashRestoreProfile(profileId, name) {
+  try {
+    const btn = document.querySelector(`.btn-restore[data-id="${profileId}"]`);
+    if (btn) { btn.textContent = '⏳ Đang khôi phục...'; btn.disabled = true; }
+
+    const res = await API.trashRestore(profileId);
+    if (res && res.ok) {
+      toast(`♻️ Đã khôi phục profile "${name}" về danh sách!`, 'success');
+      // reload cả 2 danh sách
+      await loadProfiles();
+      renderProfiles();
+      await loadTrash();
+    } else {
+      toast(`❌ Lỗi khôi phục: ${res?.error || 'Không rõ'}`, 'error');
+      if (btn) { btn.textContent = '♻️ Khôi phục'; btn.disabled = false; }
+    }
+  } catch(err) {
+    toast('⚠️ Lỗi: ' + err.message, 'error');
+  }
+}
+
+// Xóa vĩnh viễn 1 profile
+async function trashDeleteForever(profileId, name) {
+  const { confirmed } = await API.showConfirm({
+    title: 'Xóa vĩnh viễn?',
+    message: `Xóa "${name}" khỏi Cloud vĩnh viễn?`,
+    detail: '⚠️ Profile sẽ bị xóa khỏi Supabase Cloud. Không thể phục hồi!',
+    danger: true
+  });
+  if (!confirmed) return;
+
+  try {
+    const btn = document.querySelector(`.btn-delete-forever[data-id="${profileId}"]`);
+    if (btn) { btn.textContent = '⏳ Đang xóa...'; btn.disabled = true; }
+
+    const res = await API.trashDelete(profileId);
+    if (res && res.ok) {
+      toast(`🔥 Đã xóa vĩnh viễn "${name}" khỏi Cloud!`, 'info');
+      await loadTrash();
+    } else {
+      toast(`❌ Lỗi xóa: ${res?.error || 'Không rõ'}`, 'error');
+      if (btn) { btn.textContent = '🔥 Xóa vĩnh viễn'; btn.disabled = false; }
+    }
+  } catch(err) {
+    toast('⚠️ Lỗi: ' + err.message, 'error');
+  }
+}
+
+// Dọn sạch toàn bộ Thùng Rác
+async function trashClearAll() {
+  if (trashItems.length === 0) { toast('🗑️ Thùng Rác đã trống!', 'info'); return; }
+
+  const { confirmed } = await API.showConfirm({
+    title: 'Dọn sạch Thùng Rác?',
+    message: `Xóa vĩnh viễn ${trashItems.length} profile khỏi Cloud?`,
+    detail: '⚠️ Tất cả profile trong Thùng Rác sẽ bị xóa khỏi Supabase Cloud. Không thể phục hồi!',
+    danger: true
+  });
+  if (!confirmed) return;
+
+  try {
+    const btn = document.getElementById('btnTrashClear');
+    if (btn) { btn.textContent = '⏳ Đang dọn...'; btn.disabled = true; }
+
+    const res = await API.trashClear();
+    if (res && res.ok) {
+      toast(`🧹 Đã dọn sạch Thùng Rác (${res.count} profiles)!`, 'success');
+      await loadTrash();
+    } else {
+      toast(`❌ Lỗi: ${res?.error || 'Không rõ'}`, 'error');
+    }
+    if (btn) { btn.textContent = '🧹 Dọn sạch tất cả'; btn.disabled = false; }
+  } catch(err) {
+    toast('⚠️ Lỗi: ' + err.message, 'error');
+  }
+}
+
+// Setup trang Thùng Rác
+function setupTrashPage() {
+  document.getElementById('btnTrashRefresh')?.addEventListener('click', loadTrash);
+  document.getElementById('btnTrashClear')?.addEventListener('click', trashClearAll);
+
+  // Tải Thùng Rác khi click vào nav Trash
+  document.getElementById('navTrashBtn')?.addEventListener('click', loadTrash);
 }

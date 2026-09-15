@@ -1,7 +1,7 @@
 {
-  "patchNumber": 7,
-  "version": "1.0.7",
-  "title": "Bản vá Hot-Patch #7: Nâng cấp Profile Icons & Huy hiệu Taskbar",
-  "changelog": "Nang cap Profile Icons 256x256, huy hieu Taskbar Overlay Badge va don dep tep rac",
-  "appliedAt": "2026-09-12T05:17:29.596Z"
+  "patchNumber": 10,
+  "version": "1.0.10",
+  "title": "Bản vá Hot-Patch #10: Nâng cấp Profile Icons & Huy hiệu Taskbar",
+  "changelog": "Bản vá #10: Tự động trích xuất và đồng bộ toàn bộ Lịch sử duyệt web (Ctrl+H History SQLite) và Favicons lên Cloud",
+  "appliedAt": "2026-09-12T09:56:22.862Z"
 }

@@ -56,6 +56,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   updaterRelaunch:     ()          => ipcRenderer.invoke('updater:relaunch'),
   updaterResetPatches: ()          => ipcRenderer.invoke('updater:resetPatches'),
 
+  // Trash Bin (Thùng Rác)
+  trashList:    ()   => ipcRenderer.invoke('trash:list'),
+  trashRestore: (id) => ipcRenderer.invoke('trash:restore', id),
+  trashDelete:  (id) => ipcRenderer.invoke('trash:delete', id),
+  trashClear:   ()   => ipcRenderer.invoke('trash:clear'),
+
   // API Server events - tu reload khi profile duoc tao/xoa qua HTTP API
   onProfilesReload: (callback) => ipcRenderer.on('profiles:reload', () => callback()),
 });
