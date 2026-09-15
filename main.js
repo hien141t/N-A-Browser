@@ -871,34 +871,62 @@ ipcMain.handle('updater:checkPatch', async (event, customUrl) => {
   try {
     const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     let manifestUrl = customUrl;
+    let hasCustomInSettings = false;
     if (!manifestUrl && fs.existsSync(settingsPath)) {
       try {
         const s = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-        manifestUrl = s.updateManifestUrl;
+        if (s.updateManifestUrl) {
+          manifestUrl = s.updateManifestUrl;
+          hasCustomInSettings = true;
+        }
       } catch(e) {}
     }
 
-    // Nếu người dùng chỉ định URL riêng trong settings
+    // ── Kiểm tra đồng thời từ CẢ 2 NGUỒN GIT CHÍNH THỐNG (hien151306-byte & hien141t) ──
+    const sourcesToFetch = [...PATCH_SOURCES.map(fetchManifestFromSource)];
+
+    // Nếu có customUrl hoặc updateManifestUrl trong settings, kiểm tra đồng thời như 1 nguồn bổ sung
     if (manifestUrl) {
-      const resp = await fetch(manifestUrl, { headers: { 'Cache-Control': 'no-cache' } });
-      if (!resp.ok) return { ok: false, error: 'Máy chủ phản hồi mã lỗi HTTP: ' + resp.status };
-      const manifest = await resp.json();
-      return { ok: true, source: 'custom_url', ...manifest };
+      sourcesToFetch.push((async () => {
+        try {
+          const bustUrl = manifestUrl.includes('?') ? `${manifestUrl}&t=${Date.now()}` : `${manifestUrl}?t=${Date.now()}`;
+          const resp = await fetch(bustUrl, {
+            headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' },
+            signal: AbortSignal.timeout(6000)
+          });
+          if (resp.ok) {
+            const manifest = await resp.json();
+            return { ok: true, source: 'custom_url', ...manifest };
+          }
+        } catch(e) {}
+        return null;
+      })());
     }
 
-    // ── Kiểm tra đồng thời từ CẢ 2 NGUỒN GIT (hien151306-byte & hien141t) ──
-    const results = await Promise.allSettled(PATCH_SOURCES.map(fetchManifestFromSource));
+    const results = await Promise.allSettled(sourcesToFetch);
     const validManifests = results
       .filter(r => r.status === 'fulfilled' && r.value && r.value.ok)
       .map(r => r.value);
 
     if (validManifests.length === 0) {
-      return { ok: false, error: 'Không thể kết nối máy chủ kiểm tra bản vá từ cả 2 nguồn Git (hien151306-byte và hien141t)' };
+      return { ok: false, error: 'Không thể kết nối máy chủ kiểm tra bản vá từ các nguồn Git (hien151306-byte và hien141t)' };
     }
 
-    // Chọn bản vá có patchNumber cao nhất (mới nhất) giữa 2 nguồn Git
+    // Luôn chọn bản vá có patchNumber cao nhất (mới nhất) giữa tất cả các nguồn
     validManifests.sort((a, b) => (b.patchNumber || 0) - (a.patchNumber || 0));
     const bestManifest = validManifests[0];
+
+    // Tự động dọn dẹp updateManifestUrl cũ trong settings.json nếu nó trỏ vào GitHub để trả quyền kiểm soát cho Dual-Git
+    if (hasCustomInSettings && fs.existsSync(settingsPath)) {
+      try {
+        const s = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+        if (s.updateManifestUrl && (s.updateManifestUrl.includes('githubusercontent.com') || s.updateManifestUrl.includes('github.com'))) {
+          delete s.updateManifestUrl;
+          fs.writeFileSync(settingsPath, JSON.stringify(s, null, 2), 'utf-8');
+          console.log('[Updater] Đã tự động dọn dẹp updateManifestUrl cũ khỏi settings.json để luôn dùng Dual-Git tự động.');
+        }
+      } catch(e) {}
+    }
 
     console.log(`[Updater] Tìm thấy bản vá mới nhất từ nguồn: ${bestManifest.source} (Patch #${bestManifest.patchNumber})`);
     return bestManifest;

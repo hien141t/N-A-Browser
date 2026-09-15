@@ -1,7 +1,7 @@
 {
-  "patchNumber": 19,
-  "version": "1.0.19",
-  "title": "Bản vá Hot-Patch #19: Ban va #19: Fix dong bo lich su tim kiem qua may - luu WAL va cookies, dong bo khi dung profile",
-  "changelog": "Ban va #19: Fix dong bo lich su tim kiem qua may - luu WAL va cookies, dong bo khi dung profile",
-  "appliedAt": "2026-09-15T15:34:39.631Z"
+  "patchNumber": 20,
+  "version": "1.0.20",
+  "title": "Bản vá Hot-Patch #20: Fix loi updater: URL tuy chinh cu trong settings.json khong the ghi de nguon GitHub Dual-Git, tu dong so sanh patchNumber va don dep URL cu",
+  "changelog": "Fix loi updater: URL tuy chinh cu trong settings.json khong the ghi de nguon GitHub Dual-Git, tu dong so sanh patchNumber va don dep URL cu",
+  "appliedAt": "2026-09-15T16:04:22.201Z"
 }
