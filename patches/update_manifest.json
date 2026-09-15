@@ -1,10 +1,17 @@
 {
-  "version": "1.0.17",
-  "patchNumber": 17,
-  "title": "Bản vá Hot-Patch #17: Ban va #16: Tich hop he thong Dual-Git OTA Updater - Dong bo tu ca 2 nguon Git hien151306-byte va hien141t",
-  "changelog": "Ban va #16: Tich hop he thong Dual-Git OTA Updater - Dong bo tu ca 2 nguon Git hien151306-byte va hien141t",
-  "updatedAt": "2026-09-15T12:27:38.744Z",
+  "version": "1.0.18",
+  "patchNumber": 18,
+  "title": "Bản vá Hot-Patch #18: Ban va #18: Tu dong kiem tra va dong bo ban va - May da co ban va bo qua khong gui, may chua co thi gui lai danh sach cap nhat",
+  "changelog": "Ban va #18: Tu dong kiem tra va dong bo ban va - May da co ban va bo qua khong gui, may chua co thi gui lai danh sach cap nhat",
+  "updatedAt": "2026-09-15T14:07:47.258Z",
   "history": [
+    {
+      "patchNumber": 17,
+      "version": "1.0.17",
+      "title": "Bản vá Hot-Patch #17: Ban va #16: Tich hop he thong Dual-Git OTA Updater - Dong bo tu ca 2 nguon Git hien151306-byte va hien141t",
+      "changelog": "Ban va #16: Tich hop he thong Dual-Git OTA Updater - Dong bo tu ca 2 nguon Git hien151306-byte va hien141t",
+      "updatedAt": "2026-09-15T12:27:38.744Z"
+    },
     {
       "patchNumber": 16,
       "version": "1.0.16",

@@ -1,7 +1,7 @@
 {
-  "patchNumber": 14,
-  "version": "1.0.14",
-  "title": "Bản vá Hot-Patch #14: Nâng cấp Profile Icons & Huy hiệu Taskbar",
-  "changelog": "Ban va #14: Nang cap he thong cap nhat OTA - Hien danh sach tat ca ban va bi bo lo, dem so ban va chua cap nhat, changelog rieng tung ban",
-  "appliedAt": "2026-09-15T10:28:24.540Z"
+  "patchNumber": 18,
+  "version": "1.0.18",
+  "title": "Bản vá Hot-Patch #18: Ban va #18: Tu dong kiem tra va dong bo ban va - May da co ban va bo qua khong gui, may chua co thi gui lai danh sach cap nhat",
+  "changelog": "Ban va #18: Tu dong kiem tra va dong bo ban va - May da co ban va bo qua khong gui, may chua co thi gui lai danh sach cap nhat",
+  "appliedAt": "2026-09-15T14:07:47.259Z"
 }

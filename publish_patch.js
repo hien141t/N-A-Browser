@@ -182,6 +182,15 @@ const newManifest = {
   files: patchFilesList
 };
 
+const patchInfoPath = path.join(patchesDir, 'patch_info.json');
+const patchInfo = {
+  patchNumber: nextPatchNum,
+  version: '1.0.' + nextPatchNum,
+  title: `Bản vá Hot-Patch #${nextPatchNum}: ${commitMsg}`,
+  changelog: commitMsg,
+  appliedAt: new Date().toISOString()
+};
+fs.writeFileSync(patchInfoPath, JSON.stringify(patchInfo, null, 2), 'utf-8');
 fs.writeFileSync(manifestPath, JSON.stringify(newManifest, null, 2), 'utf-8');
 console.log(`\n🎉 Đã tạo thành công Bản vá #${nextPatchNum} gồm ${patchFilesList.length} files: "${commitMsg}"`);
 
