@@ -1,7 +1,7 @@
 {
-  "patchNumber": 13,
-  "version": "1.0.13",
-  "title": "Bản vá Hot-Patch #13: Nâng cấp Profile Icons & Huy hiệu Taskbar",
-  "changelog": "Ban va #13: Fix bug click nut Xin KM nhieu lan - Chi click 1 lan duy nhat vao nut xac nhan, khoa nut 8 giay sau khi bam tranh spam",
-  "appliedAt": "2026-09-15T10:22:14.370Z"
+  "patchNumber": 14,
+  "version": "1.0.14",
+  "title": "Bản vá Hot-Patch #14: Nâng cấp Profile Icons & Huy hiệu Taskbar",
+  "changelog": "Ban va #14: Nang cap he thong cap nhat OTA - Hien danh sach tat ca ban va bi bo lo, dem so ban va chua cap nhat, changelog rieng tung ban",
+  "appliedAt": "2026-09-15T10:28:24.540Z"
 }

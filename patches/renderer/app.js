@@ -39,6 +39,7 @@ const API = window.electronAPI || {
   trashRestore: async () => ({ ok: false, error: 'No Electron' }),
   trashDelete:  async () => ({ ok: false, error: 'No Electron' }),
   trashClear:   async () => ({ ok: false, error: 'No Electron' }),
+  proxyCheck:   async () => ({ ok: false, error: 'No Electron' }),
 };
 
 // ── State ──
@@ -291,6 +292,7 @@ function createProfileCard(profile, device, running) {
     <div class="card-proxy">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
       ${proxy}
+      ${profile.proxy?.host ? `<span class="proxy-status-badge" data-proxy-badge="${profile.id}" style="margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(99,102,241,0.15);color:#a5b4fc;cursor:pointer;" title="Bấm để kiểm tra proxy">🔌 Test</span>` : ''}
     </div>
     <div class="card-actions">
       <button class="btn-launch ${running ? 'stop' : ''}" data-id="${profile.id}">
@@ -311,6 +313,12 @@ function createProfileCard(profile, device, running) {
   card.querySelector('[data-action="clear-cache"]').addEventListener('click', () => clearProfileCache(profile.id));
   card.querySelector('[data-action="edit"]').addEventListener('click', () => openEditProfileModal(profile.id));
   card.querySelector('[data-action="delete"]').addEventListener('click', () => deleteProfileData(profile.id));
+  if (profile.proxy?.host) {
+    card.querySelector(`[data-proxy-badge="${profile.id}"]`)?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      testProxyOnly(profile);
+    });
+  }
   return card;
 }
 
@@ -338,6 +346,7 @@ function createProfileListRow(profile, device, running) {
       <button class="btn-launch ${running ? 'stop' : ''}" data-id="${profile.id}" style="padding:6px 12px;font-size:11px">
         ${running ? '■ Stop' : '▶ Launch'}
       </button>
+      ${profile.proxy?.host ? `<button class="btn-icon" data-proxy-badge="${profile.id}" data-action="test-proxy" data-id="${profile.id}" title="Kiểm tra Proxy" style="width:28px;height:28px;border-radius:7px;font-size:13px;">🔌</button>` : ''}
       <button class="btn-icon" data-action="sync-cookie" data-id="${profile.id}" title="Đồng bộ Cookie & Lịch sử (Ctrl+H) của profile này lên Cloud" style="width:28px;height:28px;border-radius:7px;color:#fbbf24">🍪</button>
       <button class="btn-icon" data-action="clear-cache" data-id="${profile.id}" title="Làm sạch Cookie & Cache" style="width:28px;height:28px;border-radius:7px">🧹</button>
       <button class="btn-icon" data-action="edit" data-id="${profile.id}" title="Edit" style="width:28px;height:28px;border-radius:7px">✏️</button>
@@ -350,10 +359,35 @@ function createProfileListRow(profile, device, running) {
   row.querySelector('[data-action="clear-cache"]').addEventListener('click', () => clearProfileCache(profile.id));
   row.querySelector('[data-action="edit"]').addEventListener('click', () => openEditProfileModal(profile.id));
   row.querySelector('[data-action="delete"]').addEventListener('click', () => deleteProfileData(profile.id));
+  if (profile.proxy?.host) {
+    row.querySelector('[data-action="test-proxy"]')?.addEventListener('click', () => testProxyOnly(profile));
+  }
   return row;
 }
 
-// ── Toggle Browser ──
+// ── Helper cập nhật badge trạng thái proxy ──
+function setProxyBadgeState(profileId, status, text, title = '') {
+  const elements = document.querySelectorAll(`[data-proxy-badge="${profileId}"]`);
+  elements.forEach(el => {
+    el.textContent = text;
+    if (title) el.title = title;
+    if (status === 'loading') {
+      el.style.background = 'rgba(234,179,8,0.18)';
+      el.style.color = '#eab308';
+    } else if (status === 'ok') {
+      el.style.background = 'rgba(6,214,160,0.18)';
+      el.style.color = '#06d6a0';
+    } else if (status === 'error') {
+      el.style.background = 'rgba(239,68,68,0.18)';
+      el.style.color = '#ef4444';
+    } else {
+      el.style.background = 'rgba(99,102,241,0.15)';
+      el.style.color = '#a5b4fc';
+    }
+  });
+}
+
+// ── Toggle Browser (với Proxy Check trước khi Launch) ──
 async function toggleBrowser(profileId, running) {
   const profile = profiles.find(p => p.id === profileId);
   if (!profile) return;
@@ -362,20 +396,84 @@ async function toggleBrowser(profileId, running) {
     const res = await API.closeBrowser(profileId);
     if (res.ok) toast('🛑 Browser stopped', 'info');
     else toast('⚠️ Could not stop browser', 'error');
-  } else {
-    const baseDevice = devices.find(d => d.id === profile.deviceId);
-    const device = {
-      ...baseDevice,
-      timezone: profile.timezone || baseDevice?.timezone || 'Asia/Ho_Chi_Minh'
-    };
-    const profileIndex = profiles.findIndex(p => p.id === profile.id);
-    const profileNum = profileIndex >= 0 ? profileIndex + 1 : 1;
-    toast(`🚀 Launching ${profile.name} (#${profileNum})...`, 'info');
-    const res = await API.launchBrowser({ ...profile, device, profileNum });
-    if (res.ok) toast(`✅ ${profile.name} launched (PID: ${res.pid})`, 'success');
-    else toast('❌ Launch failed — Is Chrome/Chromium installed?', 'error');
+    await refreshStatus();
+    return;
   }
+
+  // ── Kiểm tra proxy trước khi mở ──
+  if (profile.proxy?.host && profile.proxy?.port) {
+    const proxyHost = profile.proxy.host.split(':')[0] || profile.proxy.host;
+    const proxyPort = profile.proxy.port || 8080;
+
+    setProxyBadgeState(profileId, 'loading', '⏳', 'Đang kiểm tra proxy...');
+    toast(`🔌 Đang kiểm tra proxy ${proxyHost}:${proxyPort}...`, 'info');
+
+    try {
+      const checkRes = await API.proxyCheck({ host: proxyHost, port: proxyPort, type: profile.proxy.type || 'http' });
+
+      if (checkRes.ok) {
+        // Proxy OK → cập nhật badge xanh + launch luôn
+        setProxyBadgeState(profileId, 'ok', `✅ ${checkRes.latencyMs}ms`, `Proxy OK — ${checkRes.latencyMs}ms`);
+        toast(`✅ Proxy OK (${checkRes.latencyMs}ms) — Đang mở ${profile.name}...`, 'success');
+      } else {
+        // Proxy FAIL → cập nhật badge đỏ + hỏi có muốn tiếp tục không
+        setProxyBadgeState(profileId, 'error', '❌ Lỗi', `Proxy lỗi: ${checkRes.error}`);
+        toast(`⚠️ Proxy không kết nối được: ${checkRes.error}`, 'error');
+
+        const confirmed = await showConfirmModal({
+          icon: '⚠️',
+          title: 'Proxy không hoạt động!',
+          message: `${proxyHost}:${proxyPort} — ${checkRes.error}`,
+          sub: 'Vẫn muốn mở profile không? (Trình duyệt sẽ dùng IP thật của máy)',
+          confirmText: 'Vẫn mở',
+          danger: true
+        });
+        if (!confirmed) return; // Người dùng huỷ
+      }
+    } catch(e) {
+      console.warn('[ProxyCheck UI error]', e.message);
+      // Lỗi check → vẫn cho launch bình thường
+    }
+  }
+
+  // ── Launch browser ──
+  const baseDevice = devices.find(d => d.id === profile.deviceId);
+  const device = {
+    ...baseDevice,
+    timezone: profile.timezone || baseDevice?.timezone || 'Asia/Ho_Chi_Minh'
+  };
+  const profileIndex = profiles.findIndex(p => p.id === profile.id);
+  const profileNum = profileIndex >= 0 ? profileIndex + 1 : 1;
+  toast(`🚀 Launching ${profile.name} (#${profileNum})...`, 'info');
+  const res = await API.launchBrowser({ ...profile, device, profileNum });
+  if (res.ok) toast(`✅ ${profile.name} launched (PID: ${res.pid})`, 'success');
+  else toast('❌ Launch failed — Is Chrome/Chromium installed?', 'error');
+
   await refreshStatus();
+}
+
+// ── Test proxy thủ công (bấm nút 🔌 riêng) ──
+async function testProxyOnly(profile) {
+  if (!profile.proxy?.host) return;
+  const proxyHost = profile.proxy.host.split(':')[0] || profile.proxy.host;
+  const proxyPort = profile.proxy.port || 8080;
+
+  setProxyBadgeState(profile.id, 'loading', '⏳', 'Đang kiểm tra...');
+  toast(`🔌 Đang kiểm tra proxy ${proxyHost}:${proxyPort}...`, 'info');
+
+  try {
+    const res = await API.proxyCheck({ host: proxyHost, port: proxyPort, type: profile.proxy.type || 'http' });
+    if (res.ok) {
+      setProxyBadgeState(profile.id, 'ok', `✅ ${res.latencyMs}ms`, `Proxy OK — Latency: ${res.latencyMs}ms`);
+      toast(`✅ Proxy ${proxyHost}:${proxyPort} — OK! Latency: ${res.latencyMs}ms`, 'success');
+    } else {
+      setProxyBadgeState(profile.id, 'error', '❌', `Proxy lỗi: ${res.error}`);
+      toast(`❌ Proxy ${proxyHost}:${proxyPort} — ${res.error}`, 'error');
+    }
+  } catch(e) {
+    setProxyBadgeState(profile.id, 'error', '❌', `Lỗi: ${e.message}`);
+    toast(`⚠️ Lỗi kiểm tra proxy: ${e.message}`, 'error');
+  }
 }
 
 // ── Custom Confirm Modal ──

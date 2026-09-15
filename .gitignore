@@ -20,6 +20,7 @@ build/
 /profiles/
 /profiles.json
 /settings.json
+trash.json
 # Credentials & Private Config
 supabase_config.json
 

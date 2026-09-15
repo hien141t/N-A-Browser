@@ -62,6 +62,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   trashDelete:  (id) => ipcRenderer.invoke('trash:delete', id),
   trashClear:   ()   => ipcRenderer.invoke('trash:clear'),
 
+  // Proxy Check
+  proxyCheck: (cfg) => ipcRenderer.invoke('proxy:check', cfg),
+
   // API Server events - tu reload khi profile duoc tao/xoa qua HTTP API
   onProfilesReload: (callback) => ipcRenderer.on('profiles:reload', () => callback()),
 });

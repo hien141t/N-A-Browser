@@ -1,10 +1,17 @@
 {
-  "version": "1.0.14",
-  "patchNumber": 14,
-  "title": "Bản vá Hot-Patch #14: Nâng cấp Profile Icons & Huy hiệu Taskbar",
-  "changelog": "Ban va #14: Nang cap he thong cap nhat OTA - Hien danh sach tat ca ban va bi bo lo, dem so ban va chua cap nhat, changelog rieng tung ban",
-  "updatedAt": "2026-09-15T10:27:04.946Z",
+  "version": "1.0.15",
+  "patchNumber": 15,
+  "title": "Bản vá Hot-Patch #15: Ban va #15: Kiem tra Proxy tu dong truoc khi mo Profile (TCP ping, hien thi badge latency va hoi xac nhan neu proxy loi)",
+  "changelog": "Ban va #15: Kiem tra Proxy tu dong truoc khi mo Profile (TCP ping, hien thi badge latency va hoi xac nhan neu proxy loi)",
+  "updatedAt": "2026-09-15T11:45:26.128Z",
   "history": [
+    {
+      "patchNumber": 14,
+      "version": "1.0.14",
+      "title": "Bản vá Hot-Patch #14: Nâng cấp Profile Icons & Huy hiệu Taskbar",
+      "changelog": "Ban va #14: Nang cap he thong cap nhat OTA - Hien danh sach tat ca ban va bi bo lo, dem so ban va chua cap nhat, changelog rieng tung ban",
+      "updatedAt": "2026-09-15T10:27:04.946Z"
+    },
     {
       "patchNumber": 13,
       "version": "1.0.13",

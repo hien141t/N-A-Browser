@@ -175,7 +175,7 @@ if (fs.existsSync(manifestPath)) {
 const newManifest = {
   version: '1.0.' + nextPatchNum,
   patchNumber: nextPatchNum,
-  title: `Bản vá Hot-Patch #${nextPatchNum}: Nâng cấp Profile Icons & Huy hiệu Taskbar`,
+  title: `Bản vá Hot-Patch #${nextPatchNum}: ${commitMsg}`,
   changelog: commitMsg,
   updatedAt: new Date().toISOString(),
   history: existingHistory,

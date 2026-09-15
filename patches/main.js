@@ -908,6 +908,58 @@ ipcMain.handle('updater:resetPatches', async () => {
   }
 });
 
+// ── Proxy Check IPC ──
+// Kiểm tra kết nối TCP đến proxy host:port, trả về latency (ms)
+ipcMain.handle('proxy:check', async (event, proxyConfig) => {
+  const { host, port, type = 'http', user, pass } = proxyConfig || {};
+  if (!host || !port) return { ok: false, error: 'Thiếu host hoặc port proxy' };
+
+  const cleanHost = String(host).trim();
+  const cleanPort = parseInt(port);
+  if (!cleanHost || isNaN(cleanPort) || cleanPort < 1 || cleanPort > 65535) {
+    return { ok: false, error: `Proxy không hợp lệ: ${cleanHost}:${port}` };
+  }
+
+  const TIMEOUT_MS = 6000; // 6 giây timeout
+
+  return new Promise((resolve) => {
+    const t0 = Date.now();
+    const socket = new net.Socket();
+    let done = false;
+
+    const finish = (ok, error = null) => {
+      if (done) return;
+      done = true;
+      socket.destroy();
+      const latencyMs = Date.now() - t0;
+      if (ok) {
+        console.log(`[ProxyCheck] ✅ ${type}://${cleanHost}:${cleanPort} — ${latencyMs}ms`);
+        resolve({ ok: true, latencyMs, host: cleanHost, port: cleanPort, type });
+      } else {
+        console.log(`[ProxyCheck] ❌ ${type}://${cleanHost}:${cleanPort} — ${error}`);
+        resolve({ ok: false, error, latencyMs: Date.now() - t0, host: cleanHost, port: cleanPort, type });
+      }
+    };
+
+    socket.setTimeout(TIMEOUT_MS);
+    socket.on('connect', () => finish(true));
+    socket.on('timeout', () => finish(false, `Timeout sau ${TIMEOUT_MS / 1000}s — proxy không phản hồi`));
+    socket.on('error', (err) => {
+      const msg = err.code === 'ECONNREFUSED' ? 'Proxy từ chối kết nối (ECONNREFUSED)'
+                : err.code === 'ENOTFOUND'    ? `Không phân giải được host "${cleanHost}"`
+                : err.code === 'ETIMEDOUT'    ? `Timeout kết nối đến proxy`
+                : err.message;
+      finish(false, msg);
+    });
+
+    try {
+      socket.connect(cleanPort, cleanHost);
+    } catch(e) {
+      finish(false, e.message);
+    }
+  });
+});
+
 
 
 
