@@ -185,12 +185,39 @@ const newManifest = {
 fs.writeFileSync(manifestPath, JSON.stringify(newManifest, null, 2), 'utf-8');
 console.log(`\n🎉 Đã tạo thành công Bản vá #${nextPatchNum} gồm ${patchFilesList.length} files: "${commitMsg}"`);
 
-// 7. Git commit & push
+// 7. Git commit & push đồng thời lên CẢ 2 NGUỒN (origin: hien151306-byte & backup: hien141t)
 try {
-  console.log('🚀 Đang đẩy bản vá lên GitHub...');
-  execSync('git add -A && git commit -m "release: hot-patch #' + nextPatchNum + ' - ' + commitMsg.replace(/"/g, '') + '" && git push origin main', { cwd: rootDir, stdio: 'inherit' });
-  console.log(`\n🌟 XUẤT BẢN THÀNH CÔNG! Bản vá #${nextPatchNum} đã lên GitHub.`);
-  console.log('Các máy khác chỉ cần mở app N/A Browser và bấm "Kiểm tra bản vá mới" là sẽ tự động đồng bộ ngay lập tức.');
+  console.log('🚀 Đang commit bản vá...');
+  execSync('git add -A && git commit -m "release: hot-patch #' + nextPatchNum + ' - ' + commitMsg.replace(/"/g, '') + '"', { cwd: rootDir, stdio: 'inherit' });
+
+  // Đẩy lên origin (hien151306-byte)
+  let pushOriginSuccess = false;
+  try {
+    console.log('📡 Đang đẩy lên origin (hien151306-byte)...');
+    execSync('git push origin main', { cwd: rootDir, stdio: 'inherit' });
+    pushOriginSuccess = true;
+    console.log('✅ Đã đẩy thành công lên hien151306-byte/N-A-Browser');
+  } catch (e1) {
+    console.warn('⚠️ Chưa đẩy được lên origin (hien151306-byte): ' + e1.message);
+  }
+
+  // Đẩy lên backup (hien141t)
+  let pushBackupSuccess = false;
+  try {
+    console.log('📡 Đang đẩy lên backup (hien141t)...');
+    execSync('git push backup main', { cwd: rootDir, stdio: 'inherit' });
+    pushBackupSuccess = true;
+    console.log('✅ Đã đẩy thành công lên hien141t/N-A-Browser');
+  } catch (e2) {
+    console.warn('⚠️ Chưa đẩy được lên backup (hien141t): ' + e2.message);
+  }
+
+  if (pushOriginSuccess || pushBackupSuccess) {
+    console.log(`\n🌟 XUẤT BẢN THÀNH CÔNG! Bản vá #${nextPatchNum} đã lên GitHub.`);
+    console.log('Hệ thống N/A Browser tự động đồng bộ từ cả 2 nguồn Git (hien151306-byte và hien141t).');
+  } else {
+    console.error('\n❌ Không thể đẩy lên cả 2 nguồn Git!');
+  }
 } catch (err) {
-  console.error('❌ Lỗi khi đẩy lên GitHub:', err.message);
+  console.error('❌ Lỗi khi commit/đẩy bản vá:', err.message);
 }

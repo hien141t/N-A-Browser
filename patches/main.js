@@ -796,6 +796,60 @@ ipcMain.handle('updater:getPatchInfo', async () => {
   };
 });
 
+// ── Multi-source Git Repositories for OTA Patches (Dual-Git Redundancy) ──
+const PATCH_SOURCES = [
+  {
+    name: 'hien151306-byte',
+    owner: 'hien151306-byte',
+    repo: 'N-A-Browser',
+    branch: 'main',
+    api: 'https://api.github.com/repos/hien151306-byte/N-A-Browser/contents/patches/update_manifest.json',
+    raw: 'https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/update_manifest.json'
+  },
+  {
+    name: 'hien141t',
+    owner: 'hien141t',
+    repo: 'N-A-Browser',
+    branch: 'main',
+    api: 'https://api.github.com/repos/hien141t/N-A-Browser/contents/patches/update_manifest.json',
+    raw: 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/update_manifest.json'
+  }
+];
+
+// Helper lấy manifest từ 1 nguồn Git (thử GitHub API trước, sau đó raw URL)
+async function fetchManifestFromSource(src) {
+  // 1. Thử GitHub API (cập nhật ngay lập tức)
+  try {
+    const apiRes = await fetch(src.api, {
+      headers: { 'User-Agent': 'NABrowser-App', 'Accept': 'application/vnd.github.v3+json' },
+      signal: AbortSignal.timeout(5000)
+    });
+    if (apiRes.ok) {
+      const ghData = await apiRes.json();
+      if (ghData && ghData.content) {
+        const manifestStr = Buffer.from(ghData.content, 'base64').toString('utf8');
+        const manifest = JSON.parse(manifestStr);
+        return { ok: true, source: `github_api (${src.name})`, repoOwner: src.owner, ...manifest };
+      }
+    }
+  } catch (e) {}
+
+  // 2. Thử raw GitHub content (fallback)
+  try {
+    const rawUrl = `${src.raw}?t=${Date.now()}`;
+    const rawRes = await fetch(rawUrl, {
+      headers: { 'Cache-Control': 'no-cache' },
+      signal: AbortSignal.timeout(6000)
+    });
+    if (rawRes.ok) {
+      const manifest = await rawRes.json();
+      return { ok: true, source: `raw (${src.name})`, repoOwner: src.owner, ...manifest };
+    }
+  } catch (e) {}
+
+  return null;
+}
+
 ipcMain.handle('updater:checkPatch', async (event, customUrl) => {
   try {
     const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
@@ -807,27 +861,30 @@ ipcMain.handle('updater:checkPatch', async (event, customUrl) => {
       } catch(e) {}
     }
 
-    if (!manifestUrl) {
-      try {
-        const ghApiResp = await fetch('https://api.github.com/repos/hien151306-byte/N-A-Browser/contents/patches/update_manifest.json', {
-          headers: { 'User-Agent': 'NABrowser-App', 'Accept': 'application/vnd.github.v3+json' }
-        });
-        if (ghApiResp.ok) {
-          const ghData = await ghApiResp.json();
-          if (ghData && ghData.content) {
-            const manifestStr = Buffer.from(ghData.content, 'base64').toString('utf8');
-            const manifest = JSON.parse(manifestStr);
-            return { ok: true, source: 'github_api', ...manifest };
-          }
-        }
-      } catch (ghErr) {}
-      manifestUrl = 'https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/update_manifest.json?t=' + Date.now();
+    // Nếu người dùng chỉ định URL riêng trong settings
+    if (manifestUrl) {
+      const resp = await fetch(manifestUrl, { headers: { 'Cache-Control': 'no-cache' } });
+      if (!resp.ok) return { ok: false, error: 'Máy chủ phản hồi mã lỗi HTTP: ' + resp.status };
+      const manifest = await resp.json();
+      return { ok: true, source: 'custom_url', ...manifest };
     }
 
-    const resp = await fetch(manifestUrl, { headers: { 'Cache-Control': 'no-cache' } });
-    if (!resp.ok) return { ok: false, error: 'Máy chủ phản hồi mã lỗi HTTP: ' + resp.status };
-    const manifest = await resp.json();
-    return { ok: true, source: 'remote', ...manifest };
+    // ── Kiểm tra đồng thời từ CẢ 2 NGUỒN GIT (hien151306-byte & hien141t) ──
+    const results = await Promise.allSettled(PATCH_SOURCES.map(fetchManifestFromSource));
+    const validManifests = results
+      .filter(r => r.status === 'fulfilled' && r.value && r.value.ok)
+      .map(r => r.value);
+
+    if (validManifests.length === 0) {
+      return { ok: false, error: 'Không thể kết nối máy chủ kiểm tra bản vá từ cả 2 nguồn Git (hien151306-byte và hien141t)' };
+    }
+
+    // Chọn bản vá có patchNumber cao nhất (mới nhất) giữa 2 nguồn Git
+    validManifests.sort((a, b) => (b.patchNumber || 0) - (a.patchNumber || 0));
+    const bestManifest = validManifests[0];
+
+    console.log(`[Updater] Tìm thấy bản vá mới nhất từ nguồn: ${bestManifest.source} (Patch #${bestManifest.patchNumber})`);
+    return bestManifest;
   } catch (err) {
     return { ok: false, error: 'Không thể kết nối máy chủ kiểm tra bản vá: ' + err.message };
   }
@@ -865,10 +922,40 @@ ipcMain.handle('updater:applyPatch', async (event, patchData) => {
       if (f.content) {
         fs.writeFileSync(destPath, f.content, 'utf-8');
       } else if (f.url) {
-        const fileResp = await fetch(f.url, { headers: { 'Cache-Control': 'no-cache' } });
-        if (!fileResp.ok) throw new Error('Lỗi tải file ' + f.filename + ': HTTP ' + fileResp.status);
-        const arrayBuf = await fileResp.arrayBuffer();
-        fs.writeFileSync(destPath, Buffer.from(arrayBuf));
+        // Tự động tải từ URL gốc, nếu lỗi thì tự đổi sang nguồn Git phụ (fallback mirror)
+        const urlsToTry = [f.url];
+        for (const src of PATCH_SOURCES) {
+          const mirrorUrl = f.url.replace(
+            /raw\.githubusercontent\.com\/[^/]+\/N-A-Browser/,
+            `raw.githubusercontent.com/${src.owner}/N-A-Browser`
+          );
+          if (!urlsToTry.includes(mirrorUrl)) {
+            urlsToTry.push(mirrorUrl);
+          }
+        }
+
+        let downloaded = false;
+        let lastErr = null;
+        for (const tryUrl of urlsToTry) {
+          try {
+            const fileResp = await fetch(tryUrl, {
+              headers: { 'Cache-Control': 'no-cache' },
+              signal: AbortSignal.timeout(10000)
+            });
+            if (fileResp.ok) {
+              const arrayBuf = await fileResp.arrayBuffer();
+              fs.writeFileSync(destPath, Buffer.from(arrayBuf));
+              downloaded = true;
+              break;
+            }
+          } catch(e) {
+            lastErr = e;
+          }
+        }
+
+        if (!downloaded) {
+          throw new Error(`Lỗi tải file ${f.filename}: thử tải từ cả 2 nguồn Git thất bại (${lastErr ? lastErr.message : 'HTTP error'})`);
+        }
       }
     }
 

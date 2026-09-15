@@ -1,10 +1,17 @@
 {
-  "version": "1.0.16",
-  "patchNumber": 16,
-  "title": "Bản vá Hot-Patch #16: Ban va #16: Chuyen he thong cap nhat va repository chinh thuc sang hien151306-byte/N-A-Browser",
-  "changelog": "Ban va #16: Chuyen he thong cap nhat va repository chinh thuc sang hien151306-byte/N-A-Browser",
-  "updatedAt": "2026-09-15T12:18:47.470Z",
+  "version": "1.0.17",
+  "patchNumber": 17,
+  "title": "Bản vá Hot-Patch #17: Ban va #16: Tich hop he thong Dual-Git OTA Updater - Dong bo tu ca 2 nguon Git hien151306-byte va hien141t",
+  "changelog": "Ban va #16: Tich hop he thong Dual-Git OTA Updater - Dong bo tu ca 2 nguon Git hien151306-byte va hien141t",
+  "updatedAt": "2026-09-15T12:27:38.744Z",
   "history": [
+    {
+      "patchNumber": 16,
+      "version": "1.0.16",
+      "title": "Bản vá Hot-Patch #16: Ban va #16: Chuyen he thong cap nhat va repository chinh thuc sang hien151306-byte/N-A-Browser",
+      "changelog": "Ban va #16: Chuyen he thong cap nhat va repository chinh thuc sang hien151306-byte/N-A-Browser",
+      "updatedAt": "2026-09-15T12:18:47.470Z"
+    },
     {
       "patchNumber": 15,
       "version": "1.0.15",
