@@ -3,8 +3,7 @@
 // ==========================================
 
 const DEFAULT_WEBSITES = [
-    "https://m.9922999.com/Account/Register",
-    "https://m.9922044.com/Account/Register"
+    "https://m.i9bet331.com/Account/Register?r=NR6K77"
 ];
 
 // Telegram Bot Settings (Cấu hình sẵn của bạn)
@@ -103,7 +102,7 @@ function generateRandomAccount() {
 
 function getSelectedSite() {
     const select = document.getElementById('siteSelect');
-    return select.value || 'https://m.9922999.com/Account/Register';
+    return select.value || 'https://m.i9bet331.com/Account/Register?r=NR6K77';
 }
 
 async function loadWebsites() {
@@ -551,3 +550,4 @@ document.getElementById('promoBtn')?.addEventListener('click', async () => {
         promoUrl: promoUrl
     });
 });
+

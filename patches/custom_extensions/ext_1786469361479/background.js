@@ -4,8 +4,7 @@
 // ==========================================
 
 const DEFAULT_WEBSITES = [
-    "https://m.9922999.com",
-    "https://m.9922044.com"
+    "https://m.i9bet331.com/Account/Register?r=NR6K77"
 ];
 
 const OCR_SERVER = "http://180.93.106.208:5588";
@@ -123,13 +122,18 @@ async function runRegisterOnly(tabId, data) {
     try {
         console.log("[i9 BG] Bắt đầu điền form đăng ký i9...");
         let site = data.site || DEFAULT_WEBSITES[0];
+        let targetUrl = site;
         try {
-            site = new URL(site).origin;
+            const parsedSite = new URL(site);
+            if (!parsedSite.pathname.toLowerCase().includes("/account/register")) {
+                parsedSite.pathname = "/Account/Register";
+            }
+            targetUrl = parsedSite.toString();
+            site = parsedSite.origin;
         } catch (e) {
             console.error("[i9 BG] Error parsing site URL:", e);
+            targetUrl = site.replace(/\/$/, "") + "/Account/Register";
         }
-
-        let targetUrl = site + "/Account/Register";
         const tab = await chrome.tabs.get(tabId);
 
         if (!tab.url || !tab.url.includes("Account/Register")) {
@@ -154,13 +158,18 @@ async function runFullSequence(tabId, data) {
     try {
         console.log("[i9 BG] Bắt đầu luồng CHẠY ALL i9...");
         let site = data.site || DEFAULT_WEBSITES[0];
+        let targetUrl = site;
         try {
-            site = new URL(site).origin;
+            const parsedSite = new URL(site);
+            if (!parsedSite.pathname.toLowerCase().includes("/account/register")) {
+                parsedSite.pathname = "/Account/Register";
+            }
+            targetUrl = parsedSite.toString();
+            site = parsedSite.origin;
         } catch (e) {
             console.error("[i9 BG] Error parsing site URL:", e);
+            targetUrl = site.replace(/\/$/, "") + "/Account/Register";
         }
-
-        let targetUrl = site + "/Account/Register";
         const tab = await chrome.tabs.get(tabId);
 
         if (!tab.url || !tab.url.includes("Account/Register")) {
@@ -849,3 +858,4 @@ function promoDOMSequenceI9(username, depositAmount) {
         }
     });
 }
+

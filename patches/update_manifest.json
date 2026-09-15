@@ -1,9 +1,9 @@
 {
-  "version": "1.0.11",
-  "patchNumber": 11,
-  "title": "Bản vá Hot-Patch #11: Nâng cấp Profile Icons & Huy hiệu Taskbar",
-  "changelog": "Ban va #11: Them Thung Rac (Soft-Delete) - Xoa profile vao Thung Rac thay vi xoa ngay, co the Khoi phuc hoac Xoa vinh vien tren Cloud",
-  "updatedAt": "2026-09-15T10:08:08.326Z",
+  "version": "1.0.12",
+  "patchNumber": 12,
+  "title": "Bản vá Hot-Patch #12: Nâng cấp Profile Icons & Huy hiệu Taskbar",
+  "changelog": "Ban va #12: Cap nhat Tool i9 Auto Register - Nang cap extension tu dong dang ky, dien form i9 (9922999.com, 9922044.com), giai captcha OCR",
+  "updatedAt": "2026-09-15T10:17:49.419Z",
   "files": [
     {
       "filename": "app.js",
@@ -203,44 +203,9 @@
       "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/content.js"
     },
     {
-      "filename": "copy_diem.py",
-      "dest": "custom_extensions/ext_1786469361479/copy_diem.py",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/copy_diem.py"
-    },
-    {
-      "filename": "get_points.py",
-      "dest": "custom_extensions/ext_1786469361479/get_points.py",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/get_points.py"
-    },
-    {
-      "filename": "get_points_200.py",
-      "dest": "custom_extensions/ext_1786469361479/get_points_200.py",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/get_points_200.py"
-    },
-    {
-      "filename": "get_points_bulk.py",
-      "dest": "custom_extensions/ext_1786469361479/get_points_bulk.py",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/get_points_bulk.py"
-    },
-    {
-      "filename": "get_points_kiot.py",
-      "dest": "custom_extensions/ext_1786469361479/get_points_kiot.py",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/get_points_kiot.py"
-    },
-    {
-      "filename": "get_points_stealth.py",
-      "dest": "custom_extensions/ext_1786469361479/get_points_stealth.py",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/get_points_stealth.py"
-    },
-    {
       "filename": "icon128.png",
       "dest": "custom_extensions/ext_1786469361479/icon128.png",
       "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/icon128.png"
-    },
-    {
-      "filename": "kiot_proxy.py",
-      "dest": "custom_extensions/ext_1786469361479/kiot_proxy.py",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/kiot_proxy.py"
     },
     {
       "filename": "local_ocr_server.py",
