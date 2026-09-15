@@ -149,13 +149,36 @@ if (fs.existsSync(srcExtJson)) {
   console.log('✅ Đã nạp extensions.json vào bản vá');
 }
 
-// 6. Ghi manifest mới
+// 6. Ghi manifest mới (giữ history của các bản vá cũ)
+let existingHistory = [];
+if (fs.existsSync(manifestPath)) {
+  try {
+    const oldManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+    // Append bản vá cũ vào history
+    const oldEntry = {
+      patchNumber: oldManifest.patchNumber,
+      version: oldManifest.version,
+      title: oldManifest.title,
+      changelog: oldManifest.changelog,
+      updatedAt: oldManifest.updatedAt || new Date().toISOString()
+    };
+    existingHistory = oldManifest.history || [];
+    // Thêm bản cũ vào đầu history (nếu chưa có)
+    if (!existingHistory.find(h => h.patchNumber === oldManifest.patchNumber)) {
+      existingHistory.unshift(oldEntry);
+    }
+    // Giữ tối đa 30 bản trong history
+    if (existingHistory.length > 30) existingHistory = existingHistory.slice(0, 30);
+  } catch(e) {}
+}
+
 const newManifest = {
   version: '1.0.' + nextPatchNum,
   patchNumber: nextPatchNum,
   title: `Bản vá Hot-Patch #${nextPatchNum}: Nâng cấp Profile Icons & Huy hiệu Taskbar`,
   changelog: commitMsg,
   updatedAt: new Date().toISOString(),
+  history: existingHistory,
   files: patchFilesList
 };
 

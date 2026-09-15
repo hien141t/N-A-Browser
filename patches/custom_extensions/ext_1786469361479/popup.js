@@ -527,13 +527,7 @@ document.getElementById('moneyPassBtn').addEventListener('click', async () => {
     });
 });
 
-let _promoRunning = false;
 document.getElementById('promoBtn')?.addEventListener('click', async () => {
-    if (_promoRunning) {
-        addLog('⏳ Đang chạy Xin KM rồi, vui lòng đợi...', 'warning');
-        return;
-    }
-
     const username = document.getElementById('username').value;
     const depositAmount = document.getElementById('depositAmount').value || '50';
     const promoUrl = document.getElementById('promoUrl').value || 'https://i9sanh.cc/Activity/detail/id/111';
@@ -547,12 +541,6 @@ document.getElementById('promoBtn')?.addEventListener('click', async () => {
     const tab = tabs.find(t => !t.url.startsWith('chrome-extension://')) || tabs[0];
     if (!tab) return;
 
-    // Khoá nút, tránh click nhiều lần
-    _promoRunning = true;
-    const btn = document.getElementById('promoBtn');
-    const originalText = btn ? btn.textContent : '';
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Đang chạy...'; btn.style.opacity = '0.6'; }
-
     addLog(`Đang chuyển hướng sang Xin KM cho TK '${username}'...`, 'info');
     chrome.runtime.sendMessage({
         action: "runPromo",
@@ -560,12 +548,6 @@ document.getElementById('promoBtn')?.addEventListener('click', async () => {
         username: username,
         depositAmount: depositAmount,
         promoUrl: promoUrl
-    }, () => {
-        // Mở khoá nút sau khi message đã được gửi đi (background xử lý async)
-        setTimeout(() => {
-            _promoRunning = false;
-            if (btn) { btn.disabled = false; btn.textContent = originalText; btn.style.opacity = '1'; }
-        }, 8000); // khoá 8 giây để tránh spam
     });
 });
 

@@ -1993,23 +1993,57 @@ async function setupUpdater() {
         const newPatchNum = res.patchNumber || 1;
 
         if (newPatchNum > curPatchNum) {
+          const missedCount = newPatchNum - curPatchNum;
           if (msgEl) {
-            msgEl.textContent = ' Phát hiện có bản vá mới!';
+            msgEl.textContent = `🆕 Có ${missedCount} bản vá mới chưa cập nhật!`;
             msgEl.style.color = '#06d6a0';
           }
+
           if (bannerEl) {
             bannerEl.style.display = 'block';
-            if (titleEl) titleEl.textContent = res.title || ('Bản vá mới v' + (res.version || '1.0.1'));
-            if (changelogEl) changelogEl.textContent = res.changelog || 'Bao gồm các bản sửa lỗi và cải thiện tính năng.';
+
+            // ── Tạo danh sách các bản vá bị bỏ lỡ ──
+            const allHistory = [
+              { patchNumber: res.patchNumber, version: res.version, title: res.title, changelog: res.changelog, updatedAt: res.updatedAt },
+              ...(res.history || [])
+            ];
+            // Lọc chỉ các bản chưa có (> curPatchNum), sort giảm dần
+            const missed = allHistory
+              .filter(h => (h.patchNumber || 0) > curPatchNum)
+              .sort((a, b) => (b.patchNumber || 0) - (a.patchNumber || 0));
+
+            if (titleEl) titleEl.textContent = `📦 ${missedCount} Bản vá mới — Patch #${curPatchNum + 1}→#${newPatchNum}`;
+
+            // Render danh sách từng bản vá
+            if (changelogEl) {
+              changelogEl.innerHTML = '';
+              missed.forEach(h => {
+                const item = document.createElement('div');
+                item.style.cssText = `
+                  padding:10px 14px;border-radius:8px;margin-bottom:8px;
+                  background:rgba(99,102,241,0.07);border:1px solid rgba(99,102,241,0.2);
+                `;
+                const date = h.updatedAt ? new Date(h.updatedAt).toLocaleDateString('vi-VN') : '';
+                item.innerHTML = `
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                    <span style="background:rgba(99,102,241,0.2);color:#a5b4fc;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">v${h.version || '?'} · #${h.patchNumber}</span>
+                    ${date ? `<span style="color:var(--text-muted);font-size:10px;">${date}</span>` : ''}
+                  </div>
+                  <div style="font-size:12px;color:var(--text-muted);line-height:1.5;">${h.changelog || h.title || 'Cải thiện hiệu năng'}</div>
+                `;
+                changelogEl.appendChild(item);
+              });
+            }
+
             if (applyBtn) {
               applyBtn.style.display = 'inline-block';
               applyBtn.disabled = false;
-              applyBtn.textContent = '⚡ Tải & Áp dụng bản vá ngay';
+              applyBtn.textContent = `⚡ Cập nhật tất cả ${missedCount} bản vá`;
             }
           }
         } else {
           if (msgEl) {
-            msgEl.textContent = ' Bạn đang sử dụng bản vá mới nhất!';
+            msgEl.textContent = '✅ Bạn đang sử dụng bản vá mới nhất!';
             msgEl.style.color = '#06d6a0';
           }
         }

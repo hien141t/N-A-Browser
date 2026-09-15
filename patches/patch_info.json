@@ -1,7 +1,7 @@
 {
-  "patchNumber": 12,
-  "version": "1.0.12",
-  "title": "Bản vá Hot-Patch #12: Nâng cấp Profile Icons & Huy hiệu Taskbar",
-  "changelog": "Ban va #12: Cap nhat Tool i9 Auto Register - Nang cap extension tu dong dang ky, dien form i9 (9922999.com, 9922044.com), giai captcha OCR",
-  "appliedAt": "2026-09-15T10:18:48.083Z"
+  "patchNumber": 13,
+  "version": "1.0.13",
+  "title": "Bản vá Hot-Patch #13: Nâng cấp Profile Icons & Huy hiệu Taskbar",
+  "changelog": "Ban va #13: Fix bug click nut Xin KM nhieu lan - Chi click 1 lan duy nhat vao nut xac nhan, khoa nut 8 giay sau khi bam tranh spam",
+  "appliedAt": "2026-09-15T10:22:14.370Z"
 }
