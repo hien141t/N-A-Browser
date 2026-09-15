@@ -1861,8 +1861,14 @@ async function syncWithCloud(pin, isManual = false) {
       }
     }
 
-    // TUYỆT ĐỐI KHÔNG gọi syncPushProfiles ở đây:
-    // Tránh trường hợp máy phụ có danh sách cũ đẩy ngược lại làm hồi sinh profile đã xóa!
+    // Khi người dùng bấm "Đồng bộ Cloud", snapshot Web Data/History trước.
+    // Luồng tự động lúc mở app vẫn chỉ pull để máy phụ không đẩy dữ liệu cũ ngược lên.
+    if (isManual && API.syncAllCookies) {
+      const webDataRes = await API.syncAllCookies();
+      if (webDataRes && !webDataRes.ok) {
+        throw new Error(webDataRes.error || 'Không thể đồng bộ History/Cookie lên Cloud');
+      }
+    }
 
     if (API.syncPullProfiles) {
       const pullRes = await API.syncPullProfiles();

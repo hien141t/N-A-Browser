@@ -1,7 +1,7 @@
 {
-  "patchNumber": 18,
-  "version": "1.0.18",
-  "title": "Bản vá Hot-Patch #18: Ban va #18: Tu dong kiem tra va dong bo ban va - May da co ban va bo qua khong gui, may chua co thi gui lai danh sach cap nhat",
-  "changelog": "Ban va #18: Tu dong kiem tra va dong bo ban va - May da co ban va bo qua khong gui, may chua co thi gui lai danh sach cap nhat",
-  "appliedAt": "2026-09-15T14:07:47.259Z"
+  "patchNumber": 19,
+  "version": "1.0.19",
+  "title": "Bản vá Hot-Patch #19: Ban va #19: Fix dong bo lich su tim kiem qua may - luu WAL va cookies, dong bo khi dung profile",
+  "changelog": "Ban va #19: Fix dong bo lich su tim kiem qua may - luu WAL va cookies, dong bo khi dung profile",
+  "appliedAt": "2026-09-15T15:34:39.631Z"
 }
