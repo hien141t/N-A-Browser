@@ -1,7 +1,7 @@
 {
-  "patchNumber": 11,
-  "version": "1.0.11",
-  "title": "Bản vá Hot-Patch #11: Nâng cấp Profile Icons & Huy hiệu Taskbar",
-  "changelog": "Ban va #11: Them Thung Rac (Soft-Delete) - Xoa profile vao Thung Rac thay vi xoa ngay, co the Khoi phuc hoac Xoa vinh vien tren Cloud",
-  "appliedAt": "2026-09-15T10:12:33.166Z"
+  "patchNumber": 12,
+  "version": "1.0.12",
+  "title": "Bản vá Hot-Patch #12: Nâng cấp Profile Icons & Huy hiệu Taskbar",
+  "changelog": "Ban va #12: Cap nhat Tool i9 Auto Register - Nang cap extension tu dong dang ky, dien form i9 (9922999.com, 9922044.com), giai captcha OCR",
+  "appliedAt": "2026-09-15T10:18:48.083Z"
 }

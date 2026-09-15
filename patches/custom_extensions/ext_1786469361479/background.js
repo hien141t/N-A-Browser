@@ -846,9 +846,9 @@ function promoDOMSequenceI9(username, depositAmount) {
 
             if (btnSubmit) {
                 console.log("[i9 Promo] Click nút Xác nhận xin khuyến mãi...");
-                forceClick(btnSubmit);
-                const parent = btnSubmit.closest('a, button');
-                if (parent && parent !== btnSubmit) forceClick(parent);
+                // Chỉ click 1 lần duy nhất lên phần tử có sự kiện (a hoặc button cha)
+                const clickTarget = btnSubmit.closest('a, button') || btnSubmit;
+                clickTarget.click();
             }
 
             resolve({ success: true, captchaText });
