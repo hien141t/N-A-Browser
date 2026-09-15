@@ -809,7 +809,7 @@ ipcMain.handle('updater:checkPatch', async (event, customUrl) => {
 
     if (!manifestUrl) {
       try {
-        const ghApiResp = await fetch('https://api.github.com/repos/hien141t/N-A-Browser/contents/patches/update_manifest.json', {
+        const ghApiResp = await fetch('https://api.github.com/repos/hien151306-byte/N-A-Browser/contents/patches/update_manifest.json', {
           headers: { 'User-Agent': 'NABrowser-App', 'Accept': 'application/vnd.github.v3+json' }
         });
         if (ghApiResp.ok) {
@@ -821,7 +821,7 @@ ipcMain.handle('updater:checkPatch', async (event, customUrl) => {
           }
         }
       } catch (ghErr) {}
-      manifestUrl = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/update_manifest.json?t=' + Date.now();
+      manifestUrl = 'https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/update_manifest.json?t=' + Date.now();
     }
 
     const resp = await fetch(manifestUrl, { headers: { 'Cache-Control': 'no-cache' } });

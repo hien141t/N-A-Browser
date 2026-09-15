@@ -22,10 +22,10 @@ if (fs.existsSync(manifestPath)) {
 }
 
 const nextPatchNum = (manifest.patchNumber || 6) + 1;
-const rawBaseRenderer = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/renderer/';
-const rawBaseExt = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/';
-const rawBaseIcons = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/';
-const rawBasePatches = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/';
+const rawBaseRenderer = 'https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/renderer/';
+const rawBaseExt = 'https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/custom_extensions/';
+const rawBaseIcons = 'https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/';
+const rawBasePatches = 'https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/';
 
 fs.mkdirSync(patchesRendererDir, { recursive: true });
 fs.mkdirSync(patchesExtDir, { recursive: true });
