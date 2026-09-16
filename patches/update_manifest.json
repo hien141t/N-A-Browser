@@ -1,38 +1,10 @@
 {
-  "version": "1.0.21",
-  "patchNumber": 21,
-  "title": "Bản vá Hot-Patch #21: Khoi phuc toan bo ma nguon ve ban va #17 (Rollback to Patch #17)",
-  "changelog": "Khoi phuc toan bo ma nguon ve ban va #17 (Rollback to Patch #17)",
-  "updatedAt": "2026-09-16T09:39:31.960Z",
+  "version": "1.0.17",
+  "patchNumber": 17,
+  "title": "Bản vá Hot-Patch #17: Ban va #16: Tich hop he thong Dual-Git OTA Updater - Dong bo tu ca 2 nguon Git hien151306-byte va hien141t",
+  "changelog": "Ban va #16: Tich hop he thong Dual-Git OTA Updater - Dong bo tu ca 2 nguon Git hien151306-byte va hien141t",
+  "updatedAt": "2026-09-15T12:27:38.744Z",
   "history": [
-    {
-      "patchNumber": 20,
-      "version": "1.0.20",
-      "title": "Bản vá Hot-Patch #20: Fix loi updater: URL tuy chinh cu trong settings.json khong the ghi de nguon GitHub Dual-Git, tu dong so sanh patchNumber va don dep URL cu",
-      "changelog": "Fix loi updater: URL tuy chinh cu trong settings.json khong the ghi de nguon GitHub Dual-Git, tu dong so sanh patchNumber va don dep URL cu",
-      "updatedAt": "2026-09-15T16:04:22.200Z"
-    },
-    {
-      "patchNumber": 19,
-      "version": "1.0.19",
-      "title": "Bản vá Hot-Patch #19: Ban va #19: Fix dong bo lich su tim kiem qua may - luu WAL va cookies, dong bo khi dung profile",
-      "changelog": "Ban va #19: Fix dong bo lich su tim kiem qua may - luu WAL va cookies, dong bo khi dung profile",
-      "updatedAt": "2026-09-15T15:34:39.631Z"
-    },
-    {
-      "patchNumber": 18,
-      "version": "1.0.18",
-      "title": "Bản vá Hot-Patch #18: Ban va #18: Tu dong kiem tra va dong bo ban va - May da co ban va bo qua khong gui, may chua co thi gui lai danh sach cap nhat",
-      "changelog": "Ban va #18: Tu dong kiem tra va dong bo ban va - May da co ban va bo qua khong gui, may chua co thi gui lai danh sach cap nhat",
-      "updatedAt": "2026-09-15T14:07:47.258Z"
-    },
-    {
-      "patchNumber": 17,
-      "version": "1.0.17",
-      "title": "Bản vá Hot-Patch #17: Ban va #16: Tich hop he thong Dual-Git OTA Updater - Dong bo tu ca 2 nguon Git hien151306-byte va hien141t",
-      "changelog": "Ban va #16: Tich hop he thong Dual-Git OTA Updater - Dong bo tu ca 2 nguon Git hien151306-byte va hien141t",
-      "updatedAt": "2026-09-15T12:27:38.744Z"
-    },
     {
       "patchNumber": 16,
       "version": "1.0.16",
@@ -111,11 +83,6 @@
       "url": "https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/badge_10.png"
     },
     {
-      "filename": "badge_11.png",
-      "dest": "profile_icons/badge_11.png",
-      "url": "https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/badge_11.png"
-    },
-    {
       "filename": "badge_2.png",
       "dest": "profile_icons/badge_2.png",
       "url": "https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/badge_2.png"
@@ -174,16 +141,6 @@
       "filename": "profile_10.png",
       "dest": "profile_icons/profile_10.png",
       "url": "https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/profile_10.png"
-    },
-    {
-      "filename": "profile_11.ico",
-      "dest": "profile_icons/profile_11.ico",
-      "url": "https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/profile_11.ico"
-    },
-    {
-      "filename": "profile_11.png",
-      "dest": "profile_icons/profile_11.png",
-      "url": "https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/profile_11.png"
     },
     {
       "filename": "profile_2.ico",

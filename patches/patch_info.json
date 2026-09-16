@@ -1,7 +1,7 @@
 {
-  "patchNumber": 21,
-  "version": "1.0.21",
-  "title": "Bản vá Hot-Patch #21: Khoi phuc toan bo ma nguon ve ban va #17 (Rollback to Patch #17)",
-  "changelog": "Khoi phuc toan bo ma nguon ve ban va #17 (Rollback to Patch #17)",
-  "appliedAt": "2026-09-16T09:39:31.961Z"
+  "patchNumber": 17,
+  "version": "1.0.17",
+  "title": "Bản vá Hot-Patch #17: Tích hợp hệ thống Dual-Git OTA Updater",
+  "changelog": "Ban va #17: Tich hop he thong Dual-Git OTA Updater - Dong bo tu ca 2 nguon Git hien151306-byte va hien141t",
+  "appliedAt": "2026-09-15T12:27:38.744Z"
 }
