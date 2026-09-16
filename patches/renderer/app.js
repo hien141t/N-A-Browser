@@ -1321,10 +1321,10 @@ function promptExtensionName(defaultName, extPath, isEditing = false) {
     const pathInfoEl = document.getElementById('extOriginalPathInfo');
     const cancelBtn = document.getElementById('extNameModalCancelBtn');
     const saveBtn = document.getElementById('extNameModalSaveBtn');
+    const closeBtn = document.getElementById('extNameModalCloseBtn');
 
     if (!overlay || !inputEl) {
-      const entered = window.prompt(isEditing ? 'Đổi tên tiện ích mở rộng:' : 'Đặt tên cho tiện ích mở rộng vừa thêm:', defaultName);
-      resolve(entered !== null ? (entered.trim() || defaultName) : (isEditing ? null : defaultName));
+      resolve(defaultName);
       return;
     }
 
@@ -1336,28 +1336,38 @@ function promptExtensionName(defaultName, extPath, isEditing = false) {
       pathInfoEl.textContent = extPath ? `Đường dẫn: ${extPath}` : '';
     }
 
+    overlay.style.display = 'flex';
     overlay.classList.add('open');
     setTimeout(() => {
       inputEl.focus();
       inputEl.select();
     }, 120);
 
-    const cleanup = () => {
+    let resolved = false;
+    const cleanup = (val) => {
+      if (resolved) return;
+      resolved = true;
       overlay.classList.remove('open');
+      overlay.style.display = 'none';
       if (saveBtn) saveBtn.removeEventListener('click', onSave);
       if (cancelBtn) cancelBtn.removeEventListener('click', onCancel);
+      if (closeBtn) closeBtn.removeEventListener('click', onCancel);
       if (inputEl) inputEl.removeEventListener('keydown', onKey);
+      overlay.removeEventListener('click', onOverlayClick);
+      resolve(val);
     };
 
     const onSave = () => {
       const val = inputEl.value.trim();
-      cleanup();
-      resolve(val || defaultName);
+      cleanup(val || defaultName);
     };
 
     const onCancel = () => {
-      cleanup();
-      resolve(isEditing ? null : defaultName);
+      cleanup(isEditing ? null : defaultName);
+    };
+
+    const onOverlayClick = (e) => {
+      if (e.target === overlay) onCancel();
     };
 
     const onKey = (e) => {
@@ -1372,26 +1382,40 @@ function promptExtensionName(defaultName, extPath, isEditing = false) {
 
     if (saveBtn) saveBtn.addEventListener('click', onSave);
     if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
+    if (closeBtn) closeBtn.addEventListener('click', onCancel);
     if (inputEl) inputEl.addEventListener('keydown', onKey);
+    overlay.addEventListener('click', onOverlayClick);
   });
 }
 
 function setupExtensionsPage() {
   document.getElementById('btnAddExtension').addEventListener('click', async () => {
-    const res = await API.selectExtension();
-    if (!res) return;
-    if (res.ok) {
-      // Cho phép người dùng đặt tên sau bước thêm vào
-      const customName = await promptExtensionName(res.name, res.path, false);
-      if (customName) {
-        res.name = customName;
+    try {
+      const res = await API.selectExtension();
+      if (!res) return;
+      if (!res.ok) {
+        toast(`❌ ${res.error || 'Không thể thêm tiện ích'}`, 'error');
+        return;
       }
+
+      // 1. Thêm NGAY LẬP TỨC để đảm bảo tiện ích được lưu và hiển thị
       extensions.push(res);
       await saveExtensions();
       renderExtensions();
       toast(`✅ Đã thêm extension: ${res.name}`, 'success');
-    } else {
-      toast(`❌ ${res.error}`, 'error');
+
+      // 2. Sau khi đã thêm xong, mở hộp thoại cho phép đặt lại tên gợi nhớ nếu muốn
+      promptExtensionName(res.name, res.path, false).then(async (customName) => {
+        if (customName && customName !== res.name) {
+          res.name = customName;
+          await saveExtensions();
+          renderExtensions();
+          toast(`✅ Đã cập nhật tên: ${customName}`, 'success');
+        }
+      });
+    } catch(err) {
+      console.error('Lỗi khi thêm tiện ích:', err);
+      toast(`❌ Lỗi: ${err.message}`, 'error');
     }
   });
   renderExtensions();

@@ -1119,35 +1119,76 @@ ipcMain.handle('extensions:save', async (event, extensions) => {
 
 // Select extension folder or zip file
 ipcMain.handle('extensions:select', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory', 'openFile'],
-    filters: [{ name: 'Extension', extensions: ['zip', 'crx'] }]
-  });
-  if (result.canceled || !result.filePaths.length) return null;
-  
-  const selectedPath = result.filePaths[0];
-  const extId = 'ext_' + Date.now();
-  const targetDir = path.join(APP_DATA_DIR, 'custom_extensions', extId);
-  fs.mkdirSync(targetDir, { recursive: true });
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Chọn tiện ích mở rộng (Thư mục đã giải nén hoặc file .zip/.crx)',
+      properties: ['openDirectory', 'openFile'],
+      filters: [{ name: 'Extension hoặc Tệp nén', extensions: ['zip', 'crx', 'json'] }]
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+    
+    const selectedPath = result.filePaths[0];
+    const extId = 'ext_' + Date.now();
+    const targetDir = path.join(APP_DATA_DIR, 'custom_extensions', extId);
+    fs.mkdirSync(targetDir, { recursive: true });
 
-  const stat = fs.statSync(selectedPath);
-  let extName = path.basename(selectedPath);
+    const stat = fs.statSync(selectedPath);
+    let extName = path.basename(selectedPath);
 
-  if (stat.isDirectory()) {
-    // Copy folder contents recursively
-    fs.cpSync(selectedPath, targetDir, { recursive: true });
-    // Try reading manifest.json for extension name
+    const findManifestDir = (dir, depth = 0) => {
+      if (depth > 3) return null;
+      if (fs.existsSync(path.join(dir, 'manifest.json'))) return dir;
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const e of entries) {
+          if (e.isDirectory() && !e.name.startsWith('.')) {
+            const found = findManifestDir(path.join(dir, e.name), depth + 1);
+            if (found) return found;
+          }
+        }
+      } catch(e){}
+      return null;
+    };
+
+    if (stat.isDirectory()) {
+      // Tìm xem manifest.json nằm ở đâu (có thể ở root hoặc thư mục con)
+      const manifestDir = findManifestDir(selectedPath) || selectedPath;
+      fs.cpSync(manifestDir, targetDir, { recursive: true });
+    } else if (stat.isFile()) {
+      const ext = path.extname(selectedPath).toLowerCase();
+      if (ext === '.zip' || ext === '.crx') {
+        // Tự động giải nén file zip/crx bằng tar built-in
+        const { execSync } = require('child_process');
+        execSync(`tar -xf "${selectedPath}" -C "${targetDir}"`, { stdio: 'ignore' });
+        const manifestDir = findManifestDir(targetDir);
+        if (manifestDir && manifestDir !== targetDir) {
+          fs.cpSync(manifestDir, targetDir, { recursive: true });
+        }
+      } else if (path.basename(selectedPath).toLowerCase() === 'manifest.json') {
+        const parentDir = path.dirname(selectedPath);
+        fs.cpSync(parentDir, targetDir, { recursive: true });
+      } else {
+        fs.rmSync(targetDir, { recursive: true, force: true });
+        return { ok: false, error: 'Vui lòng chọn thư mục chứa tiện ích hoặc file nén .zip.' };
+      }
+    }
+
+    // Kiểm tra manifest.json
     const manifestFile = path.join(targetDir, 'manifest.json');
     if (fs.existsSync(manifestFile)) {
       try {
         const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf-8'));
         if (manifest.name) extName = manifest.name;
       } catch(e){}
+    } else {
+      fs.rmSync(targetDir, { recursive: true, force: true });
+      return { ok: false, error: 'Không tìm thấy file manifest.json trong tiện ích này!' };
     }
+
     return { ok: true, id: extId, name: extName, path: targetDir, enabled: true };
-  } else {
-    // File .zip or .crx
-    return { ok: false, error: 'Vui lòng chọn thư mục extension đã giải nén (có chứa file manifest.json).' };
+  } catch (err) {
+    console.error('[extensions:select] Lỗi:', err);
+    return { ok: false, error: 'Lỗi khi nạp tiện ích: ' + err.message };
   }
 });
 
