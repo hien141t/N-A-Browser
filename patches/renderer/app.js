@@ -1311,11 +1311,81 @@ async function saveExtensions() {
   await API.saveExtensions(extensions);
 }
 
+// ── Extension Custom Name Dialog ──
+function promptExtensionName(defaultName, extPath, isEditing = false) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById('extNameModalOverlay');
+    const titleEl = document.getElementById('extNameModalTitle');
+    const subtitleEl = document.getElementById('extNameModalSubtitle');
+    const inputEl = document.getElementById('extCustomNameInput');
+    const pathInfoEl = document.getElementById('extOriginalPathInfo');
+    const cancelBtn = document.getElementById('extNameModalCancelBtn');
+    const saveBtn = document.getElementById('extNameModalSaveBtn');
+
+    if (!overlay || !inputEl) {
+      const entered = window.prompt(isEditing ? 'Đổi tên tiện ích mở rộng:' : 'Đặt tên cho tiện ích mở rộng vừa thêm:', defaultName);
+      resolve(entered !== null ? (entered.trim() || defaultName) : (isEditing ? null : defaultName));
+      return;
+    }
+
+    if (titleEl) titleEl.textContent = isEditing ? '✏️ Đổi tên tiện ích mở rộng' : '🧩 Đặt tên cho tiện ích mở rộng';
+    if (subtitleEl) subtitleEl.textContent = isEditing ? 'Cập nhật tên hiển thị dễ nhớ cho Extension này' : 'Đã nạp tiện ích thành công. Bạn hãy đặt tên hiển thị:';
+    if (cancelBtn) cancelBtn.textContent = isEditing ? 'Hủy bỏ' : 'Bỏ qua (Giữ mặc định)';
+    inputEl.value = defaultName || '';
+    if (pathInfoEl) {
+      pathInfoEl.textContent = extPath ? `Đường dẫn: ${extPath}` : '';
+    }
+
+    overlay.classList.add('open');
+    setTimeout(() => {
+      inputEl.focus();
+      inputEl.select();
+    }, 120);
+
+    const cleanup = () => {
+      overlay.classList.remove('open');
+      if (saveBtn) saveBtn.removeEventListener('click', onSave);
+      if (cancelBtn) cancelBtn.removeEventListener('click', onCancel);
+      if (inputEl) inputEl.removeEventListener('keydown', onKey);
+    };
+
+    const onSave = () => {
+      const val = inputEl.value.trim();
+      cleanup();
+      resolve(val || defaultName);
+    };
+
+    const onCancel = () => {
+      cleanup();
+      resolve(isEditing ? null : defaultName);
+    };
+
+    const onKey = (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        onSave();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onCancel();
+      }
+    };
+
+    if (saveBtn) saveBtn.addEventListener('click', onSave);
+    if (cancelBtn) cancelBtn.addEventListener('click', onCancel);
+    if (inputEl) inputEl.addEventListener('keydown', onKey);
+  });
+}
+
 function setupExtensionsPage() {
   document.getElementById('btnAddExtension').addEventListener('click', async () => {
     const res = await API.selectExtension();
     if (!res) return;
     if (res.ok) {
+      // Cho phép người dùng đặt tên sau bước thêm vào
+      const customName = await promptExtensionName(res.name, res.path, false);
+      if (customName) {
+        res.name = customName;
+      }
       extensions.push(res);
       await saveExtensions();
       renderExtensions();
@@ -1347,15 +1417,31 @@ function renderExtensions() {
     card.innerHTML = `
       <div class="ext-card-header">
         <div class="ext-icon">🧩</div>
-        <div>
-          <div class="ext-title">${ext.name}</div>
-          <div class="ext-path">${ext.path}</div>
+        <div style="flex:1; min-width:0;">
+          <div class="ext-title" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+            <span class="ext-name-text" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${ext.name}">${ext.name}</span>
+          </div>
+          <div class="ext-path" title="${ext.path}">${ext.path}</div>
         </div>
       </div>
-      <div class="ext-actions">
+      <div class="ext-actions" style="margin-top:10px; display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn-icon btn-rename-ext" data-id="${ext.id}" title="Đổi tên Extension" style="cursor:pointer;">✏️ Đổi tên</button>
         <button class="btn-icon btn-danger" data-id="${ext.id}" title="Remove Extension">🗑️</button>
       </div>
     `;
+
+    // Nút đổi tên tiện ích
+    card.querySelector('.btn-rename-ext').addEventListener('click', async () => {
+      const newName = await promptExtensionName(ext.name, ext.path, true);
+      if (newName && newName !== ext.name) {
+        ext.name = newName;
+        await saveExtensions();
+        renderExtensions();
+        toast(`✅ Đã đổi tên thành: ${newName}`, 'success');
+      }
+    });
+
+    // Nút xóa tiện ích
     card.querySelector('.btn-danger').addEventListener('click', async () => {
       extensions = extensions.filter(e => e.id !== ext.id);
       await saveExtensions();

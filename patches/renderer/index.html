@@ -1020,6 +1020,28 @@ user:pass@113.187.249.232:20028" class="form-input mono" style="font-size:11px;l
   </div>
 </div>
 
+<!-- ══ EXTENSION NAME / RENAME MODAL ══ -->
+<div class="confirm-overlay" id="extNameModalOverlay">
+  <div class="confirm-card" style="max-width: 440px; text-align: left; padding: 22px 20px; border-radius: 16px;">
+    <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 14px;">
+      <div class="confirm-icon" style="margin: 0; width: 44px; height: 44px; line-height: 44px; font-size: 1.6rem; flex-shrink: 0;">🧩</div>
+      <div>
+        <h3 id="extNameModalTitle" style="font-size: 15px; font-weight: 700; color: #fff; margin: 0;">Đặt tên tiện ích mở rộng</h3>
+        <p id="extNameModalSubtitle" style="font-size: 12px; color: var(--txt3); margin: 3px 0 0;">Nhập tên hiển thị gợi nhớ cho Extension này</p>
+      </div>
+    </div>
+    <div style="margin-bottom: 16px;">
+      <label style="display: block; font-size: 12px; color: var(--txt2); margin-bottom: 6px; font-weight: 600;">Tên tiện ích:</label>
+      <input type="text" id="extCustomNameInput" class="form-input" style="width: 100%; box-sizing: border-box; padding: 10px 12px; font-size: 13px; border-radius: 10px;" placeholder="Nhập tên tiện ích..." />
+      <div id="extOriginalPathInfo" style="font-size: 11px; color: var(--txt3); margin-top: 6px; word-break: break-all; opacity: 0.8;"></div>
+    </div>
+    <div class="confirm-actions" style="justify-content: flex-end; gap: 10px;">
+      <button class="btn-secondary" id="extNameModalCancelBtn" style="flex: initial; padding: 9px 16px;">Bỏ qua</button>
+      <button class="btn-primary" id="extNameModalSaveBtn" style="flex: initial; padding: 9px 20px; font-weight: 700;">✅ Lưu tên</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ TOAST ══ -->
 
 
