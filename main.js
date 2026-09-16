@@ -659,17 +659,17 @@ ipcMain.handle('sync:pullProfiles', async () => {
     // Khôi phục Lịch sử duyệt web (Ctrl+H) và Favicons cho từng profile nếu Cloud có lưu
     for (const p of remoteProfiles) {
       if (p.webData && p.webData.historyGz) {
-        if (launchedBrowsers.has(p.id) || launchedBrowsers.has(String(p.id))) {
-          // Không ghi đè SQLite khi Chrome còn đang mở. Lần đóng/launch kế tiếp
-          // sẽ chụp hoặc nạp lại dữ liệu an toàn.
-          console.warn(`[Sync Pull] Bỏ qua restore History của profile đang chạy "${p.name}".`);
-          continue;
-        }
         try {
           const defaultDir = path.join(APP_DATA_DIR, 'profiles', String(p.id), 'Default');
-          if (restoreBrowserHistoryData(defaultDir, p.webData, true)) {
-            console.log(`[Sync Pull] 📜 Đã khôi phục thành công Lịch sử (Ctrl+H) cho profile "${p.name}"!`);
+          fs.mkdirSync(defaultDir, { recursive: true });
+          const historyFile = path.join(defaultDir, 'History');
+          const buf = zlib.gunzipSync(Buffer.from(p.webData.historyGz, 'base64'));
+          fs.writeFileSync(historyFile, buf);
+          if (p.webData.faviconsGz) {
+            const fBuf = zlib.gunzipSync(Buffer.from(p.webData.faviconsGz, 'base64'));
+            fs.writeFileSync(path.join(defaultDir, 'Favicons'), fBuf);
           }
+          console.log(`[Sync Pull] 📜 Đã khôi phục thành công Lịch sử (Ctrl+H) cho profile "${p.name}"!`);
         } catch(e) {
           console.warn(`[Sync Pull] Lỗi giải nén History cho ${p.name}:`, e.message);
         }
@@ -699,37 +699,23 @@ ipcMain.handle('cookies:syncProfile', async (event, profileId) => {
     const res = await extractProfileCookies(profileId);
     const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
     let profileName = profileId;
-    let profile = null;
     if (fs.existsSync(profilePath)) {
       try {
         const all = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
-        profile = all.find(x => x.id === profileId);
-        if (profile) {
-          profileName = profile.name || profileId;
-
-          // extractProfileCookies đã ghi historyGz/WAL vào profiles.json.
-          // Chỉ cập nhật cookies và merge, tuyệt đối không thay thế toàn bộ webData.
-          if (Array.isArray(res.cookies) && res.cookies.length > 0) {
-            profile.webData = {
-              ...(profile.webData || {}),
-              cookies: res.cookies,
-              count: res.cookies.length,
-              updatedAt: Date.now()
-            };
+        const p = all.find(x => x.id === profileId);
+        if (p) {
+          profileName = p.name || profileId;
+          if (res.cookies && res.cookies.length > 0) {
+            p.webData = { cookies: res.cookies, count: res.cookies.length, updatedAt: Date.now() };
             fs.writeFileSync(profilePath, JSON.stringify(all, null, 2), 'utf-8');
           }
           if (supabaseManager) {
-            const pushResult = await supabaseManager.pushSingleProfile(profile);
-            if (!pushResult?.ok) {
-              return { ok: false, error: pushResult?.error || 'Không thể đẩy dữ liệu lên Cloud' };
-            }
+            await supabaseManager.pushSingleProfile(p);
           }
         }
-      } catch(e) {
-        return { ok: false, error: e.message };
-      }
+      } catch(e) {}
     }
-    const hasHistory = !!(res.hasHistory || (profile && profile.webData && profile.webData.historyGz));
+    const hasHistory = !!(res.hasHistory || (p && p.webData && p.webData.historyGz));
     return {
       ok: true,
       count: res.count || 0,
@@ -781,10 +767,7 @@ ipcMain.handle('cookies:syncAll', async () => {
     } catch(e) {}
 
     if (supabaseManager) {
-      const pushResult = await supabaseManager.pushAllProfiles(profiles);
-      if (!pushResult?.ok) {
-        return { ok: false, error: pushResult?.error || 'Không thể đẩy dữ liệu lên Cloud' };
-      }
+      await supabaseManager.pushAllProfiles(profiles);
     }
 
     return {
@@ -871,62 +854,34 @@ ipcMain.handle('updater:checkPatch', async (event, customUrl) => {
   try {
     const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
     let manifestUrl = customUrl;
-    let hasCustomInSettings = false;
     if (!manifestUrl && fs.existsSync(settingsPath)) {
       try {
         const s = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-        if (s.updateManifestUrl) {
-          manifestUrl = s.updateManifestUrl;
-          hasCustomInSettings = true;
-        }
+        manifestUrl = s.updateManifestUrl;
       } catch(e) {}
     }
 
-    // ── Kiểm tra đồng thời từ CẢ 2 NGUỒN GIT CHÍNH THỐNG (hien151306-byte & hien141t) ──
-    const sourcesToFetch = [...PATCH_SOURCES.map(fetchManifestFromSource)];
-
-    // Nếu có customUrl hoặc updateManifestUrl trong settings, kiểm tra đồng thời như 1 nguồn bổ sung
+    // Nếu người dùng chỉ định URL riêng trong settings
     if (manifestUrl) {
-      sourcesToFetch.push((async () => {
-        try {
-          const bustUrl = manifestUrl.includes('?') ? `${manifestUrl}&t=${Date.now()}` : `${manifestUrl}?t=${Date.now()}`;
-          const resp = await fetch(bustUrl, {
-            headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' },
-            signal: AbortSignal.timeout(6000)
-          });
-          if (resp.ok) {
-            const manifest = await resp.json();
-            return { ok: true, source: 'custom_url', ...manifest };
-          }
-        } catch(e) {}
-        return null;
-      })());
+      const resp = await fetch(manifestUrl, { headers: { 'Cache-Control': 'no-cache' } });
+      if (!resp.ok) return { ok: false, error: 'Máy chủ phản hồi mã lỗi HTTP: ' + resp.status };
+      const manifest = await resp.json();
+      return { ok: true, source: 'custom_url', ...manifest };
     }
 
-    const results = await Promise.allSettled(sourcesToFetch);
+    // ── Kiểm tra đồng thời từ CẢ 2 NGUỒN GIT (hien151306-byte & hien141t) ──
+    const results = await Promise.allSettled(PATCH_SOURCES.map(fetchManifestFromSource));
     const validManifests = results
       .filter(r => r.status === 'fulfilled' && r.value && r.value.ok)
       .map(r => r.value);
 
     if (validManifests.length === 0) {
-      return { ok: false, error: 'Không thể kết nối máy chủ kiểm tra bản vá từ các nguồn Git (hien151306-byte và hien141t)' };
+      return { ok: false, error: 'Không thể kết nối máy chủ kiểm tra bản vá từ cả 2 nguồn Git (hien151306-byte và hien141t)' };
     }
 
-    // Luôn chọn bản vá có patchNumber cao nhất (mới nhất) giữa tất cả các nguồn
+    // Chọn bản vá có patchNumber cao nhất (mới nhất) giữa 2 nguồn Git
     validManifests.sort((a, b) => (b.patchNumber || 0) - (a.patchNumber || 0));
     const bestManifest = validManifests[0];
-
-    // Tự động dọn dẹp updateManifestUrl cũ trong settings.json nếu nó trỏ vào GitHub để trả quyền kiểm soát cho Dual-Git
-    if (hasCustomInSettings && fs.existsSync(settingsPath)) {
-      try {
-        const s = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
-        if (s.updateManifestUrl && (s.updateManifestUrl.includes('githubusercontent.com') || s.updateManifestUrl.includes('github.com'))) {
-          delete s.updateManifestUrl;
-          fs.writeFileSync(settingsPath, JSON.stringify(s, null, 2), 'utf-8');
-          console.log('[Updater] Đã tự động dọn dẹp updateManifestUrl cũ khỏi settings.json để luôn dùng Dual-Git tự động.');
-        }
-      } catch(e) {}
-    }
 
     console.log(`[Updater] Tìm thấy bản vá mới nhất từ nguồn: ${bestManifest.source} (Patch #${bestManifest.patchNumber})`);
     return bestManifest;
@@ -1580,12 +1535,29 @@ ipcMain.handle('browser:launch', async (event, profile) => {
     fs.mkdirSync(defaultDir, { recursive: true });
     if (profile.webData && profile.webData.historyGz) {
       try {
-        if (restoreBrowserHistoryData(defaultDir, profile.webData)) {
+        const historyFile = path.join(defaultDir, 'History');
+        let shouldRestore = !fs.existsSync(historyFile);
+        if (!shouldRestore && profile.webData.historyUpdatedAt) {
+          const stats = fs.statSync(historyFile);
+          if (profile.webData.historyUpdatedAt > stats.mtimeMs) shouldRestore = true;
+        }
+        if (shouldRestore) {
+          const buf = zlib.gunzipSync(Buffer.from(profile.webData.historyGz, 'base64'));
+          fs.writeFileSync(historyFile, buf);
           console.log(`[Launch] 📜 Đã nạp thành công Lịch sử duyệt web (Ctrl+H) cho "${profile.name}"!`);
         }
       } catch (errH) {
         console.warn('[Launch] Lỗi khôi phục History:', errH.message);
       }
+    }
+    if (profile.webData && profile.webData.faviconsGz) {
+      try {
+        const faviconsFile = path.join(defaultDir, 'Favicons');
+        if (!fs.existsSync(faviconsFile)) {
+          const buf = zlib.gunzipSync(Buffer.from(profile.webData.faviconsGz, 'base64'));
+          fs.writeFileSync(faviconsFile, buf);
+        }
+      } catch (e) {}
     }
 
     // Write fingerprint inject script & Chrome extension (MV2 for Blocking Proxy Auth)
@@ -1846,114 +1818,36 @@ ipcMain.handle('browser:status', async () => {
   return result;
 });
 
-// ── SQLite browser-data helpers ───────────────────────────────────
-// Chrome có thể giữ các lượt truy cập/tìm kiếm mới nhất trong WAL.
-// Chỉ copy History mà bỏ History-wal sẽ làm mất chính các bản ghi mới.
-function gzipFileToBase64(filePath) {
-  try {
-    if (!fs.existsSync(filePath)) return undefined;
-    const raw = fs.readFileSync(filePath);
-    return raw.length > 0 ? zlib.gzipSync(raw).toString('base64') : undefined;
-  } catch (err) {
-    console.warn(`[Sync History] Không thể đọc ${filePath}:`, err.message);
-    return undefined;
-  }
-}
-
-function gunzipBase64ToFile(encoded, filePath) {
-  if (!encoded) return false;
-  const raw = zlib.gunzipSync(Buffer.from(encoded, 'base64'));
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, raw);
-  return true;
-}
-
-function removeIfExists(filePath) {
-  try {
-    if (fs.existsSync(filePath)) fs.rmSync(filePath, { force: true });
-  } catch (err) {
-    console.warn(`[Sync History] Không thể xóa ${filePath}:`, err.message);
-  }
-}
-
-function restoreBrowserHistoryData(defaultDir, webData, force = false) {
-  if (!webData || !webData.historyGz) return false;
-
-  const historyFile = path.join(defaultDir, 'History');
-  let shouldRestore = force || !fs.existsSync(historyFile);
-  if (!shouldRestore) {
-    try {
-      const stats = fs.statSync(historyFile);
-      shouldRestore = stats.size === 0 || (
-        webData.historyUpdatedAt && webData.historyUpdatedAt > stats.mtimeMs
-      );
-    } catch (err) {
-      shouldRestore = true;
-    }
-  }
-  if (!shouldRestore) return false;
-
-  fs.mkdirSync(defaultDir, { recursive: true });
-
-  // Không để WAL/SHM cũ của máy đích trộn với database mới.
-  for (const suffix of ['-wal', '-shm', '-journal']) {
-    removeIfExists(path.join(defaultDir, `History${suffix}`));
-  }
-  gunzipBase64ToFile(webData.historyGz, historyFile);
-  if (webData.historyWalGz) {
-    gunzipBase64ToFile(webData.historyWalGz, path.join(defaultDir, 'History-wal'));
-  }
-  if (webData.historyJournalGz) {
-    gunzipBase64ToFile(webData.historyJournalGz, path.join(defaultDir, 'History-journal'));
-  }
-
-  if (webData.faviconsGz) {
-    for (const suffix of ['-wal', '-shm', '-journal']) {
-      removeIfExists(path.join(defaultDir, `Favicons${suffix}`));
-    }
-    gunzipBase64ToFile(webData.faviconsGz, path.join(defaultDir, 'Favicons'));
-    if (webData.faviconsWalGz) {
-      gunzipBase64ToFile(webData.faviconsWalGz, path.join(defaultDir, 'Favicons-wal'));
-    }
-    if (webData.faviconsJournalGz) {
-      gunzipBase64ToFile(webData.faviconsJournalGz, path.join(defaultDir, 'Favicons-journal'));
-    }
-  }
-
-  return true;
-}
-
-// ── Helper trích xuất file History/Favicons của profile ────────────
+// ── Helper trích xuất file History và Favicons của profile ──
 function getProfileHistoryData(profileId) {
-  const webData = {};
+  let historyGz = null;
+  let faviconsGz = null;
   try {
     const defaultDir = path.join(APP_DATA_DIR, 'profiles', String(profileId), 'Default');
-    const historyGz = gzipFileToBase64(path.join(defaultDir, 'History'));
-    if (historyGz) {
-      webData.historyGz = historyGz;
-      webData.historyUpdatedAt = Date.now();
-      // null có chủ đích: xóa sidecar cũ trên Cloud khi SQLite đã checkpoint WAL.
-      webData.historyWalGz = gzipFileToBase64(path.join(defaultDir, 'History-wal')) || null;
-      webData.historyJournalGz = gzipFileToBase64(path.join(defaultDir, 'History-journal')) || null;
+    const historyFile = path.join(defaultDir, 'History');
+    if (fs.existsSync(historyFile)) {
+      const hBuf = fs.readFileSync(historyFile);
+      if (hBuf.length > 0) {
+        historyGz = zlib.gzipSync(hBuf).toString('base64');
+      }
     }
-
-    const faviconsGz = gzipFileToBase64(path.join(defaultDir, 'Favicons'));
-    if (faviconsGz) {
-      webData.faviconsGz = faviconsGz;
-      webData.faviconsWalGz = gzipFileToBase64(path.join(defaultDir, 'Favicons-wal')) || null;
-      webData.faviconsJournalGz = gzipFileToBase64(path.join(defaultDir, 'Favicons-journal')) || null;
+    const faviconsFile = path.join(defaultDir, 'Favicons');
+    if (fs.existsSync(faviconsFile)) {
+      const fBuf = fs.readFileSync(faviconsFile);
+      if (fBuf.length > 0) {
+        faviconsGz = zlib.gzipSync(fBuf).toString('base64');
+      }
     }
   } catch (err) {
     console.warn(`[Sync History] Không thể đọc History/Favicons cho ${profileId}:`, err.message);
   }
-  return webData;
+  return { historyGz, faviconsGz };
 }
 
 // ── Trích xuất Cookies & Lịch sử (Ctrl+H) toàn diện cho Profile (Hỗ trợ cả khi profile đang MỞ hoặc đã ĐÓNG) ──
 async function extractProfileCookies(profileId) {
   const runningInfo = launchedBrowsers.get(profileId);
-  const historyData = getProfileHistoryData(profileId);
-  const hasHistory = !!historyData.historyGz;
+  const { historyGz, faviconsGz } = getProfileHistoryData(profileId);
 
   // 1. Nếu trình duyệt đang mở: Kết nối CDP trực tiếp trích xuất ngay tức thì
   if (runningInfo && runningInfo.debugPort) {
@@ -1973,11 +1867,15 @@ async function extractProfileCookies(profileId) {
           const payload = {
             cookies: clean,
             count: clean.length,
-            updatedAt: Date.now(),
-            ...historyData
+            updatedAt: Date.now()
           };
+          if (historyGz) {
+            payload.historyGz = historyGz;
+            payload.historyUpdatedAt = Date.now();
+          }
+          if (faviconsGz) payload.faviconsGz = faviconsGz;
           saveProfileWebData(profileId, payload);
-          return { ok: true, cookies: clean, count: clean.length, hasHistory, source: 'active' };
+          return { ok: true, cookies: clean, count: clean.length, hasHistory: !!historyGz, source: 'active' };
         }
       }
       b.disconnect();
@@ -2028,11 +1926,15 @@ async function extractProfileCookies(profileId) {
             const payload = {
               cookies: clean,
               count: clean.length,
-              updatedAt: Date.now(),
-              ...historyData
+              updatedAt: Date.now()
             };
+            if (historyGz) {
+              payload.historyGz = historyGz;
+              payload.historyUpdatedAt = Date.now();
+            }
+            if (faviconsGz) payload.faviconsGz = faviconsGz;
             saveProfileWebData(profileId, payload);
-            return { ok: true, cookies: clean, count: clean.length, hasHistory, source: 'headless' };
+            return { ok: true, cookies: clean, count: clean.length, hasHistory: !!historyGz, source: 'headless' };
           }
         } else {
           await b.close();
@@ -2054,23 +1956,26 @@ async function extractProfileCookies(profileId) {
       const all = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
       const p = all.find(x => x.id === profileId);
       if (p?.webData?.cookies && Array.isArray(p.webData.cookies) && p.webData.cookies.length > 0) {
-        if (Object.keys(historyData).length > 0) {
-          saveProfileWebData(profileId, historyData);
+        if (historyGz) {
+          p.webData.historyGz = historyGz;
+          p.webData.historyUpdatedAt = Date.now();
+          if (faviconsGz) p.webData.faviconsGz = faviconsGz;
+          saveProfileWebData(profileId, p.webData);
         }
-        return { ok: true, cookies: p.webData.cookies, count: p.webData.cookies.length, hasHistory: !!(hasHistory || p.webData.historyGz), source: 'cache' };
+        return { ok: true, cookies: p.webData.cookies, count: p.webData.cookies.length, hasHistory: !!(historyGz || p.webData.historyGz), source: 'cache' };
       }
     } catch(e){}
   }
 
-  if (hasHistory) {
-    saveProfileWebData(profileId, { ...historyData, updatedAt: Date.now() });
+  if (historyGz) {
+    saveProfileWebData(profileId, { historyGz, faviconsGz, historyUpdatedAt: Date.now(), updatedAt: Date.now() });
     return { ok: true, cookies: [], count: 0, hasHistory: true, source: 'history-only' };
   }
 
   return { ok: true, cookies: [], count: 0, hasHistory: false, source: 'empty' };
 }
 
-// ── Lưu Web Data cục bộ; caller sẽ push lên Cloud sau khi snapshot hoàn tất ──
+// ── Đóng Chrome đúng cách: dùng CDP Browser.close() trước, mới force kill ──
 function saveProfileWebData(profileId, webData) {
   try {
     const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
@@ -2078,34 +1983,20 @@ function saveProfileWebData(profileId, webData) {
     let profiles = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
     const p = profiles.find(x => x.id === profileId);
     if (p) {
-      // Merge từng trường có giá trị để một snapshot thiếu History không
-      // vô tình xóa historyGz đã đồng bộ trước đó.
-      const mergedWebData = { ...(p.webData || {}) };
-      for (const [key, value] of Object.entries(webData || {})) {
-        if (value !== undefined) mergedWebData[key] = value;
-      }
-      mergedWebData.updatedAt = Date.now();
-      p.webData = mergedWebData;
+      p.webData = {
+        ...(p.webData || {}),
+        ...webData,
+        updatedAt: Date.now()
+      };
       fs.writeFileSync(profilePath, JSON.stringify(profiles, null, 2), 'utf-8');
-      return p;
+      if (supabaseManager && supabaseManager.currentUser) {
+        supabaseManager.pushSingleProfile(p).then(() => {
+          console.log(`[Cloud Sync] ☁️ Đã tự động đồng bộ Web Data & History của profile "${p.name}" lên Cloud!`);
+        }).catch(e => console.warn('[Cloud Sync Error]', e.message));
+      }
     }
   } catch (e) {
     console.error('[saveProfileWebData Error]', e);
-  }
-  return null;
-}
-
-async function pushProfileFromDisk(profileId) {
-  if (!supabaseManager || !supabaseManager.currentUser) return { ok: false, error: 'Chưa đăng nhập Cloud' };
-  const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
-  if (!fs.existsSync(profilePath)) return { ok: false, error: 'Không tìm thấy profiles.json' };
-  try {
-    const profiles = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
-    const profile = profiles.find(x => x.id === profileId);
-    if (!profile) return { ok: false, error: `Không tìm thấy profile ${profileId}` };
-    return supabaseManager.pushSingleProfile(profile);
-  } catch (err) {
-    return { ok: false, error: err.message };
   }
 }
 
@@ -2113,73 +2004,60 @@ async function gracefulCloseProfile(profileId) {
   const info = launchedBrowsers.get(profileId);
   stopLocalProxy(profileId);
 
-  if (!info || !info.pid || !info.debugPort) return;
-
-  let capturedCookies = null;
-
-  // Bước 1: lấy cookies qua CDP, nhưng chụp History SAU khi Chrome đóng.
-  // Như vậy SQLite có cơ hội checkpoint WAL vào file History chính.
-  try {
-    const b = await puppeteer.connect({
-      browserURL: `http://127.0.0.1:${info.debugPort}`,
-      defaultViewport: null,
-    });
-
+  if (info && info.pid && info.debugPort) {
+    // Bước 1: Thử đóng graceful qua CDP
     try {
-      const pages = await b.pages();
-      if (pages.length > 0) {
-        const client = await pages[0].createCDPSession();
-        await client.send('Network.enable');
-        const { cookies } = await client.send('Network.getAllCookies');
-        capturedCookies = (cookies && cookies.length > 0) ? sanitizeCookiesForCDP(cookies) : [];
+      const b = await puppeteer.connect({
+        browserURL: `http://127.0.0.1:${info.debugPort}`,
+        defaultViewport: null,
+      });
+
+      // Trích xuất Cookies và dữ liệu web trước khi tắt
+      try {
+        const pages = await b.pages();
+        if (pages.length > 0) {
+          const client = await pages[0].createCDPSession();
+          await client.send('Network.enable');
+          const { cookies } = await client.send('Network.getAllCookies');
+          const clean = (cookies && cookies.length > 0) ? sanitizeCookiesForCDP(cookies) : [];
+          const { historyGz, faviconsGz } = getProfileHistoryData(profileId);
+          console.log(`[Sync] 🍪 Thu thập được ${clean.length} cookies ${historyGz ? '+ Lịch sử Ctrl+H' : ''} của profile ${profileId}`);
+          saveProfileWebData(profileId, {
+            cookies: clean,
+            count: clean.length,
+            historyGz,
+            faviconsGz,
+            historyUpdatedAt: historyGz ? Date.now() : undefined,
+            updatedAt: Date.now()
+          });
+        }
+      } catch (errCookies) {
+        console.warn(`[Sync] Không thể trích xuất cookies trước khi đóng: ${errCookies.message}`);
       }
-    } catch (errCookies) {
-      console.warn(`[Sync] Không thể trích xuất cookies trước khi đóng: ${errCookies.message}`);
+
+      // Browser.close() ra lệnh cho Chrome tự đóng toàn bộ tab rồi thoát
+      await b.close();
+      console.log(`[Close] 🎯 CDP Browser.close() gửi tới profile ${profileId}`);
+    } catch(e) {
+      console.log(`[Close] CDP không kết nối được, sẽ force kill (${e.message})`);
     }
 
-    // Browser.close() ra lệnh cho Chrome tự đóng toàn bộ tab rồi thoát.
-    await b.close();
-    console.log(`[Close] 🎯 CDP Browser.close() gửi tới profile ${profileId}`);
-  } catch(e) {
-    console.log(`[Close] CDP không kết nối được, sẽ force kill (${e.message})`);
-  }
-
-  // Bước 2: Chờ Chrome tự thoát (tối đa 2s)
-  const isAlive = (pid) => {
-    try { process.kill(pid, 0); return true; } catch(e) { return false; }
-  };
-  let exited = false;
-  for (let i = 0; i < 8; i++) {
-    await new Promise(r => setTimeout(r, 250));
-    if (!isAlive(info.pid)) {
-      console.log(`[Close] ✅ Chrome tự thoát sau ${(i+1)*250}ms`);
-      exited = true;
-      break;
+    // Bước 2: Chờ Chrome tự thoát (tối đa 2s)
+    const isAlive = (pid) => {
+      try { process.kill(pid, 0); return true; } catch(e) { return false; }
+    };
+    for (let i = 0; i < 8; i++) {
+      await new Promise(r => setTimeout(r, 250));
+      if (!isAlive(info.pid)) {
+        console.log(`[Close] ✅ Chrome tự thoát sau ${(i+1)*250}ms`);
+        launchedBrowsers.delete(profileId);
+        return;
+      }
     }
   }
 
   // Bước 3: Force kill nếu vẫn tồn tại
-  if (!exited) killProfileProcessTree(profileId);
-  else launchedBrowsers.delete(profileId);
-
-  // Bước 4: đọc History sau khi process đã dừng rồi mới lưu/push.
-  const historyData = getProfileHistoryData(profileId);
-  if (capturedCookies !== null) {
-    saveProfileWebData(profileId, {
-      cookies: capturedCookies,
-      count: capturedCookies.length,
-      ...historyData,
-      updatedAt: Date.now()
-    });
-    console.log(`[Sync] 🍪 Đã lưu ${capturedCookies.length} cookies ${historyData.historyGz ? '+ Lịch sử Ctrl+H' : ''} của profile ${profileId}`);
-  } else if (Object.keys(historyData).length > 0) {
-    saveProfileWebData(profileId, { ...historyData, updatedAt: Date.now() });
-  }
-
-  const pushResult = await pushProfileFromDisk(profileId);
-  if (!pushResult.ok && pushResult.error !== 'Chưa đăng nhập Cloud') {
-    console.warn(`[Cloud Sync] Không thể đồng bộ profile ${profileId}:`, pushResult.error);
-  }
+  killProfileProcessTree(profileId);
 }
 
 function killProfileProcessTree(profileId) {
@@ -2844,9 +2722,6 @@ async function handleApiRequest(req, res) {
     const target = profiles.find(p => p.id === id);
     if (!target) return sendJSON(res, 404, { ok: false, error: `Profile "${id}" không tồn tại.` });
 
-    // Đóng graceful để không làm mất History/Cookies mới nhất trước khi xóa.
-    await gracefulCloseProfile(id);
-
     profiles = profiles.filter(p => p.id !== id);
     saveProfilesToDisk(profiles);
 
@@ -2905,17 +2780,6 @@ async function handleApiRequest(req, res) {
 
       const profileDir = path.join(APP_DATA_DIR, 'profiles', id);
       fs.mkdirSync(profileDir, { recursive: true });
-      const defaultDir = path.join(profileDir, 'Default');
-      fs.mkdirSync(defaultDir, { recursive: true });
-
-      // API launch phải khôi phục cùng dữ liệu History/Cookies như launch từ UI.
-      try {
-        if (restoreBrowserHistoryData(defaultDir, profile.webData)) {
-          console.log(`[API Launch] 📜 Đã nạp Lịch sử duyệt web cho "${profile.name}"!`);
-        }
-      } catch (errHistory) {
-        console.warn('[API Launch] Lỗi khôi phục History:', errHistory.message);
-      }
 
       // Fingerprint extension
       const injectScript = generateFingerprintScript(device);
@@ -2994,7 +2858,6 @@ chrome.webRequest.onAuthRequired.addListener(
 
       const args = [
         `--user-data-dir=${profileDir}`,
-        '--profile-directory=Default',
         `--user-agent=${device.user_agent || ''}`,
         `--lang=${device.language || 'vi-VN'}`,
         `--window-position=${gridPos.posX},${gridPos.posY}`,
@@ -3053,7 +2916,7 @@ chrome.webRequest.onAuthRequired.addListener(
           proc.unref();
           launchedBrowsers.set(id, { pid: proc.pid, startTime: Date.now(), debugPort });
           // CDP: setup proxy auth → apply emulation → navigate URL thật
-          applyCDPDeviceEmulation(debugPort, device, profile.proxy, gridPos.winW, gridPos.winH, startUrl, profile).catch(e => {});
+          applyCDPDeviceEmulation(debugPort, device, profile.proxy, gridPos.winW, gridPos.winH, startUrl).catch(e => {});
           // Notify renderer UI
           if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
           console.log(`[API] 🚀 Launched profile "${profile.name}" PID=${proc.pid} debugPort=${debugPort}`);
@@ -3072,8 +2935,8 @@ chrome.webRequest.onAuthRequired.addListener(
   const matchStop = pathname.match(/^\/api\/profiles\/([^/]+)\/stop$/);
   if (method === 'POST' && matchStop) {
     const id = matchStop[1];
-    // Dùng cùng luồng graceful như nút Stop trong UI để lưu History/Cookies.
-    await gracefulCloseProfile(id);
+    stopLocalProxy(id); // Dừng local proxy server nếu có
+    killProfileProcessTree(id);
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
     return sendJSON(res, 200, { ok: true, message: `Profile ${id} đã dừng.` });
   }

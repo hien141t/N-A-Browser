@@ -1861,14 +1861,8 @@ async function syncWithCloud(pin, isManual = false) {
       }
     }
 
-    // Khi người dùng bấm "Đồng bộ Cloud", snapshot Web Data/History trước.
-    // Luồng tự động lúc mở app vẫn chỉ pull để máy phụ không đẩy dữ liệu cũ ngược lên.
-    if (isManual && API.syncAllCookies) {
-      const webDataRes = await API.syncAllCookies();
-      if (webDataRes && !webDataRes.ok) {
-        throw new Error(webDataRes.error || 'Không thể đồng bộ History/Cookie lên Cloud');
-      }
-    }
+    // TUYỆT ĐỐI KHÔNG gọi syncPushProfiles ở đây:
+    // Tránh trường hợp máy phụ có danh sách cũ đẩy ngược lại làm hồi sinh profile đã xóa!
 
     if (API.syncPullProfiles) {
       const pullRes = await API.syncPullProfiles();
@@ -2043,16 +2037,6 @@ async function setupUpdater() {
   const relaunchBtn = document.getElementById('btnRelaunchApp');
   const resetBtn = document.getElementById('btnResetPatch');
 
-  // Modal OTA elements
-  const otaModal = document.getElementById('otaModalOverlay');
-  const otaTitle = document.getElementById('otaModalTitle');
-  const otaSubtitle = document.getElementById('otaModalSubtitle');
-  const otaList = document.getElementById('otaMissedList');
-  const btnOtaClose = document.getElementById('btnOtaClose');
-  const btnOtaDismiss = document.getElementById('btnOtaDismiss');
-  const btnOtaApply = document.getElementById('btnOtaApplyNow');
-  const btnOtaRelaunch = document.getElementById('btnOtaRelaunchNow');
-
   if (!checkBtn) return;
 
   let latestPatch = null;
@@ -2086,125 +2070,7 @@ async function setupUpdater() {
 
   await refreshPatchUI();
 
-  // Helper hiển thị OTA Modal cho máy chưa có bản vá
-  function showOtaModal(patchRes, curNum) {
-    if (!otaModal) return;
-    const newNum = patchRes.patchNumber || 1;
-    const missedCount = Math.max(1, newNum - curNum);
-
-    if (otaTitle) otaTitle.textContent = `📦 Có ${missedCount} bản vá mới cần đồng bộ`;
-    if (otaSubtitle) otaSubtitle.textContent = `Bản vá hiện tại: #${curNum} → Mới nhất: #${newNum}`;
-
-    const allHistory = [
-      { patchNumber: patchRes.patchNumber, version: patchRes.version, title: patchRes.title, changelog: patchRes.changelog, updatedAt: patchRes.updatedAt },
-      ...(patchRes.history || [])
-    ];
-    const missed = allHistory
-      .filter(h => (h.patchNumber || 0) > curNum)
-      .sort((a, b) => (b.patchNumber || 0) - (a.patchNumber || 0));
-
-    if (otaList) {
-      otaList.innerHTML = '';
-      missed.forEach(h => {
-        const item = document.createElement('div');
-        item.style.cssText = `
-          padding: 10px 14px; border-radius: 8px;
-          background: rgba(99,102,241,0.07); border: 1px solid rgba(99,102,241,0.2);
-        `;
-        const date = h.updatedAt ? new Date(h.updatedAt).toLocaleDateString('vi-VN') : '';
-        item.innerHTML = `
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-            <span style="background:rgba(99,102,241,0.2);color:#a5b4fc;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;">v${h.version || '?'} · #${h.patchNumber}</span>
-            ${date ? `<span style="color:var(--text-muted);font-size:10px;">${date}</span>` : ''}
-          </div>
-          <div style="font-size:12px;color:var(--text-muted);line-height:1.5;">${h.changelog || h.title || 'Cải thiện hiệu năng và sửa lỗi'}</div>
-        `;
-        otaList.appendChild(item);
-      });
-    }
-
-    if (btnOtaApply) {
-      btnOtaApply.style.display = 'inline-flex';
-      btnOtaApply.disabled = false;
-      btnOtaApply.textContent = `⚡ Cập nhật tất cả (${missedCount} bản vá)`;
-    }
-    if (btnOtaRelaunch) btnOtaRelaunch.style.display = 'none';
-    if (btnOtaDismiss) btnOtaDismiss.style.display = 'inline-block';
-
-    otaModal.style.display = 'flex';
-  }
-
-  function closeOtaModal() {
-    if (otaModal) otaModal.style.display = 'none';
-  }
-
-  btnOtaClose?.addEventListener('click', closeOtaModal);
-  btnOtaDismiss?.addEventListener('click', closeOtaModal);
-
-  btnOtaApply?.addEventListener('click', async () => {
-    if (!latestPatch) return;
-    btnOtaApply.disabled = true;
-    btnOtaApply.textContent = '⏳ Đang tải và áp dụng...';
-
-    try {
-      const res = await API.updaterApplyPatch(latestPatch);
-      if (res && res.ok) {
-        toast('✅ Đã áp dụng bản vá thành công!', 'success');
-        btnOtaApply.style.display = 'none';
-        if (btnOtaDismiss) btnOtaDismiss.style.display = 'none';
-        if (btnOtaRelaunch) btnOtaRelaunch.style.display = 'inline-flex';
-        await refreshPatchUI();
-      } else {
-        toast('❌ Lỗi áp dụng bản vá: ' + (res?.error || 'Thất bại'), 'error');
-        btnOtaApply.disabled = false;
-        btnOtaApply.textContent = 'Thử lại';
-      }
-    } catch(err) {
-      toast('❌ Lỗi: ' + err.message, 'error');
-      btnOtaApply.disabled = false;
-      btnOtaApply.textContent = 'Thử lại';
-    }
-  });
-
-  btnOtaRelaunch?.addEventListener('click', () => {
-    if (API.updaterRelaunch) {
-      API.updaterRelaunch();
-    } else {
-      location.reload();
-    }
-  });
-
-  // ── Tự động kiểm tra bản vá OTA trong nền (Background Auto-check) ──
-  // Máy nào CÓ bản vá rồi thì KHÔNG GỬI, KHÔNG LÀM PHIỀN
-  // Máy nào CHƯA CÓ thì GỬI THÔNG BÁO VÀ DANH SÁCH CẬP NHẬT ĐỂ ĐỒNG BỘ
-  async function performSilentCheck() {
-    try {
-      const curInfo = await API.updaterGetPatchInfo?.();
-      const curPatchNum = curInfo?.currentPatch?.patchNumber || 0;
-
-      const res = await API.updaterCheckPatch();
-      if (res && res.ok) {
-        const newPatchNum = res.patchNumber || 1;
-        if (newPatchNum > curPatchNum) {
-          // Máy CHƯA CÓ bản vá -> Gửi lại danh sách cập nhật
-          latestPatch = res;
-          showOtaModal(res, curPatchNum);
-        } else {
-          // Máy ĐÃ CÓ bản vá rồi -> Không gửi, im lặng
-          console.log(`[Updater] Máy đã có bản vá mới nhất (#${curPatchNum}). Bỏ qua, không gửi.`);
-        }
-      }
-    } catch (err) {
-      console.warn('[Updater] Auto-check error:', err);
-    }
-  }
-
-  // Tự động kiểm tra sau khi mở app 3 giây
-  setTimeout(performSilentCheck, 3000);
-  // Định kỳ kiểm tra mỗi 30 phút
-  setInterval(performSilentCheck, 30 * 60 * 1000);
-
-  // Check update button in Settings page
+  // Check update button
   checkBtn.addEventListener('click', async () => {
     checkBtn.disabled = true;
     if (msgEl) {
@@ -2239,12 +2105,14 @@ async function setupUpdater() {
               { patchNumber: res.patchNumber, version: res.version, title: res.title, changelog: res.changelog, updatedAt: res.updatedAt },
               ...(res.history || [])
             ];
+            // Lọc chỉ các bản chưa có (> curPatchNum), sort giảm dần
             const missed = allHistory
               .filter(h => (h.patchNumber || 0) > curPatchNum)
               .sort((a, b) => (b.patchNumber || 0) - (a.patchNumber || 0));
 
             if (titleEl) titleEl.textContent = `📦 ${missedCount} Bản vá mới — Patch #${curPatchNum + 1}→#${newPatchNum}`;
 
+            // Render danh sách từng bản vá
             if (changelogEl) {
               changelogEl.innerHTML = '';
               missed.forEach(h => {
@@ -2302,21 +2170,21 @@ async function setupUpdater() {
     try {
       const res = await API.updaterApplyPatch(latestPatch);
       if (res && res.ok) {
-        toast('✅ Đã áp dụng bản vá thành công!', 'success');
+        toast(' Đã áp dụng bản vá thành công!', 'success');
         applyBtn.style.display = 'none';
         if (relaunchBtn) relaunchBtn.style.display = 'inline-block';
         if (msgEl) {
-          msgEl.textContent = '✅ Đã vá xong! Hãy bấm Khởi động lại.';
+          msgEl.textContent = ' Đã vá xong! Hãy bấm Khởi động lại.';
           msgEl.style.color = '#06d6a0';
         }
         await refreshPatchUI();
       } else {
-        toast('❌ Lỗi áp dụng bản vá: ' + (res?.error || 'Thất bại'), 'error');
+        toast(' Lỗi áp dụng bản vá: ' + (res?.error || 'Thất bại'), 'error');
         applyBtn.disabled = false;
         applyBtn.textContent = 'Thử lại';
       }
     } catch(err) {
-      toast('❌ Lỗi: ' + err.message, 'error');
+      toast(' Lỗi: ' + err.message, 'error');
       applyBtn.disabled = false;
       applyBtn.textContent = 'Thử lại';
     }
@@ -2337,14 +2205,14 @@ async function setupUpdater() {
     try {
       const res = await API.updaterResetPatches();
       if (res && res.ok) {
-        toast('✅ Đã khôi phục về bản gốc!', 'info');
+        toast(' Đã khôi phục về bản gốc!', 'info');
         await refreshPatchUI();
         setTimeout(() => location.reload(), 500);
       } else {
-        toast('❌ Lỗi: ' + (res?.error || 'Không thể khôi phục'), 'error');
+        toast(' Lỗi: ' + (res?.error || 'Không thể khôi phục'), 'error');
       }
     } catch(err) {
-      toast('❌ Lỗi: ' + err.message, 'error');
+      toast(' Lỗi: ' + err.message, 'error');
     }
   });
 }

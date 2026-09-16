@@ -1,10 +1,17 @@
 {
-  "version": "1.0.20",
-  "patchNumber": 20,
-  "title": "Bản vá Hot-Patch #20: Fix loi updater: URL tuy chinh cu trong settings.json khong the ghi de nguon GitHub Dual-Git, tu dong so sanh patchNumber va don dep URL cu",
-  "changelog": "Fix loi updater: URL tuy chinh cu trong settings.json khong the ghi de nguon GitHub Dual-Git, tu dong so sanh patchNumber va don dep URL cu",
-  "updatedAt": "2026-09-15T16:04:22.200Z",
+  "version": "1.0.21",
+  "patchNumber": 21,
+  "title": "Bản vá Hot-Patch #21: Khoi phuc toan bo ma nguon ve ban va #17 (Rollback to Patch #17)",
+  "changelog": "Khoi phuc toan bo ma nguon ve ban va #17 (Rollback to Patch #17)",
+  "updatedAt": "2026-09-16T09:39:31.960Z",
   "history": [
+    {
+      "patchNumber": 20,
+      "version": "1.0.20",
+      "title": "Bản vá Hot-Patch #20: Fix loi updater: URL tuy chinh cu trong settings.json khong the ghi de nguon GitHub Dual-Git, tu dong so sanh patchNumber va don dep URL cu",
+      "changelog": "Fix loi updater: URL tuy chinh cu trong settings.json khong the ghi de nguon GitHub Dual-Git, tu dong so sanh patchNumber va don dep URL cu",
+      "updatedAt": "2026-09-15T16:04:22.200Z"
+    },
     {
       "patchNumber": 19,
       "version": "1.0.19",
@@ -104,6 +111,11 @@
       "url": "https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/badge_10.png"
     },
     {
+      "filename": "badge_11.png",
+      "dest": "profile_icons/badge_11.png",
+      "url": "https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/badge_11.png"
+    },
+    {
       "filename": "badge_2.png",
       "dest": "profile_icons/badge_2.png",
       "url": "https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/badge_2.png"
@@ -162,6 +174,16 @@
       "filename": "profile_10.png",
       "dest": "profile_icons/profile_10.png",
       "url": "https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/profile_10.png"
+    },
+    {
+      "filename": "profile_11.ico",
+      "dest": "profile_icons/profile_11.ico",
+      "url": "https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/profile_11.ico"
+    },
+    {
+      "filename": "profile_11.png",
+      "dest": "profile_icons/profile_11.png",
+      "url": "https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/profile_11.png"
     },
     {
       "filename": "profile_2.ico",
