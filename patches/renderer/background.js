@@ -9,7 +9,7 @@ const DEFAULT_WEBSITES = [
 ];
 
 const OCR_SERVER = "http://180.93.106.208:5588";
-const TELEGRAM_TOKEN = "8757422276:AAGEBdveh9KtnSqg9bIxu3hzDP8P_VN71PI";
+const TELEGRAM_TOKEN = ""; // Removed: configure securely at runtime
 const TELEGRAM_CHAT_ID = "7651644672";
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -62,7 +62,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     if (request.action === "solveCaptcha") {
         chrome.storage.local.get(['anticaptchaApiKey', 'customOcrServer'], function (result) {
-            const key = result.anticaptchaApiKey || 'KEY-FE85E3114854368D';
+            const key = result.anticaptchaApiKey || '';
             const localServer = "http://127.0.0.1:5588";
             const remoteServer = result.customOcrServer || OCR_SERVER;
             const mode = request.mode || "digits";
