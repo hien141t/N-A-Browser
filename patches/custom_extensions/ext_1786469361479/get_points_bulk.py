@@ -14,7 +14,7 @@ API_URL = "https://api.svnet.vn/"
 HEADERS = {
     "accept": "application/json, text/plain, */*",
     "accept-language": "en-US,en;q=0.9",
-    "authorization": "JWT eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJJZCI6MjY5NCwiQXBwQ2xpZW50SWQiOjAsIlVzZXJOYW1lIjoiQnR2ZG9hbiIsIkZ1bGxOYW1lIjoiQmFuIFRoxrDhu51uZyBW4bulIMSQb8OgbiBUcsaw4budbmciLCJDb2RlIjoiZkkrajA4STdoK1VpS2ZMM2FoanhYUT09IiwiRXhwaXJlZERhdGUiOiIwMDAxLTAxLTAxVDAwOjAwOjAwIn0.LygvP39bGalyj_lWYBe92YOQTDUWO-d0gOChSsP8NK8",
+    "authorization": os.environ.get("SVNET_JWT_TOKEN", ""),
     "companyid": "",
     "content-type": "application/json",
     "namespace": "Main",
