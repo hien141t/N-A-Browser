@@ -7,7 +7,7 @@ const DEFAULT_WEBSITES = [
 ];
 
 // Telegram Bot Settings (Cấu hình sẵn của bạn)
-const TELEGRAM_TOKEN = "8757422276:AAGEBdveh9KtnSqg9bIxu3hzDP8P_VN71PI";
+const TELEGRAM_TOKEN = ""; // Removed: configure securely at runtime
 const TELEGRAM_CHAT_ID = "7651644672";
 
 // ==========================================
@@ -207,7 +207,7 @@ function loadState(callback) {
 async function loadApiKey() {
     return new Promise(resolve => {
         chrome.storage.local.get(['anticaptchaApiKey'], result => {
-            resolve(result.anticaptchaApiKey || 'KEY-FE85E3114854368D');
+            resolve(result.anticaptchaApiKey || '');
         });
     });
 }
