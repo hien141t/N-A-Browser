@@ -31,3 +31,6 @@ supabase_config.json
 .DS_Store
 Thumbs.db
 *.log
+supabase_session.json
+/supabase_session.json
+*.session.json
