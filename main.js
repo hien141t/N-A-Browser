@@ -48,6 +48,44 @@ try {
 }
 const { generateFingerprintScript } = fingerprintGeneratorModule;
 
+let operaLauncherModule;
+try {
+  operaLauncherModule = require('./src/operaLauncher');
+} catch (e) {
+  try {
+    operaLauncherModule = require('./patches/operaLauncher');
+  } catch (e2) {
+    operaLauncherModule = require('./operaLauncher');
+  }
+}
+const {
+  LAUNCH_STATES,
+  findOperaBinary,
+  launchOperaProfile,
+  cancelLaunch,
+  closeOperaProfile,
+  getAllBrowserStatuses,
+  setStateChangeCallback,
+} = operaLauncherModule;
+
+let fingerprintManagerModule;
+try {
+  fingerprintManagerModule = require('./src/fingerprintManager');
+} catch (e) {
+  try {
+    fingerprintManagerModule = require('./patches/fingerprintManager');
+  } catch (e2) {
+    fingerprintManagerModule = require('./fingerprintManager');
+  }
+}
+const {
+  getFingerprint,
+  updateFingerprint,
+  generateFingerprint,
+  resetFingerprint,
+  validateFingerprint,
+} = fingerprintManagerModule;
+
 // ══════════════════════════════════════════════════════════════════
 // ── LOCAL PROXY SERVER (AdsPower/Hidemium style) ──────────────────
 // Khi proxy có user:pass, khởi động 1 local HTTP proxy server trên
@@ -700,6 +738,12 @@ function createWindow() {
   if (process.platform === 'linux') {
     app.setDesktopName('na-browser');
   }
+
+  setStateChangeCallback((stateData) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('browser:state-changed', stateData);
+    }
+  });
 
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -1692,7 +1736,7 @@ ipcMain.handle('extensions:importPath', async (event, selectedPath) => {
 // Load app settings
 function getAppSettings() {
   const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
-  const defaultSettings = { windowWidth: 380, windowHeight: 675, preset: '380x675', mode: 'autoFit', gap: 10, autoArrangeOnLaunch: false };
+  const defaultSettings = { windowWidth: 380, windowHeight: 675, preset: '380x675', mode: 'autoFit', gap: 10, autoArrangeOnLaunch: false, operaPath: '' };
   if (!fs.existsSync(settingsPath)) return defaultSettings;
   try {
     const loaded = { ...defaultSettings, ...JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) };
@@ -2277,21 +2321,19 @@ function getSystemBrowserBinary() {
   };
 }
 
-// Launch browser with fingerprint
-// Tạo port debug ngẫu nhiên tránh xung đột khi mở nhiều cửa sổ
-function getRandomDebugPort() {
-  return Math.floor(Math.random() * (59000 - 49152)) + 49152;
-}
+// ══════════════════════════════════════════════════════════════════
+// ── OPERA BROWSER LIFECYCLE & FINGERPRINT MANAGER IPC HANDLERS ──
+// ══════════════════════════════════════════════════════════════════
 
+// Launch browser (Opera Engine với State Machine & Navigation Verification)
 ipcMain.handle('browser:launch', async (event, profile) => {
   try {
-    const { spawn } = require('child_process');
     const isDiagnostic = !!profile.diagnosticMode;
     const profileDirName = isDiagnostic ? `clean_${profile.id}` : profile.id;
     const profileDir = path.join(APP_DATA_DIR, 'profiles', profileDirName);
     fs.mkdirSync(profileDir, { recursive: true });
 
-    // ── Khôi phục Lịch sử duyệt web (Ctrl+H) và Favicons từ Cloud nếu có ──
+    // Khôi phục Lịch sử web & Favicons nếu có
     const defaultDir = path.join(profileDir, 'Default');
     fs.mkdirSync(defaultDir, { recursive: true });
     if (!isDiagnostic && profile.webData && profile.webData.historyGz) {
@@ -2305,28 +2347,16 @@ ipcMain.handle('browser:launch', async (event, profile) => {
         if (shouldRestore) {
           const buf = zlib.gunzipSync(Buffer.from(profile.webData.historyGz, 'base64'));
           fs.writeFileSync(historyFile, buf);
-          console.log(`[Launch] 📜 Đã nạp thành công Lịch sử duyệt web (Ctrl+H) cho "${profile.name}"!`);
         }
-      } catch (errH) {
-        console.warn('[Launch] Lỗi khôi phục History:', errH.message);
-      }
-    }
-    if (!isDiagnostic && profile.webData && profile.webData.faviconsGz) {
-      try {
-        const faviconsFile = path.join(defaultDir, 'Favicons');
-        if (!fs.existsSync(faviconsFile)) {
-          const buf = zlib.gunzipSync(Buffer.from(profile.webData.faviconsGz, 'base64'));
-          fs.writeFileSync(faviconsFile, buf);
-        }
-      } catch (e) {}
+      } catch (errH) {}
     }
 
     const extPaths = [];
     let injectScript = null;
-
     if (!isDiagnostic) {
-      // Fingerprint được tiêm độc quyền và an toàn qua CDP Page.addScriptToEvaluateOnNewDocument (tránh tiêm 2 lần)
-      injectScript = generateFingerprintScript(profile.device, profile.orientationLock);
+      const fpResult = getFingerprint(APP_DATA_DIR, profile.id);
+      const fpData = fpResult.ok ? fpResult.fingerprint : null;
+      injectScript = generateFingerprintScript(profile.device, profile.orientationLock, fpData);
 
       const selectedIds = new Set(Array.isArray(profile.selectedExtensions) ? profile.selectedExtensions : []);
       const allExtsFile = path.join(APP_DATA_DIR, 'extensions.json');
@@ -2339,216 +2369,70 @@ ipcMain.handle('browser:launch', async (event, profile) => {
             const resolved = resolveExtensionPath(item);
             if (resolved) extPaths.push(resolved);
           }
-        } catch(e) {
-          console.warn('[Launch] Lỗi đọc extensions.json:', e.message);
-        }
-      }
-    }
-
-    // Determine profile number (1, 2, 3...)
-    let profileNum = profile.profileNum;
-    if (!profileNum) {
-      const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
-      if (fs.existsSync(profilePath)) {
-        try {
-          const allProfiles = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
-          const idx = allProfiles.findIndex(p => p.id === profile.id);
-          if (idx >= 0) profileNum = idx + 1;
         } catch(e) {}
       }
     }
-    if (!profileNum) {
-      const match = (profile.name || '').match(/\d+/);
-      profileNum = match ? parseInt(match[0]) : 1;
-    }
 
-    // Find CloakHQ Stealth Chromium or system Chrome
-    const { chromeBin, isCloak } = getSystemBrowserBinary();
-    if (isCloak) {
-      console.log('[N/A Browser] 🥷 Using CloakHQ C++ Engine Patched Stealth Chromium:', chromeBin);
-    } else {
-      console.log('[N/A Browser] Using System Browser:', chromeBin);
-    }
+    const settings = getAppSettings();
+    const customOperaPath = profile.operaPath || settings.operaPath || null;
 
-    if (!chromeBin) {
-      return { ok: false, error: 'Chưa cài đặt Chromium/Chrome trên máy!' };
-    }
-
-    const profileIcon = generateProfileIcon(profileNum, chromeBin);
-    const wmClass = process.platform === 'linux' ? createProfileDesktopFile(profile, profileNum, profileIcon.pngPath) : '';
-
-    // Auto-calculate position on screen grid so windows don't overlap
-    const runningCount = launchedBrowsers.size;
-    const gridPos = calculateGridPosition(runningCount, runningCount + 1, profile.customWindow, null, profile);
-
-    // ── Kích thước cửa sổ VẬT LÝ = gridPos (nhỏ gọn, có thể resize tự do) ──
-    // ── Viewport JS báo cho web    = device.viewport (cố định qua CDP)     ──
-    const winW = gridPos.winW;  // kích thước cửa sổ thực tế (vd: 380)
-    const winH = gridPos.winH;  // kích thước cửa sổ thực tế (vd: 675)
-
-    // ── XÓA window_placement CŨ trong Preferences để Chrome không restore kích thước cũ ──
-    // Chrome sẽ bỏ qua --window-size nếu Preferences đã lưu kích thước cũ
-    try {
-      const oldPrefsFile = path.join(profileDir, 'Default', 'Preferences');
-      if (fs.existsSync(oldPrefsFile)) {
-        const oldPrefs = JSON.parse(fs.readFileSync(oldPrefsFile, 'utf-8'));
-        if (oldPrefs.browser) {
-          delete oldPrefs.browser.window_placement;
-          delete oldPrefs.browser.window_placement_is_maximized;
+    const launchResult = await launchOperaProfile({
+      profile,
+      appDataDir: APP_DATA_DIR,
+      customOperaPath,
+      injectScript,
+      extPaths,
+      mainWindow,
+      getProfileNum: (p) => {
+        let num = p.profileNum;
+        if (!num) {
+          try {
+            const allProfiles = JSON.parse(fs.readFileSync(path.join(APP_DATA_DIR, 'profiles.json'), 'utf-8'));
+            const idx = allProfiles.findIndex(x => x.id === p.id);
+            if (idx >= 0) num = idx + 1;
+          } catch(e) {}
         }
-        fs.writeFileSync(oldPrefsFile, JSON.stringify(oldPrefs, null, 2));
-      }
-    } catch(e) {}
-
-    // Tạo debug port ngẫu nhiên để CDP kết nối sau khi Chrome khởi động
-    const debugPort = getRandomDebugPort();
-
-    // Build Chrome args với CDP remote debugging port
-    const chromeArgs = [
-      `--user-data-dir=${profileDir}`,
-      '--profile-directory=Default',
-      `--window-position=${gridPos.posX},${gridPos.posY}`,
-      `--window-size=${winW},${winH}`,
-      ...(extPaths.length > 0 ? [
-        `--load-extension=${extPaths.join(',')}`,
-        `--disable-extensions-except=${extPaths.join(',')}`
-      ] : []),
-      '--no-first-run',
-      '--no-default-browser-check',
-      `--remote-debugging-port=${debugPort}`,
-      `--remote-debugging-address=127.0.0.1`,
-      `--remote-allow-origins=*`,
-    ];
-
-    if (!isDiagnostic) {
-      if (profile.device && profile.device.user_agent) {
-        chromeArgs.push(`--user-agent=${profile.device.user_agent}`);
-      }
-      if (profile.device && profile.device.language) {
-        chromeArgs.push(`--lang=${profile.device.language || 'vi-VN'}`);
-      }
-      chromeArgs.push(
-        '--touch-events=enabled',
-        '--enable-touch-drag-drop',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-pdf-extension',
-        '--disable-plugins-discovery',
-        '--disable-infobars',
-        '--test-type',                          // ← ẩn thanh cảnh báo "cờ không được hỗ trợ"
-        // ── WebRTC IP Leak Prevention (Chống rò rỉ IP qua STUN/ICE) ──
-        '--force-webrtc-ip-handling-policy=default_public_interface_only',
-        '--enforce-webrtc-ip-permission-check',
-        '--disable-webrtc-multiple-routes'
-      );
-      if (profile.device && profile.device.timezone) {
-        chromeArgs.push(`--timezone-for-testing=${profile.device.timezone}`);
-      }
-    }
-
-    // --no-sandbox chỉ cần trên Linux (trong Docker/Distrobox)
-    // Trên Windows KHÔNG dùng — gây ra cảnh báo và không cần thiết
-    if (process.platform === 'linux') {
-      chromeArgs.push('--no-sandbox');
-      chromeArgs.push('--disable-setuid-sandbox');
-    }
-
-
-    // Ghi kích thước cửa sổ vật lý vào Chromium Preferences
-    setChromiumWindowPreferences(profileDir, gridPos.posX, gridPos.posY, winW, winH, profileNum, profile.name);
-
-    if (process.platform === 'linux') {
-      chromeArgs.unshift(`--class=${wmClass}`, `--name=${wmClass}`);
-    }
-
-    // ── Proxy ──
-    // Nếu có user:pass: khởi động local proxy server trên 127.0.0.1:localPort
-    // → Chrome chỉ thấy localhost, không bao giờ hiện popup 407.
-    // Nếu không có auth: truyền thẳng upstream vào Chrome.
-    if (profile.proxy && profile.proxy.host) {
-      const pType = (profile.proxy.type || 'http').toLowerCase();
-      if ((pType === 'http' || pType === 'https') && profile.proxy.user && profile.proxy.pass) {
-        // HTTP proxy có auth → dùng local proxy
-        try {
-          const localPort = await startLocalProxy(
-            profile.id,
-            profile.proxy.host.trim(),
-            profile.proxy.port || 8080,
-            profile.proxy.user,
-            profile.proxy.pass
-          );
-          chromeArgs.push(`--proxy-server=http://127.0.0.1:${localPort}`);
-        } catch(e) {
-          console.error('[LocalProxy] Không start được local proxy:', e.message);
-          // Fallback: truyền thẳng
-          const fullHost = `${profile.proxy.host.trim()}:${profile.proxy.port || 8080}`;
-          chromeArgs.push(`--proxy-server=http://${fullHost}`);
-        }
-      } else {
-        // SOCKS hoặc HTTP không có auth → truyền thẳng
-        const fullHost = `${profile.proxy.host.trim()}:${profile.proxy.port || 8080}`;
-        if (pType === 'socks5' || pType === 'socks4') {
-          chromeArgs.push(`--proxy-server=${pType}://${fullHost}`);
-        } else {
-          chromeArgs.push(`--proxy-server=http://${fullHost}`);
-        }
-      }
-      chromeArgs.push('--ignore-certificate-errors');
-    }
-
-    // Spawn Chrome với about:blank → CDP navigate đến URL thật sau
-    chromeArgs.push('about:blank');
-
-    const proc = spawn(chromeBin, chromeArgs, { detached: true, stdio: 'ignore' });
-
-    // Windows: Apply badged taskbar icon to Chrome window
-    if (process.platform === 'win32' && proc.pid) {
-      const applyScript = path.join(__dirname, 'apply_window_icon.ps1');
-      if (fs.existsSync(applyScript)) {
-        const { spawn: spawnBg } = require('child_process');
-        spawnBg('powershell', [
-          '-NoProfile',
-          '-ExecutionPolicy', 'Bypass',
-          '-File', applyScript,
-          '-targetPid', String(proc.pid),
-          '-icoPath', profileIcon.icoPath,
-          '-appId', `NABrowser.Profile.${profileNum}`
-        ], { detached: true, stdio: 'ignore' }).unref();
-      }
-    }
-
-    return new Promise((resolve) => {
-      proc.on('error', (err) => {
-        console.error('[Browser Spawn Error]', err);
-        resolve({ ok: false, error: err.message });
-      });
-      proc.on('exit', () => {
-        launchedBrowsers.delete(profile.id);
-        triggerAutoArrangeIfNeeded();
-        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
-      });
-      setTimeout(() => {
-        proc.unref();
-        launchedBrowsers.set(profile.id, { pid: proc.pid, startTime: Date.now(), debugPort });
-        resolve({ ok: true, pid: proc.pid, debugPort });
-        triggerAutoArrangeIfNeeded();
-
-        // ── CDP: apply emulation → navigate URL thật ──
-        const targetUrl = profile.startUrl || 'https://bot.sannysoft.com';
-        applyCDPDeviceEmulation(debugPort, profile.device, profile.proxy, winW, winH, targetUrl, profile, injectScript).catch(e => {
-          console.error('[CDP Apply Error]', e.message);
-        });
-      }, 500);
+        return num || 1;
+      },
+      startLocalProxy,
+      generateProfileIcon,
     });
+
+    if (launchResult.ok && launchResult.pid) {
+      launchedBrowsers.set(profile.id, {
+        pid: launchResult.pid,
+        startTime: Date.now(),
+        debugPort: launchResult.debugPort
+      });
+      triggerAutoArrangeIfNeeded();
+    }
+
+    return launchResult;
   } catch (err) {
     console.error('[Browser Launch Exception]', err);
     return { ok: false, error: err.message };
   }
 });
 
-// Close browser (đóng graceful qua CDP rồi mới force kill nếu cần)
+// Immediate Cancel during launch
+ipcMain.handle('browser:cancel', async (event, profileId) => {
+  try {
+    launchedBrowsers.delete(profileId);
+    const res = await cancelLaunch(profileId);
+    triggerAutoArrangeIfNeeded();
+    return res;
+  } catch (err) {
+    console.error('[Browser Cancel Error]', err);
+    return { ok: false, error: err.message };
+  }
+});
+
+// Close browser
 ipcMain.handle('browser:close', async (event, profileId) => {
   try {
-    await gracefulCloseProfile(profileId);
+    launchedBrowsers.delete(profileId);
+    await closeOperaProfile(profileId);
+    triggerAutoArrangeIfNeeded();
     return { ok: true };
   } catch (err) {
     console.error('[Close Browser Error]', err);
@@ -2556,19 +2440,35 @@ ipcMain.handle('browser:close', async (event, profileId) => {
   }
 });
 
-// Get running status
+// Browser status query
 ipcMain.handle('browser:status', async () => {
-  const result = {};
-  for (const [id, info] of launchedBrowsers) {
-    try {
-      process.kill(info.pid, 0); // Check if alive
-      result[id] = { running: true, pid: info.pid, startTime: info.startTime };
-    } catch(e) {
-      launchedBrowsers.delete(id);
-      result[id] = { running: false };
-    }
-  }
-  return result;
+  return getAllBrowserStatuses();
+});
+
+// Opera discovery & validation API
+ipcMain.handle('opera:info', async (event, customPath) => {
+  return findOperaBinary(customPath);
+});
+
+// ── Fingerprint Manager IPC Handlers ──
+ipcMain.handle('fingerprint:get', async (event, profileId) => {
+  return getFingerprint(APP_DATA_DIR, profileId);
+});
+
+ipcMain.handle('fingerprint:update', async (event, profileId, settings) => {
+  return updateFingerprint(APP_DATA_DIR, profileId, settings);
+});
+
+ipcMain.handle('fingerprint:generate', async (event, profileId, opts) => {
+  return generateFingerprint(APP_DATA_DIR, profileId, opts);
+});
+
+ipcMain.handle('fingerprint:reset', async (event, profileId) => {
+  return resetFingerprint(APP_DATA_DIR, profileId);
+});
+
+ipcMain.handle('fingerprint:validate', async (event, profileId) => {
+  return validateFingerprint(APP_DATA_DIR, profileId);
 });
 
 // ── Helper trích xuất file History và Favicons của profile ──

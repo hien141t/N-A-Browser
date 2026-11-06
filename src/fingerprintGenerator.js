@@ -1,6 +1,6 @@
 const { normalizeDeviceRatio } = require('./layoutEngine');
 
-function generateFingerprintScript(device, orientationLock = 'auto') {
+function generateFingerprintScript(device, orientationLock = 'auto', fingerprint = null) {
   device = device || {};
   const norm = normalizeDeviceRatio(device, orientationLock);
   const screenOrientationType = norm.screenOrientation.jsType;
@@ -17,6 +17,16 @@ function generateFingerprintScript(device, orientationLock = 'auto') {
   const isMobile = device.is_mobile !== false;
   const isApple = (device.brand && device.brand.toLowerCase() === 'apple') || device.platform === 'iPhone' || device.platform === 'iPad';
   const targetPlatform = device.platform || (isApple ? (device.model && device.model.includes('iPad') ? 'iPad' : 'iPhone') : (isMobile ? 'Linux armv8l' : 'Win32'));
+
+  // Support Fingerprint Manager options
+  const fp = fingerprint || {};
+  const hwConcurrency = fp.hardware?.hardwareConcurrency || 8;
+  const devMemory = fp.hardware?.deviceMemory || 8;
+  if (fp.hardware?.maxTouchPoints !== undefined) device.max_touch_points = fp.hardware.maxTouchPoints;
+  if (fp.timezone?.timezone) device.timezone = fp.timezone.timezone;
+  if (fp.timezone?.language) device.language = fp.timezone.language;
+  if (fp.webgl?.renderer) device.webgl_renderer = fp.webgl.renderer;
+  if (fp.webgl?.vendor) device.webgl_vendor = fp.webgl.vendor;
 
   // Compute a stable integer seed unique to this device/profile
   const seedStr = (device.id || device.name || 'cloakdroid_profile') + '_' + renderer;
@@ -267,10 +277,10 @@ function generateFingerprintScript(device, orientationLock = 'auto') {
         } catch(err){}
       };
 
-      patchMetric(navProto, 'deviceMemory', 8, 'get deviceMemory');
-      patchMetric(navigator, 'deviceMemory', 8, 'get deviceMemory');
-      patchMetric(navProto, 'hardwareConcurrency', 8, 'get hardwareConcurrency');
-      patchMetric(navigator, 'hardwareConcurrency', 8, 'get hardwareConcurrency');
+      patchMetric(navProto, 'deviceMemory', ${devMemory}, 'get deviceMemory');
+      patchMetric(navigator, 'deviceMemory', ${devMemory}, 'get deviceMemory');
+      patchMetric(navProto, 'hardwareConcurrency', ${hwConcurrency}, 'get hardwareConcurrency');
+      patchMetric(navigator, 'hardwareConcurrency', ${hwConcurrency}, 'get hardwareConcurrency');
 
       if (navigator.getBattery) {
         navigator.getBattery = makeNative(function getBattery() {
