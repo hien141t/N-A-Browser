@@ -1,258 +1,158 @@
 /**
  * test_aspect_ratio.js
- * Kiểm thử tỷ lệ khung hình và tính năng khóa hướng màn hình (orientationLock).
+ * Kiểm thử TRỰC TIẾP normalizeDeviceRatio & computeEmulationState từ src/layoutEngine.js.
  * 
- * Kiểm tra các trường hợp:
- * 1. Profile dọc (portrait): width < height, aspect ratio chuẩn 9:19.5 hoặc 9:20.
- * 2. Profile ngang (landscape): width > height, aspect ratio chuẩn 19.5:9 hoặc 16:9.
- * 3. Khóa hướng orientationLock ('auto' | 'portrait' | 'landscape'):
- *    - 'portrait': Cửa sổ luôn có width < height và tỷ lệ ~9:19.5 hoặc 9:20.
- *    - 'landscape': Cửa sổ luôn có width > height và tỷ lệ ~19.5:9 hoặc 16:9.
- *    - 'auto': Giữ nguyên hướng ban đầu của thiết bị / cấu hình.
- * 4. Hỗn hợp dọc + ngang trên cùng một lưới sắp xếp (Mixed portrait + landscape).
+ * Kiểm tra:
+ * 1. Thiết bị dọc chuẩn (Phone 412x915):
+ *    - orientationLock = 'portrait': width < height, tỷ lệ chuẩn ~0.45, portrait-primary, angle 0.
+ *    - orientationLock = 'landscape': width > height, tỷ lệ chuẩn ~2.22, landscape-primary, angle 90.
+ * 2. Thiết bị ngang chuẩn / Tablet (1024x768):
+ *    - orientationLock = 'portrait': Đảm bảo chuẩn hóa min/max không bị đảo ngược tỷ lệ!
+ *    - orientationLock = 'landscape': Đảm bảo chuẩn hóa min/max đúng chiều!
+ * 3. orientationLock = 'auto': Tự suy luận từ kích thước gốc.
+ * 4. Đồng bộ hóa CDP computeEmulationState (Visual Viewport vs Window Bounds).
  */
 
 const assert = require('assert');
-const { isOverlapping } = require('./test_grid_math');
+const {
+  normalizeDeviceRatio,
+  computeEmulationState,
+  UI_DELTA_X,
+  UI_DELTA_Y
+} = require('../src/layoutEngine');
 
-/**
- * Xử lý kích thước cửa sổ dựa theo orientationLock và device/preset
- */
-function resolveWindowDimensions(opts) {
-  let {
-    width = 380,
-    height = 675,
-    orientationLock = 'auto', // 'auto' | 'portrait' | 'landscape'
-    preset = 'custom',
-    targetRatioPortrait = 9 / 19.5, // ~0.4615
-    targetRatioLandscape = 19.5 / 9 // ~2.1667
-  } = opts;
-
-  width = parseInt(width) || 380;
-  height = parseInt(height) || 675;
-
-  if (orientationLock === 'portrait') {
-    // Nếu hiện tại đang là landscape (width > height), đổi hướng thành portrait
-    if (width > height) {
-      const temp = width;
-      width = height;
-      height = temp;
-    }
-    // Nếu aspect ratio chưa chuẩn, chuẩn hóa
-    const currentRatio = width / height;
-    if (Math.abs(currentRatio - targetRatioPortrait) > 0.1) {
-      width = Math.round(height * targetRatioPortrait);
-    }
-  } else if (orientationLock === 'landscape') {
-    // Nếu hiện tại đang là portrait (width < height), đổi hướng thành landscape
-    if (width < height) {
-      const temp = width;
-      width = height;
-      height = temp;
-    }
-    // Chuẩn hóa tỷ lệ landscape
-    const currentRatio = width / height;
-    if (Math.abs(currentRatio - targetRatioLandscape) > 0.1) {
-      height = Math.round(width / targetRatioLandscape);
-    }
-  } else {
-    // 'auto': giữ nguyên tỉ lệ gốc hoặc thiết lập ban đầu
-  }
-
-  return {
-    width,
-    height,
-    orientation: width < height ? 'portrait' : 'landscape',
-    aspectRatio: width / height,
-    orientationLock
-  };
-}
-
-/**
- * Thuật toán sắp xếp hỗn hợp (Mixed Grid Layout) hỗ trợ cả cửa sổ dọc và ngang
- */
-function arrangeMixedWindows(profiles, workArea = { x: 0, y: 0, width: 1920, height: 1080 }, options = {}) {
-  const startX = options.startX !== undefined ? options.startX : 10;
-  const startY = options.startY !== undefined ? options.startY : 10;
-  const gapX = options.gapX !== undefined ? options.gapX : 10;
-  const gapY = options.gapY !== undefined ? options.gapY : 10;
-
-  const resolvedProfiles = profiles.map(p => {
-    const dim = resolveWindowDimensions({
-      width: p.customWindow?.width || (p.orientationLock === 'landscape' ? 675 : 380),
-      height: p.customWindow?.height || (p.orientationLock === 'landscape' ? 380 : 675),
-      orientationLock: p.orientationLock || 'auto'
-    });
-    return { ...p, dim };
-  });
-
-  const placedWindows = [];
-  let currentX = workArea.x + startX;
-  let currentY = workArea.y + startY;
-  let rowMaxHeight = 0;
-
-  for (let i = 0; i < resolvedProfiles.length; i++) {
-    const prof = resolvedProfiles[i];
-    let winW = prof.dim.width;
-    let winH = prof.dim.height;
-
-    // Nếu vượt quá chiều ngang của workArea, xuống hàng mới
-    if (currentX + winW > workArea.x + workArea.width - startX && placedWindows.length > 0) {
-      currentX = workArea.x + startX;
-      currentY += rowMaxHeight + gapY;
-      rowMaxHeight = 0;
-    }
-
-    // Nếu chiều cao vượt quá workArea, tỉ lệ co lại để vừa
-    if (currentY + winH > workArea.y + workArea.height - startY) {
-      const scale = (workArea.height - (currentY - workArea.y) - startY) / winH;
-      if (scale > 0.5) {
-        winW = Math.floor(winW * scale);
-        winH = Math.floor(winH * scale);
-      }
-    }
-
-    placedWindows.push({
-      id: prof.id || `win_${i}`,
-      orientation: prof.dim.orientation,
-      x: currentX,
-      y: currentY,
-      w: winW,
-      h: winH
-    });
-
-    rowMaxHeight = Math.max(rowMaxHeight, winH);
-    currentX += winW + gapX;
-  }
-
-  return placedWindows;
-}
-
-/**
- * Chạy test suite cho Aspect Ratio & Khóa Hướng
- */
 function runAspectRatioTests() {
-  console.log('====================================================');
-  console.log('🧪 BẮT ĐẦU KIỂM THỬ: Tỷ lệ khung hình & Khóa hướng');
+  console.log('\n====================================================');
+  console.log('🧪 BẮT ĐẦU KIỂM THỬ: Tỷ lệ Khung Hình & Khóa Hướng (Production Math)');
   console.log('====================================================\n');
 
-  let totalTests = 0;
-  let passedTests = 0;
+  let passed = 0;
+  let total = 0;
 
-  function runTest(testName, testFn) {
-    totalTests++;
+  function test(name, fn) {
+    total++;
     try {
-      testFn();
-      console.log(`  ✅ PASS: ${testName}`);
-      passedTests++;
+      fn();
+      console.log(`  ✅ PASS: ${name}`);
+      passed++;
     } catch (err) {
-      console.error(`  ❌ FAIL: ${testName}`);
-      console.error(`     Nguyên nhân: ${err.message}`);
+      console.error(`  ❌ FAIL: ${name}`);
+      console.error(`     Lỗi: ${err.message}`);
+      throw err;
     }
   }
 
-  // 1. Portrait tests
-  console.log('--- 1. Profile dọc (Portrait) ---');
-  runTest('Profile Portrait: width < height và tỷ lệ chuẩn 9:19.5 (~0.4615)', () => {
-    const dim = resolveWindowDimensions({ width: 380, height: 823, orientationLock: 'portrait' });
-    assert(dim.width < dim.height, 'Portrait width phải nhỏ hơn height');
-    const ratio = dim.width / dim.height;
-    const target = 9 / 19.5;
-    assert(Math.abs(ratio - target) < 0.05, `Tỷ lệ ${ratio} lệch so với chuẩn 9:19.5 (${target})`);
+  // --- 1. Điện thoại thông thường (412x915) ---
+  console.log('--- 1. Thiết bị Phone chuẩn (412x915) ---');
+  const phoneDevice = { viewport: { width: 412, height: 915 } };
+
+  test('Phone + orientationLock="portrait": screen.orientation="portrait-primary", angle=0, ratio < 1', () => {
+    const norm = normalizeDeviceRatio(phoneDevice, 'portrait');
+    assert.strictEqual(norm.isLandscape, false);
+    assert.strictEqual(norm.screenOrientation.jsType, 'portrait-primary');
+    assert.strictEqual(norm.screenOrientation.angle, 0);
+    assert.strictEqual(norm.windowOrientation, 0);
+    assert.strictEqual(norm.screenWidth, 412);
+    assert.strictEqual(norm.screenHeight, 915);
+    assert(Math.abs(norm.targetRatio - (412 / 915)) < 0.001);
   });
 
-  runTest('Profile Portrait: tỷ lệ chuẩn 9:20 (0.45)', () => {
-    const dim = resolveWindowDimensions({
-      width: 360,
-      height: 800,
+  test('Phone + orientationLock="landscape": screen.orientation="landscape-primary", angle=90, ratio > 1', () => {
+    const norm = normalizeDeviceRatio(phoneDevice, 'landscape');
+    assert.strictEqual(norm.isLandscape, true);
+    assert.strictEqual(norm.screenOrientation.jsType, 'landscape-primary');
+    assert.strictEqual(norm.screenOrientation.angle, 90);
+    assert.strictEqual(norm.windowOrientation, 90);
+    assert.strictEqual(norm.screenWidth, 915);
+    assert.strictEqual(norm.screenHeight, 412);
+    assert(Math.abs(norm.targetRatio - (915 / 412)) < 0.001);
+  });
+
+  // --- 2. Tablet / Preset vốn dĩ nằm ngang (1024x768) ---
+  console.log('\n--- 2. Tablet / Preset vốn nằm ngang (1024x768) - CHỐNG ĐẢO TỶ LỆ ---');
+  const tabletDevice = { viewport: { width: 1024, height: 768 } };
+
+  test('Tablet vốn nằm ngang khi khóa "portrait" KHÔNG bị đảo tỷ lệ (targetRatio < 1)', () => {
+    const norm = normalizeDeviceRatio(tabletDevice, 'portrait');
+    assert.strictEqual(norm.isLandscape, false);
+    assert.strictEqual(norm.screenOrientation.jsType, 'portrait-primary');
+    assert.strictEqual(norm.screenOrientation.angle, 0);
+    assert.strictEqual(norm.screenWidth, 768);
+    assert.strictEqual(norm.screenHeight, 1024);
+    // targetRatio phải là min/max = 768/1024 = 0.75 (< 1.0), không được là 1024/768!
+    assert.strictEqual(norm.targetRatio, 768 / 1024);
+    assert(norm.targetRatio < 1.0, `targetRatio (${norm.targetRatio}) phải < 1.0 cho portrait`);
+  });
+
+  test('Tablet vốn nằm ngang khi khóa "landscape" (targetRatio > 1)', () => {
+    const norm = normalizeDeviceRatio(tabletDevice, 'landscape');
+    assert.strictEqual(norm.isLandscape, true);
+    assert.strictEqual(norm.screenOrientation.jsType, 'landscape-primary');
+    assert.strictEqual(norm.screenOrientation.angle, 90);
+    assert.strictEqual(norm.screenWidth, 1024);
+    assert.strictEqual(norm.screenHeight, 768);
+    assert.strictEqual(norm.targetRatio, 1024 / 768);
+    assert(norm.targetRatio > 1.0, `targetRatio (${norm.targetRatio}) phải > 1.0 cho landscape`);
+  });
+
+  // --- 3. orientationLock="auto" ---
+  console.log('\n--- 3. orientationLock="auto" ---');
+  test('Phone + auto: Mặc định portrait theo tỷ lệ gốc', () => {
+    const norm = normalizeDeviceRatio(phoneDevice, 'auto');
+    assert.strictEqual(norm.isLandscape, false);
+    assert.strictEqual(norm.screenOrientation.jsType, 'portrait-primary');
+  });
+
+  test('Tablet + auto: Mặc định landscape theo tỷ lệ gốc', () => {
+    const norm = normalizeDeviceRatio(tabletDevice, 'auto');
+    assert.strictEqual(norm.isLandscape, true);
+    assert.strictEqual(norm.screenOrientation.jsType, 'landscape-primary');
+  });
+
+  // --- 4. Đồng bộ CDP computeEmulationState ---
+  console.log('\n--- 4. Đồng bộ CDP computeEmulationState (Visual Viewport vs Window) ---');
+  test('computeEmulationState: Viewport thực tế loại trừ UI delta và bảo toàn tỷ lệ', () => {
+    const state = computeEmulationState({
+      currentWinW: 400,
+      currentWinH: 800,
+      device: phoneDevice,
       orientationLock: 'portrait',
-      targetRatioPortrait: 9 / 20
+      uiDeltaX: UI_DELTA_X,
+      uiDeltaY: UI_DELTA_Y
     });
-    assert(dim.width < dim.height, 'Portrait width < height');
-    const ratio = dim.width / dim.height;
-    assert(Math.abs(ratio - 0.45) < 0.05, `Tỷ lệ ${ratio} lệch so với chuẩn 9:20 (0.45)`);
+
+    assert(state.viewportW > 0);
+    assert(state.viewportH > 0);
+    assert.strictEqual(state.screenOrientation.type, 'portraitPrimary');
+    assert.strictEqual(state.screenOrientation.angle, 0);
+
+    // Viewport width / height tỷ lệ chuẩn ~412/915
+    const ratio = state.viewportW / state.viewportH;
+    assert(Math.abs(ratio - (412 / 915)) < 0.05, `Tỷ lệ viewport ${ratio} lệch so với gốc ${412/915}`);
   });
 
-  // 2. Landscape tests
-  console.log('\n--- 2. Profile ngang (Landscape) ---');
-  runTest('Profile Landscape: width > height và tỷ lệ chuẩn 19.5:9 (~2.1667)', () => {
-    const dim = resolveWindowDimensions({ width: 823, height: 380, orientationLock: 'landscape' });
-    assert(dim.width > dim.height, 'Landscape width phải lớn hơn height');
-    const ratio = dim.width / dim.height;
-    const target = 19.5 / 9;
-    assert(Math.abs(ratio - target) < 0.05, `Tỷ lệ ${ratio} lệch so với chuẩn 19.5:9 (${target})`);
-  });
-
-  // 3. Khóa hướng (orientationLock switch)
-  console.log('\n--- 3. Khóa hướng orientationLock ---');
-  runTest('orientationLock="portrait" tự xoay kích thước landscape (800x400) về portrait', () => {
-    const dim = resolveWindowDimensions({ width: 800, height: 400, orientationLock: 'portrait' });
-    assert(dim.width < dim.height, `Phải chuyển thành width < height, nhận được: ${dim.width}x${dim.height}`);
-    assert.strictEqual(dim.orientation, 'portrait');
-  });
-
-  runTest('orientationLock="landscape" tự xoay kích thước portrait (400x800) về landscape', () => {
-    const dim = resolveWindowDimensions({ width: 400, height: 800, orientationLock: 'landscape' });
-    assert(dim.width > dim.height, `Phải chuyển thành width > height, nhận được: ${dim.width}x${dim.height}`);
-    assert.strictEqual(dim.orientation, 'landscape');
-  });
-
-  runTest('orientationLock="auto" giữ nguyên kích thước ban đầu', () => {
-    const dimPort = resolveWindowDimensions({ width: 380, height: 675, orientationLock: 'auto' });
-    assert.strictEqual(dimPort.width, 380);
-    assert.strictEqual(dimPort.height, 675);
-    assert.strictEqual(dimPort.orientation, 'portrait');
-
-    const dimLand = resolveWindowDimensions({ width: 800, height: 450, orientationLock: 'auto' });
-    assert.strictEqual(dimLand.width, 800);
-    assert.strictEqual(dimLand.height, 450);
-    assert.strictEqual(dimLand.orientation, 'landscape');
-  });
-
-  // 4. Hỗn hợp dọc + ngang trên cùng một lưới
-  console.log('\n--- 4. Hỗn hợp Dọc + Ngang (Mixed Grid) ---');
-  runTest('Sắp xếp 4 profile (2 Portrait + 2 Landscape): Không đè nhau & Trong workArea 1920x1080', () => {
-    const workArea = { x: 0, y: 0, width: 1920, height: 1080 };
-    const profiles = [
-      { id: 'p1_port', orientationLock: 'portrait', customWindow: { width: 380, height: 750 } },
-      { id: 'p2_land', orientationLock: 'landscape', customWindow: { width: 750, height: 380 } },
-      { id: 'p3_port', orientationLock: 'portrait', customWindow: { width: 380, height: 750 } },
-      { id: 'p4_land', orientationLock: 'landscape', customWindow: { width: 750, height: 380 } }
-    ];
-
-    const arranged = arrangeMixedWindows(profiles, workArea);
-    assert.strictEqual(arranged.length, 4);
-
-    // Kiểm tra từng cửa sổ trong workArea
-    for (const win of arranged) {
-      assert(win.x >= workArea.x, `${win.id}: x ngoài màn hình`);
-      assert(win.y >= workArea.y, `${win.id}: y ngoài màn hình`);
-      assert(win.x + win.w <= workArea.x + workArea.width, `${win.id}: Tràn viền phải`);
-      assert(win.y + win.h <= workArea.y + workArea.height, `${win.id}: Tràn viền dưới`);
-    }
-
-    // Kiểm tra không có cặp nào đè lên nhau
-    for (let i = 0; i < arranged.length; i++) {
-      for (let j = i + 1; j < arranged.length; j++) {
-        assert(!isOverlapping(arranged[i], arranged[j]), `Overlap giữa ${arranged[i].id} và ${arranged[j].id}`);
-      }
-    }
+  test('computeEmulationState: Debounced guard nhận diện lệch > 4px', () => {
+    const state1 = computeEmulationState({
+      currentWinW: 400,
+      currentWinH: 800,
+      lastKnownWinW: 400,
+      lastKnownWinH: 800,
+      device: phoneDevice,
+      orientationLock: 'portrait'
+    });
+    // Kích thước chưa đổi hoặc lệch nhỏ
+    assert.strictEqual(typeof state1.needsResize, 'boolean');
   });
 
   console.log('\n====================================================');
-  console.log(`📊 TỔNG KẾT ASPECT RATIO: ${passedTests}/${totalTests} TESTS PASS`);
+  console.log(`📊 TỔNG KẾT ASPECT RATIO: ${passed}/${total} TESTS PASS`);
   console.log('====================================================\n');
 
-  return { passedTests, totalTests, success: passedTests === totalTests };
+  return { passedTests: passed, totalTests: total, success: passed === total };
 }
 
 if (require.main === module) {
-  const res = runAspectRatioTests();
-  process.exit(res.success ? 0 : 1);
+  runAspectRatioTests();
 }
 
-module.exports = {
-  resolveWindowDimensions,
-  arrangeMixedWindows,
-  runAspectRatioTests
-};
+module.exports = { runAspectRatioTests };

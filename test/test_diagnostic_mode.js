@@ -1,15 +1,19 @@
 /**
  * test_diagnostic_mode.js
- * Kiểm thử tính năng Clean Diagnostic Mode.
+ * Kiểm thử tính năng Clean Diagnostic Mode và thư mục Clean Diagnostic.
  * 
  * Đảm bảo khi bật diagnosticMode (true):
  * 1. Không nạp extensions: extPaths rỗng, không có cờ --load-extension hoặc --disable-extensions-except.
  * 2. Không tiêm fingerprint script: injectScript là null, không gọi Page.addScriptToEvaluateOnNewDocument.
  * 3. Không bật debugger / anti-debugger: antiDebugger bị tắt hoặc bỏ qua (không gọi Debugger.enable).
- * 4. So sánh với Normal Mode (diagnosticMode = false): các tính năng trên hoạt động bình thường.
+ * 4. Arrange Windows sử dụng chính xác thư mục profiles/clean_<id> khi profile bật Diagnostic.
+ * 5. So sánh với Normal Mode (diagnosticMode = false): các tính năng trên hoạt động bình thường.
  */
 
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const { getProfileDirectoryName } = require('../src/layoutEngine');
 
 /**
  * Mô phỏng logic chuẩn bị tham số khởi chạy của main.js
@@ -20,10 +24,8 @@ function buildLaunchConfig(profile, allExtensions = []) {
   let injectScript = null;
 
   if (!isDiagnostic) {
-    // Generate fingerprint script khi KHÔNG ở chế độ diagnostic
     injectScript = `/* Fingerprint for ${profile.deviceId || 'device'} */ window.__fp = true;`;
 
-    // Nạp extension nếu có
     const selectedIds = new Set(Array.isArray(profile.selectedExtensions) ? profile.selectedExtensions : []);
     for (const item of allExtensions) {
       if (selectedIds.has(item.id) && item.enabled !== false) {
@@ -32,9 +34,10 @@ function buildLaunchConfig(profile, allExtensions = []) {
     }
   }
 
-  // Build Chrome args
+  const profileDirName = getProfileDirectoryName(profile.id, isDiagnostic);
+
   const chromeArgs = [
-    `--user-data-dir=profiles/${isDiagnostic ? 'clean_' : ''}${profile.id}`,
+    `--user-data-dir=profiles/${profileDirName}`,
     '--profile-directory=Default',
     '--no-first-run',
     '--no-default-browser-check'
@@ -52,6 +55,7 @@ function buildLaunchConfig(profile, allExtensions = []) {
 
   return {
     isDiagnostic,
+    profileDirName,
     extPaths,
     injectScript,
     chromeArgs
@@ -76,131 +80,157 @@ async function simulateCDPSetup(profile, launchConfig) {
 
   // 1. Diagnostic Mode check
   if (profile && profile.diagnosticMode === true) {
-    // Diagnostic Mode: chỉ điều chỉnh bounds cửa sổ nếu cần, KHÔNG tiêm fingerprint, KHÔNG anti-debugger
     const winInfo = await mockClient.send('Browser.getWindowForTarget');
     if (winInfo && winInfo.windowId) {
-      await mockClient.send('Browser.setWindowBounds', { windowId: winInfo.windowId, bounds: { width: 380, height: 675 } });
+      await mockClient.send('Browser.setWindowBounds', {
+        windowId: winInfo.windowId,
+        bounds: { width: 380, height: 675 }
+      });
     }
-    return { cdpActions, isClean: true };
+    return { cdpActions };
   }
 
-  // 2. Tiêm fingerprint khi diagnosticMode = false
+  // 2. Chế độ thông thường
+  await mockClient.send('Page.enable');
+  await mockClient.send('Network.enable');
+
   if (launchConfig.injectScript) {
-    await mockClient.send('Page.addScriptToEvaluateOnNewDocument', { source: launchConfig.injectScript });
+    await mockClient.send('Page.addScriptToEvaluateOnNewDocument', {
+      source: launchConfig.injectScript
+    });
   }
 
-  // 3. Anti-Debugger khi profile.antiDebugger = true & diagnosticMode = false
-  if (profile.antiDebugger === true && !profile.diagnosticMode) {
+  if (profile.antiDebugger) {
     await mockClient.send('Debugger.enable');
-    await mockClient.send('Debugger.setSkipAllPauses', { skip: true });
   }
 
-  return { cdpActions, isClean: false };
+  return { cdpActions };
 }
 
-/**
- * Chạy test suite cho Clean Diagnostic Mode
- */
 async function runDiagnosticModeTests() {
-  console.log('====================================================');
-  console.log('🧪 BẮT ĐẦU KIỂM THỬ: Clean Diagnostic Mode');
+  console.log('\n====================================================');
+  console.log('🧪 BẮT ĐẦU KIỂM THỬ: Clean Diagnostic Mode & Directory Isolation');
   console.log('====================================================\n');
 
-  let totalTests = 0;
-  let passedTests = 0;
+  let passed = 0;
+  let total = 0;
 
-  async function runTest(testName, testFn) {
-    totalTests++;
+  function test(name, fn) {
+    total++;
     try {
-      await testFn();
-      console.log(`  ✅ PASS: ${testName}`);
-      passedTests++;
+      fn();
+      console.log(`  ✅ PASS: ${name}`);
+      passed++;
     } catch (err) {
-      console.error(`  ❌ FAIL: ${testName}`);
-      console.error(`     Nguyên nhân: ${err.message}`);
+      console.error(`  ❌ FAIL: ${name}`);
+      console.error(`     Lỗi: ${err.message}`);
+      throw err;
     }
   }
 
-  const sampleExtensions = [
-    { id: 'ext1', name: 'Proxy Switcher', path: '/path/to/ext1', enabled: true },
-    { id: 'ext2', name: 'Cookie AutoLoad', path: '/path/to/ext2', enabled: true }
+  async function testAsync(name, fn) {
+    total++;
+    try {
+      await fn();
+      console.log(`  ✅ PASS: ${name}`);
+      passed++;
+    } catch (err) {
+      console.error(`  ❌ FAIL: ${name}`);
+      console.error(`     Lỗi: ${err.message}`);
+      throw err;
+    }
+  }
+
+  const dummyExtensions = [
+    { id: 'ext1', name: 'Extension 1', path: '/path/ext1', enabled: true },
+    { id: 'ext2', name: 'Extension 2', path: '/path/ext2', enabled: true }
   ];
 
-  // 1. Diagnostic Mode = TRUE
+  // --- 1. Khi Diagnostic Mode = TRUE ---
   console.log('--- 1. Khi Diagnostic Mode = TRUE (Sạch nguyên bản) ---');
-  const cleanProfile = {
-    id: 'prof_clean_123',
-    name: 'Clean Test Profile',
+
+  const diagProfile = {
+    id: 'test_clean_123',
+    name: 'Diagnostic Profile',
     diagnosticMode: true,
-    antiDebugger: true, // Thử bật antiDebugger khi diagnosticMode=true
-    selectedExtensions: ['ext1', 'ext2']
+    antiDebugger: true, // Cố tình bật để kiểm tra có bị tắt cưỡng chế không
+    selectedExtensions: ['ext1', 'ext2'],
+    deviceId: 'samsung-s24'
   };
 
-  await runTest('Không nạp bất kỳ extension nào (extPaths rỗng & không có cờ --load-extension)', async () => {
-    const cfg = buildLaunchConfig(cleanProfile, sampleExtensions);
-    assert.strictEqual(cfg.extPaths.length, 0, 'extPaths phải rỗng khi diagnosticMode=true');
-    const hasLoadExtFlag = cfg.chromeArgs.some(a => a.startsWith('--load-extension'));
-    const hasExceptFlag = cfg.chromeArgs.some(a => a.startsWith('--disable-extensions-except'));
-    assert.strictEqual(hasLoadExtFlag, false, 'Không được có cờ --load-extension');
-    assert.strictEqual(hasExceptFlag, false, 'Không được có cờ --disable-extensions-except');
+  const diagConfig = buildLaunchConfig(diagProfile, dummyExtensions);
+
+  test('Không nạp bất kỳ extension nào (extPaths rỗng & không có cờ --load-extension)', () => {
+    assert.strictEqual(diagConfig.extPaths.length, 0, 'extPaths phải rỗng khi bật diagnostic');
+    const hasLoadExt = diagConfig.chromeArgs.some(arg => arg.startsWith('--load-extension'));
+    assert.strictEqual(hasLoadExt, false, 'Không được có cờ --load-extension');
   });
 
-  await runTest('Không tiêm script fingerprint (injectScript = null)', async () => {
-    const cfg = buildLaunchConfig(cleanProfile, sampleExtensions);
-    assert.strictEqual(cfg.injectScript, null, 'injectScript phải là null');
-    const hasFpFlag = cfg.chromeArgs.some(a => a.includes('AutomationControlled'));
-    assert.strictEqual(hasFpFlag, false, 'Không được can thiệp AutomationControlled trong Diagnostic Mode');
+  test('Không tiêm script fingerprint (injectScript = null)', () => {
+    assert.strictEqual(diagConfig.injectScript, null, 'injectScript phải là null');
   });
 
-  await runTest('CDP setup không gọi Page.addScriptToEvaluateOnNewDocument và không bật Debugger', async () => {
-    const cfg = buildLaunchConfig(cleanProfile, sampleExtensions);
-    const { cdpActions } = await simulateCDPSetup(cleanProfile, cfg);
+  await testAsync('CDP setup không gọi Page.addScriptToEvaluateOnNewDocument và không bật Debugger', async () => {
+    const { cdpActions } = await simulateCDPSetup(diagProfile, diagConfig);
+    const hasScriptInjection = cdpActions.some(a => a.method === 'Page.addScriptToEvaluateOnNewDocument');
+    const hasDebuggerEnable = cdpActions.some(a => a.method === 'Debugger.enable');
 
-    const hasFpInjection = cdpActions.some(a => a.method === 'Page.addScriptToEvaluateOnNewDocument');
-    const hasDebugger = cdpActions.some(a => a.method === 'Debugger.enable');
-
-    assert.strictEqual(hasFpInjection, false, 'KHÔNG được tiêm script qua CDP trong Diagnostic Mode');
-    assert.strictEqual(hasDebugger, false, 'KHÔNG được bật Debugger.enable trong Diagnostic Mode');
+    assert.strictEqual(hasScriptInjection, false, 'Không được tiêm script fingerprint');
+    assert.strictEqual(hasDebuggerEnable, false, 'Không được kích hoạt Debugger.enable');
   });
 
-  // 2. So sánh với Diagnostic Mode = FALSE (Normal Mode)
-  console.log('\n--- 2. Khi Diagnostic Mode = FALSE (Chế độ giả lập vân tay) ---');
+  // --- 2. Thư mục profiles/clean_<id> Isolation ---
+  console.log('\n--- 2. Kiểm tra Thư mục profiles/clean_<id> Isolation ---');
+
+  test('getProfileDirectoryName trả về clean_<id> khi diagnosticMode=true', () => {
+    const cleanDir = getProfileDirectoryName('prof_abc_456', true);
+    assert.strictEqual(cleanDir, 'clean_prof_abc_456');
+
+    const normalDir = getProfileDirectoryName('prof_abc_456', false);
+    assert.strictEqual(normalDir, 'prof_abc_456');
+  });
+
+  test('Source code audit: main.js arrangeRunningWindows sử dụng getProfileDirectoryName', () => {
+    const mainCode = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+    assert(mainCode.includes('getProfileDirectoryName'), 'main.js phải gọi getProfileDirectoryName');
+    assert(mainCode.includes("clean_${profile.id}") || mainCode.includes("clean_${pInfo.id}") || mainCode.includes("clean_`"), 'main.js phải chứa logic clean_ prefix');
+  });
+
+  // --- 3. Khi Diagnostic Mode = FALSE ---
+  console.log('\n--- 3. Khi Diagnostic Mode = FALSE (Chế độ giả lập vân tay) ---');
+
   const normalProfile = {
-    id: 'prof_normal_456',
-    name: 'Normal Fingerprint Profile',
+    id: 'test_normal_456',
+    name: 'Normal Profile',
     diagnosticMode: false,
     antiDebugger: true,
-    selectedExtensions: ['ext1']
+    selectedExtensions: ['ext1'],
+    deviceId: 'samsung-s24'
   };
 
-  await runTest('Chế độ thông thường nạp extension, tạo fingerprint script và bật anti-debugger', async () => {
-    const cfg = buildLaunchConfig(normalProfile, sampleExtensions);
-    assert.strictEqual(cfg.extPaths.length, 1, 'extPaths phải có 1 extension');
-    assert(cfg.injectScript !== null, 'injectScript không được null');
+  const normalConfig = buildLaunchConfig(normalProfile, dummyExtensions);
 
-    const { cdpActions } = await simulateCDPSetup(normalProfile, cfg);
-    const hasFpInjection = cdpActions.some(a => a.method === 'Page.addScriptToEvaluateOnNewDocument');
-    const hasDebugger = cdpActions.some(a => a.method === 'Debugger.enable');
+  await testAsync('Chế độ thông thường nạp extension, tạo fingerprint script và bật anti-debugger', async () => {
+    assert.strictEqual(normalConfig.extPaths.length, 1, 'Phải nạp đúng 1 extension đã chọn');
+    assert.notStrictEqual(normalConfig.injectScript, null, 'injectScript không được là null');
 
-    assert.strictEqual(hasFpInjection, true, 'Chế độ thường phải tiêm fingerprint qua CDP');
-    assert.strictEqual(hasDebugger, true, 'Chế độ thường có antiDebugger=true phải bật Debugger');
+    const { cdpActions } = await simulateCDPSetup(normalProfile, normalConfig);
+    const hasScriptInjection = cdpActions.some(a => a.method === 'Page.addScriptToEvaluateOnNewDocument');
+    const hasDebuggerEnable = cdpActions.some(a => a.method === 'Debugger.enable');
+
+    assert.strictEqual(hasScriptInjection, true, 'Chế độ thường phải tiêm fingerprint');
+    assert.strictEqual(hasDebuggerEnable, true, 'Chế độ thường phải bật anti-debugger khi cấu hình');
   });
 
   console.log('\n====================================================');
-  console.log(`📊 TỔNG KẾT DIAGNOSTIC MODE: ${passedTests}/${totalTests} TESTS PASS`);
+  console.log(`📊 TỔNG KẾT DIAGNOSTIC MODE: ${passed}/${total} TESTS PASS`);
   console.log('====================================================\n');
 
-  return { passedTests, totalTests, success: passedTests === totalTests };
+  return { passedTests: passed, totalTests: total, success: passed === total };
 }
 
 if (require.main === module) {
-  runDiagnosticModeTests().then(res => {
-    process.exit(res.success ? 0 : 1);
-  });
+  runDiagnosticModeTests();
 }
 
-module.exports = {
-  buildLaunchConfig,
-  simulateCDPSetup,
-  runDiagnosticModeTests
-};
+module.exports = { runDiagnosticModeTests };

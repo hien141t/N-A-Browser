@@ -830,12 +830,30 @@ function updateDimensionDisplay() {
     if (hInput) hInput.value = winH;
   }
 
-  // Viewport calculation
-  // Viewport represents CSS layout viewport of device / web content
-  const vpW = (preset === 'device') ? devW : winW;
-  const vpH = (preset === 'device') ? devH : winH;
+  // Viewport calculation according to CDP Emulation & Chrome UI Chrome Delta
+  // Chrome UI Chrome on Windows: ~16px borders, ~110px tab bar + address bar
+  const UI_DELTA_X = 16;
+  const UI_DELTA_Y = 110;
 
-  const ratioInfo = getAspectRatioInfo(vpW, vpH);
+  const minDim = Math.min(devW, devH);
+  const maxDim = Math.max(devW, devH);
+  const portraitRatio = minDim / maxDim;
+  const landscapeRatio = maxDim / minDim;
+
+  let actualVpW, actualVpH;
+  if (orient === 'landscape') {
+    actualVpW = Math.max(100, winW - UI_DELTA_X);
+    actualVpH = Math.max(100, Math.round(actualVpW / landscapeRatio));
+  } else if (orient === 'portrait') {
+    actualVpH = Math.max(100, winH - UI_DELTA_Y);
+    actualVpW = Math.max(100, Math.round(actualVpH * portraitRatio));
+  } else {
+    // auto: based on window bounds minus UI chrome
+    actualVpW = Math.max(100, winW - UI_DELTA_X);
+    actualVpH = Math.max(100, winH - UI_DELTA_Y);
+  }
+
+  const ratioInfo = getAspectRatioInfo(actualVpW, actualVpH);
 
   // Update badge
   const badgeEl = document.getElementById('fRatioBadge');
@@ -854,7 +872,7 @@ function updateDimensionDisplay() {
 
   // Update Viewport & Window text displays
   const vpEl = document.getElementById('fViewportDisplay');
-  if (vpEl) vpEl.textContent = `${vpW} × ${vpH} px`;
+  if (vpEl) vpEl.textContent = `${actualVpW} × ${actualVpH} px`;
 
   const winEl = document.getElementById('fWindowDisplay');
   if (winEl) winEl.textContent = `${winW} × ${winH} px`;
