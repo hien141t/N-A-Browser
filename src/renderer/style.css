@@ -738,3 +738,340 @@ html, body { height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; b
   font-size: 8px;
   color: #06d6a0;
 }
+
+
+/* ══════════════════════════════════════════════════════════════════
+   N/A BROWSER V2 — HIDEMIUM-STYLE PROFILE MANAGER & FINGERPRINT UI
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── Top Header Opera & Status Badges ── */
+.opera-header-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(239,68,68,0.12);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: #f87171;
+  transition: var(--tr);
+  cursor: pointer;
+}
+.opera-header-badge.ready {
+  background: rgba(6,214,160,0.12);
+  border-color: rgba(6,214,160,0.35);
+  color: #06d6a0;
+}
+.opera-header-badge:hover {
+  filter: brightness(1.15);
+}
+
+/* ── Bulk Actions Floating / Top Bar ── */
+.bulk-action-bar {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(135deg, rgba(99,102,241,0.2), rgba(6,214,160,0.15));
+  border: 1px solid rgba(99,102,241,0.4);
+  border-radius: var(--r);
+  padding: 8px 16px;
+  margin-bottom: 12px;
+  animation: fadeInDown .2s ease;
+}
+.bulk-action-bar.visible {
+  display: flex;
+}
+.bulk-info {
+  font-weight: 600;
+  font-size: 12px;
+  color: #c7d2fe;
+}
+.bulk-btns {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Hidemium Modern Table View ── */
+.table-view-container {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--r2);
+  overflow: hidden;
+}
+.hidemium-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.hidemium-table th {
+  padding: 12px 14px;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--txt3);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.hidemium-table td {
+  padding: 11px 14px;
+  color: var(--txt);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: middle;
+}
+.hidemium-table tr:last-child td {
+  border-bottom: none;
+}
+.hidemium-table tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+.hidemium-table tr.selected td {
+  background: rgba(99,102,241,0.08);
+}
+
+/* ── Launch State Machine Badges ── */
+.launch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.launch-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.launch-badge.stopped   { background: rgba(255,255,255,0.06); color: var(--txt3); }
+.launch-badge.starting  { background: rgba(245,158,11,0.18); color: #fbbf24; border: 1px solid rgba(245,158,11,0.4); }
+.launch-badge.connecting{ background: rgba(56,189,248,0.18); color: #38bdf8; border: 1px solid rgba(56,189,248,0.4); }
+.launch-badge.navigating{ background: rgba(168,85,247,0.18); color: #c084fc; border: 1px solid rgba(168,85,247,0.4); }
+.launch-badge.ready     { background: rgba(6,214,160,0.18);  color: #06d6a0; border: 1px solid rgba(6,214,160,0.4); }
+.launch-badge.cancelling{ background: rgba(249,115,22,0.18); color: #fb923c; border: 1px solid rgba(249,115,22,0.4); }
+.launch-badge.cancelled { background: rgba(255,255,255,0.08); color: var(--txt2); }
+.launch-badge.error     { background: rgba(239,68,68,0.18);  color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
+
+.launch-badge.pulse::before {
+  animation: pulse-dot 1.2s infinite ease-in-out;
+}
+@keyframes pulse-dot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.6); opacity: 0.4; }
+}
+
+/* ── Launch Action Buttons ── */
+.btn-launch-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: none;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--tr);
+  font-family: inherit;
+}
+.btn-launch-state.launch {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: white;
+  box-shadow: 0 2px 8px rgba(99,102,241,0.3);
+}
+.btn-launch-state.launch:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(99,102,241,0.45);
+}
+.btn-launch-state.cancel {
+  background: rgba(239,68,68,0.18);
+  border: 1px solid rgba(239,68,68,0.45);
+  color: #f87171;
+  animation: cancel-glow 1.5s infinite alternate;
+}
+.btn-launch-state.cancel:hover {
+  background: rgba(239,68,68,0.3);
+  color: #fff;
+}
+@keyframes cancel-glow {
+  0% { box-shadow: 0 0 4px rgba(239,68,68,0.2); }
+  100% { box-shadow: 0 0 12px rgba(239,68,68,0.5); }
+}
+.btn-launch-state.stop {
+  background: rgba(239,68,68,0.15);
+  border: 1px solid rgba(239,68,68,0.3);
+  color: #ef4444;
+}
+.btn-launch-state.stop:hover {
+  background: rgba(239,68,68,0.25);
+  color: white;
+}
+.btn-launch-state.retry {
+  background: rgba(245,158,11,0.18);
+  border: 1px solid rgba(245,158,11,0.4);
+  color: #fbbf24;
+}
+.btn-launch-state.retry:hover {
+  background: rgba(245,158,11,0.3);
+  color: white;
+}
+
+/* ── Modal Tabs for Create/Edit Profile ── */
+.modal-nav-tabs {
+  display: flex;
+  background: rgba(0,0,0,0.3);
+  border-bottom: 1px solid var(--border);
+  padding: 0 16px;
+  gap: 4px;
+}
+.modal-tab-btn {
+  background: none;
+  border: none;
+  color: var(--txt3);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 11px 16px;
+  cursor: pointer;
+  position: relative;
+  transition: var(--tr);
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.modal-tab-btn:hover {
+  color: var(--txt);
+}
+.modal-tab-btn.active {
+  color: var(--accent);
+}
+.modal-tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+}
+.modal-tab-pane {
+  display: none;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 20px;
+  max-height: 520px;
+  overflow-y: auto;
+}
+.modal-tab-pane.active {
+  display: flex;
+}
+
+/* ── Fingerprint Manager UI in Modal ── */
+.fp-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+}
+.fp-action-btns {
+  display: flex;
+  gap: 8px;
+}
+.fp-param-group {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.fp-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 12px;
+  color: #fff;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  padding-bottom: 6px;
+}
+.fp-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* ── Fingerprint Test Modal ── */
+.fp-test-dialog {
+  background: var(--bg2);
+  border: 1px solid var(--border2);
+  border-radius: 16px;
+  width: 500px;
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.8);
+}
+.fp-score-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: rgba(6,214,160,0.08);
+  border: 1px solid rgba(6,214,160,0.25);
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+}
+.fp-score-card.warning {
+  background: rgba(245,158,11,0.08);
+  border-color: rgba(245,158,11,0.25);
+}
+.fp-score-num {
+  font-size: 28px;
+  font-weight: 800;
+  font-family: 'JetBrains Mono', monospace;
+  color: #06d6a0;
+}
+.fp-score-num.warning {
+  color: #fbbf24;
+}
+.fp-check-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.02);
+  border-radius: 8px;
+  font-size: 12px;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.fp-check-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.fp-check-badge.valid { background: rgba(6,214,160,0.18); color: #06d6a0; }
+.fp-check-badge.invalid { background: rgba(239,68,68,0.18); color: #f87171; }

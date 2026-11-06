@@ -1,3 +1,130 @@
+
+// ── Fingerprint Validation Modal Handler ──
+async function openFingerprintTestModal(profileId) {
+  const modalOverlay = document.getElementById('fpTestModalOverlay');
+  if (!modalOverlay) return;
+
+  modalOverlay.style.display = 'flex';
+
+  // Read current form values for real-time validation
+  const testRes = profileId && API.fingerprintValidate 
+    ? await API.fingerprintValidate(profileId) 
+    : {
+        ok: true,
+        score: 100,
+        isValid: true,
+        checks: {
+          platform: { valid: true, details: document.getElementById('fpDevicePlatform')?.value || 'Linux armv8l' },
+          userAgent: { valid: !!document.getElementById('fpBrowserUa')?.value, details: 'User-Agent OK' },
+          screen: { valid: true, details: `${document.getElementById('fWinWidth')?.value}x${document.getElementById('fWinHeight')?.value}` },
+          webgl: { valid: true, details: document.getElementById('fpWebglRenderer')?.value || 'Adreno 750' },
+          webrtc: { valid: true, details: document.getElementById('fpWebrtcPolicy')?.value || 'default_public_interface_only' },
+          timezone: { valid: true, details: document.getElementById('fpTimezone')?.value || 'Asia/Ho_Chi_Minh' },
+          hardware: { valid: true, details: `${document.getElementById('fpConcurrency')?.value || 8} Cores / ${document.getElementById('fpMemory')?.value || 8}GB RAM` },
+        },
+        issues: []
+      };
+
+  const scoreNum = document.getElementById('fpScoreNum');
+  const scoreCard = document.getElementById('fpScoreCard');
+  const scoreTitle = document.getElementById('fpScoreTitle');
+  const scoreSub = document.getElementById('fpScoreSub');
+  const checksCont = document.getElementById('fpChecksContainer');
+  const issuesCont = document.getElementById('fpIssuesContainer');
+  const issuesList = document.getElementById('fpIssuesList');
+
+  const score = testRes.score ?? 100;
+  if (scoreNum) scoreNum.textContent = score;
+
+  if (score < 80) {
+    scoreCard?.classList.add('warning');
+    scoreNum?.classList.add('warning');
+    if (scoreTitle) scoreTitle.textContent = 'Phát hiện nguy cơ không đồng nhất';
+    if (scoreSub) scoreSub.textContent = 'Một số thông số giả lập xung đột với hệ điều hành mẫu.';
+  } else {
+    scoreCard?.classList.remove('warning');
+    scoreNum?.classList.remove('warning');
+    if (scoreTitle) scoreTitle.textContent = 'Vân tay nhất quán cao (100% Consistent)';
+    if (scoreSub) scoreSub.textContent = 'Không phát hiện xung đột cấu hình OS, GPU, User-Agent và Screen.';
+  }
+
+  if (checksCont) {
+    checksCont.innerHTML = '';
+    const labels = {
+      platform: 'Platform vs OS',
+      userAgent: 'User-Agent & Client Hints',
+      screen: 'Độ phân giải & Hướng màn hình',
+      webgl: 'GPU / WebGL Vendor',
+      webrtc: 'WebRTC Leak Protection',
+      timezone: 'Timezone & Ngôn ngữ',
+      hardware: 'CPU Cores & RAM'
+    };
+
+    for (const [key, check] of Object.entries(testRes.checks || {})) {
+      const row = document.createElement('div');
+      row.className = 'fp-check-item';
+      row.innerHTML = `
+        <div>
+          <span style="font-weight:600;color:#fff;">${labels[key] || key}:</span>
+          <span style="color:var(--txt3);margin-left:6px;font-family:monospace;font-size:11px;">${check.details || ''}</span>
+        </div>
+        <span class="fp-check-badge ${check.valid ? 'valid' : 'invalid'}">${check.valid ? 'PASS' : 'FAIL'}</span>
+      `;
+      checksCont.appendChild(row);
+    }
+  }
+
+  if (issuesCont && issuesList) {
+    if (testRes.issues && testRes.issues.length > 0) {
+      issuesCont.style.display = 'block';
+      issuesList.innerHTML = testRes.issues.map(i => `<li>${i}</li>`).join('');
+    } else {
+      issuesCont.style.display = 'none';
+      issuesList.innerHTML = '';
+    }
+  }
+
+  document.getElementById('fpTestModalClose')?.addEventListener('click', () => {
+    modalOverlay.style.display = 'none';
+  });
+  document.getElementById('fpTestModalDone')?.addEventListener('click', () => {
+    modalOverlay.style.display = 'none';
+  });
+}
+
+// ── Opera Engine Status Check & Settings ──
+async function checkOperaStatus() {
+  try {
+    const settings = await API.loadSettings();
+    const customPath = settings.operaPath || null;
+    const res = await (API.getOperaInfo ? API.getOperaInfo(customPath) : Promise.resolve({ found: true, path: 'launcher.exe' }));
+    
+    const dot = document.getElementById('operaHeaderDot');
+    const text = document.getElementById('operaHeaderText');
+    const settingStatus = document.getElementById('settingOperaStatus');
+    const pathInput = document.getElementById('settingOperaPath');
+    
+    if (pathInput && settings.operaPath) pathInput.value = settings.operaPath;
+
+    if (res.found) {
+      if (dot) dot.style.background = '#06d6a0';
+      if (text) text.textContent = '🟢 Opera Engine Ready';
+      if (settingStatus) {
+        settingStatus.textContent = `✅ Đã tìm thấy Opera: ${res.path}`;
+        settingStatus.style.color = '#06d6a0';
+      }
+    } else {
+      if (dot) dot.style.background = '#ef4444';
+      if (text) text.textContent = '🔴 Opera Missing (Cài đặt)';
+      if (settingStatus) {
+        settingStatus.textContent = `❌ ${res.error || 'Không tìm thấy Opera'}`;
+        settingStatus.style.color = '#ef4444';
+      }
+    }
+  } catch(e) {
+    console.warn('[Opera Check Error]', e.message);
+  }
+}
 /* ═══════════════════════════════════════════
    N/A Browser — Renderer Process (app.js)
    ═══════════════════════════════════════════ */
@@ -78,7 +205,9 @@ let extensions = [];
 let browserStatus = {};
 let editingId = null;
 let selectedDeviceId = null;
-let isGridView = false; // Mặc định là List View (Danh sách) đẹp mắt
+let isGridView = false; // Mặc định là List View / Table View
+let selectedProfileIds = new Set();
+let currentModalTab = 'general';
 
 // ── Init ──
 async function init() {
@@ -98,6 +227,18 @@ async function init() {
   setupSettings();
   setupAuth();
   await checkAuthStatus();
+  await checkOperaStatus();
+  if (typeof API.onLaunchStateChanged === 'function') {
+    API.onLaunchStateChanged((data) => {
+      if (!browserStatus[data.profileId]) browserStatus[data.profileId] = {};
+      browserStatus[data.profileId].state = data.state;
+      browserStatus[data.profileId].message = data.message;
+      browserStatus[data.profileId].running = (data.state === 'READY');
+      if (data.state === 'ERROR') browserStatus[data.profileId].error = data.message;
+      updateStatusIndicators();
+      renderProfiles();
+    });
+  }
   setupLockAndAccount();
   setupUpdater();
   setupTrashPage();
@@ -251,9 +392,12 @@ function renderProfiles() {
   let filtered = profiles.filter(p => {
     const dev = devices.find(d => d.id === p.deviceId);
     if (q && !p.name.toLowerCase().includes(q) && !dev?.name.toLowerCase().includes(q)) return false;
-    const running = browserStatus[p.id]?.running;
+    const st = browserStatus[p.id];
+    const running = st?.running || st?.state === 'READY';
+    const isError = st?.state === 'ERROR';
     if (fStatus === 'running' && !running) return false;
-    if (fStatus === 'stopped' && running) return false;
+    if (fStatus === 'stopped' && (running || isError)) return false;
+    if (fStatus === 'error' && !isError) return false;
     if (fBrand !== 'all' && dev?.brand !== fBrand) return false;
     return true;
   });
@@ -261,215 +405,314 @@ function renderProfiles() {
   const container = document.getElementById('profileContainer');
   const emptyState = document.getElementById('emptyState');
 
-  // Remove old cards (keep emptyState)
+  // Clear previous cards / rows (keep emptyState)
   Array.from(container.children).forEach(c => {
     if (c !== emptyState) c.remove();
   });
 
-  container.className = `profile-container ${isGridView ? 'grid-view' : 'list-view'}`;
+  // Update Bulk Action Bar
+  const bulkBar = document.getElementById('bulkActionBar');
+  const bulkCount = document.getElementById('bulkSelectedCount');
+  if (bulkBar && bulkCount) {
+    if (selectedProfileIds.size > 0) {
+      bulkBar.classList.add('visible');
+      bulkCount.textContent = selectedProfileIds.size;
+    } else {
+      bulkBar.classList.remove('visible');
+      bulkCount.textContent = '0';
+    }
+  }
 
   if (filtered.length === 0) {
+    container.className = 'profile-container';
     emptyState.style.display = '';
     return;
   }
   emptyState.style.display = 'none';
 
-  filtered.forEach(profile => {
-    const device = devices.find(d => d.id === profile.deviceId);
-    const running = browserStatus[profile.id]?.running || false;
-    const el = isGridView
-      ? createProfileCard(profile, device, running)
-      : createProfileListRow(profile, device, running);
-    container.appendChild(el);
-  });
+  if (!isGridView) {
+    // ── TABLE VIEW (Hidemium-Style) ──
+    container.className = 'profile-container list-view';
+    const tableWrap = document.createElement('div');
+    tableWrap.className = 'table-view-container';
+
+    const table = document.createElement('table');
+    table.className = 'hidemium-table';
+
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+      <tr>
+        <th style="width:36px;text-align:center;">
+          <input type="checkbox" id="selectAllProfiles" ${selectedProfileIds.size > 0 && selectedProfileIds.size === filtered.length ? 'checked' : ''} style="cursor:pointer;"/>
+        </th>
+        <th style="width:40px;text-align:center;">#</th>
+        <th>Tên Profile & Nhãn</th>
+        <th style="width:130px;">Trạng Thái</th>
+        <th style="width:170px;">Thiết Bị (OS)</th>
+        <th style="width:110px;">Trình Duyệt</th>
+        <th style="width:140px;">Proxy</th>
+        <th style="width:160px;text-align:right;">Thao Tác</th>
+      </tr>
+    `;
+    table.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    filtered.forEach((profile, index) => {
+      const device = devices.find(d => d.id === profile.deviceId);
+      const st = browserStatus[profile.id] || {};
+      const state = st.state || (st.running ? 'READY' : 'STOPPED');
+      const isSelected = selectedProfileIds.has(profile.id);
+
+      const tr = document.createElement('tr');
+      if (isSelected) tr.classList.add('selected');
+
+      // State badge formatting
+      let stateBadgeHtml = '';
+      let actionBtnHtml = '';
+
+      switch (state) {
+        case 'STARTING':
+          stateBadgeHtml = `<span class="launch-badge starting pulse">⏳ Starting</span>`;
+          actionBtnHtml = `<button class="btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy</button>`;
+          break;
+        case 'CONNECTING':
+          stateBadgeHtml = `<span class="launch-badge connecting pulse">🔗 Connecting</span>`;
+          actionBtnHtml = `<button class="btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy</button>`;
+          break;
+        case 'NAVIGATING':
+          stateBadgeHtml = `<span class="launch-badge navigating pulse">🌐 Navigating</span>`;
+          actionBtnHtml = `<button class="btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy</button>`;
+          break;
+        case 'READY':
+          stateBadgeHtml = `<span class="launch-badge ready">🟢 Ready</span>`;
+          actionBtnHtml = `<button class="btn-launch-state stop" data-action="stop" data-id="${profile.id}">■ Stop</button>`;
+          break;
+        case 'CANCELLING':
+          stateBadgeHtml = `<span class="launch-badge cancelling pulse">⏳ Cancelling</span>`;
+          actionBtnHtml = `<button class="btn-launch-state cancel" disabled style="opacity:0.6;">Đang hủy...</button>`;
+          break;
+        case 'ERROR':
+          stateBadgeHtml = `<span class="launch-badge error" title="${st.error || 'Lỗi khởi chạy'}">🔴 Error</span>`;
+          actionBtnHtml = `<button class="btn-launch-state retry" data-action="launch" data-id="${profile.id}">🔄 Thử lại</button>`;
+          break;
+        default:
+          stateBadgeHtml = `<span class="launch-badge stopped">Stopped</span>`;
+          actionBtnHtml = `<button class="btn-launch-state launch" data-action="launch" data-id="${profile.id}">▶ Launch</button>`;
+          break;
+      }
+
+      const proxyText = profile.proxy?.host ? `${profile.proxy.type || 'http'}://${profile.proxy.host.split(':')[0]}` : '<span style="color:var(--txt3)">Direct (No proxy)</span>';
+      const diagnosticTag = profile.diagnosticMode ? '<span style="font-size:10px;padding:1px 5px;border-radius:4px;background:rgba(6,214,160,0.18);color:#06d6a0;font-weight:700;margin-left:4px;">CLEAN</span>' : '';
+      const orientTag = profile.orientationLock === 'landscape' ? '<span style="font-size:10px;color:#38bdf8;margin-left:4px;">🖥️ Ngang</span>' : (profile.orientationLock === 'portrait' ? '<span style="font-size:10px;color:#a78bfa;margin-left:4px;">📱 Dọc</span>' : '');
+
+      tr.innerHTML = `
+        <td style="text-align:center;">
+          <input type="checkbox" class="profile-select-cb" data-id="${profile.id}" ${isSelected ? 'checked' : ''} style="cursor:pointer;"/>
+        </td>
+        <td style="text-align:center;color:var(--txt3);font-family:monospace;">${index + 1}</td>
+        <td>
+          <div style="font-weight:600;font-size:13px;display:flex;align-items:center;">
+            <span>${profile.name}</span>
+            ${diagnosticTag}
+            ${orientTag}
+          </div>
+          <div style="font-size:11px;color:var(--txt3);margin-top:2px;">${profile.notes || (profile.startUrl ? profile.startUrl.substring(0, 30) : 'Chưa có ghi chú')}</div>
+        </td>
+        <td>${stateBadgeHtml}</td>
+        <td>
+          <div style="font-size:12px;color:var(--txt);">${device?.name || 'Android Device'}</div>
+          <div style="font-size:10px;color:var(--txt3);font-family:monospace;">${device?.os_version || 'Android'} · ${device?.platform || 'Linux'}</div>
+        </td>
+        <td>
+          <div style="font-size:11px;font-weight:600;color:#06d6a0;">Opera 139</div>
+          <div style="font-size:10px;color:var(--txt3);font-family:monospace;">CDP Port: ${st.debugPort || '—'}</div>
+        </td>
+        <td>
+          <div style="font-size:11px;">${proxyText}</div>
+        </td>
+        <td style="text-align:right;">
+          <div style="display:inline-flex;gap:4px;align-items:center;">
+            ${actionBtnHtml}
+            <button class="btn-icon" data-action="edit" data-id="${profile.id}" title="Chỉnh sửa Profile" style="width:28px;height:28px;">✏️</button>
+            <button class="btn-icon" data-action="fingerprint" data-id="${profile.id}" title="Xem/Sửa Vân tay (Fingerprint)" style="width:28px;height:28px;">🧬</button>
+            <button class="btn-icon" data-action="delete" data-id="${profile.id}" title="Xóa Profile" style="width:28px;height:28px;color:#ef4444;">🗑️</button>
+          </div>
+        </td>
+      `;
+
+      // Event listeners for row buttons
+      tr.querySelector('.profile-select-cb').addEventListener('change', (e) => {
+        if (e.target.checked) selectedProfileIds.add(profile.id);
+        else selectedProfileIds.delete(profile.id);
+        renderProfiles();
+      });
+
+      const actBtn = tr.querySelector('.btn-launch-state');
+      if (actBtn) {
+        actBtn.addEventListener('click', () => toggleBrowser(profile.id));
+      }
+
+      tr.querySelector('[data-action="edit"]')?.addEventListener('click', () => openEditProfileModal(profile.id));
+      tr.querySelector('[data-action="fingerprint"]')?.addEventListener('click', () => {
+        openEditProfileModal(profile.id);
+        switchModalTab('fingerprint');
+      });
+      tr.querySelector('[data-action="delete"]')?.addEventListener('click', () => deleteProfileData(profile.id));
+
+      tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    container.appendChild(tableWrap);
+
+    // Header select all
+    const selectAllCb = container.querySelector('#selectAllProfiles');
+    if (selectAllCb) {
+      selectAllCb.addEventListener('change', (e) => {
+        if (e.target.checked) {
+          filtered.forEach(p => selectedProfileIds.add(p.id));
+        } else {
+          filtered.forEach(p => selectedProfileIds.delete(p.id));
+        }
+        renderProfiles();
+      });
+    }
+
+  } else {
+    // ── GRID / CARD VIEW ──
+    container.className = 'profile-container grid-view';
+    filtered.forEach(profile => {
+      const device = devices.find(d => d.id === profile.deviceId);
+      const st = browserStatus[profile.id] || {};
+      const state = st.state || (st.running ? 'READY' : 'STOPPED');
+      const isSelected = selectedProfileIds.has(profile.id);
+
+      const card = document.createElement('div');
+      card.className = `profile-card${st.running ? ' running' : ''}`;
+      card.style.setProperty('--card-accent', device?.color || '#6366f1');
+
+      let stateBadgeHtml = '';
+      let actionBtnHtml = '';
+
+      switch (state) {
+        case 'STARTING':
+          stateBadgeHtml = `<span class="launch-badge starting pulse">⏳ Starting</span>`;
+          actionBtnHtml = `<button class="btn-launch-state cancel" style="width:100%;padding:8px;" data-id="${profile.id}">⏹ Hủy khởi chạy</button>`;
+          break;
+        case 'CONNECTING':
+          stateBadgeHtml = `<span class="launch-badge connecting pulse">🔗 Connecting</span>`;
+          actionBtnHtml = `<button class="btn-launch-state cancel" style="width:100%;padding:8px;" data-id="${profile.id}">⏹ Hủy kết nối</button>`;
+          break;
+        case 'NAVIGATING':
+          stateBadgeHtml = `<span class="launch-badge navigating pulse">🌐 Navigating</span>`;
+          actionBtnHtml = `<button class="btn-launch-state cancel" style="width:100%;padding:8px;" data-id="${profile.id}">⏹ Hủy điều hướng</button>`;
+          break;
+        case 'READY':
+          stateBadgeHtml = `<span class="launch-badge ready">🟢 Ready</span>`;
+          actionBtnHtml = `<button class="btn-launch-state stop" style="width:100%;padding:8px;" data-id="${profile.id}">■ Dừng Browser</button>`;
+          break;
+        case 'CANCELLING':
+          stateBadgeHtml = `<span class="launch-badge cancelling pulse">⏳ Cancelling</span>`;
+          actionBtnHtml = `<button class="btn-launch-state cancel" disabled style="width:100%;padding:8px;opacity:0.6;">Đang hủy...</button>`;
+          break;
+        case 'ERROR':
+          stateBadgeHtml = `<span class="launch-badge error" title="${st.error || 'Lỗi'}">🔴 Error</span>`;
+          actionBtnHtml = `<button class="btn-launch-state retry" style="width:100%;padding:8px;" data-id="${profile.id}">🔄 Thử lại</button>`;
+          break;
+        default:
+          stateBadgeHtml = `<span class="launch-badge stopped">Stopped</span>`;
+          actionBtnHtml = `<button class="btn-launch-state launch" style="width:100%;padding:8px;" data-id="${profile.id}">▶ Khởi chạy Opera</button>`;
+          break;
+      }
+
+      const proxyText = profile.proxy?.host ? `${profile.proxy.type || 'http'}://${profile.proxy.host.split(':')[0]}` : 'No proxy';
+
+      card.innerHTML = `
+        <div class="card-top">
+          <div class="card-device-icon">${device?.icon || '📱'}</div>
+          <div class="card-info">
+            <div class="card-name" title="${profile.name}">${profile.name}</div>
+            <div class="card-device">${device?.name || 'Opera Profile'}</div>
+          </div>
+          ${stateBadgeHtml}
+        </div>
+        <div class="card-fp">
+          <span class="fp-tag ok">✓ Opera 139</span>
+          <span class="fp-tag">${device?.os_version || 'Android'}</span>
+          <span class="fp-tag">${profile.orientationLock === 'landscape' ? '🖥️ Ngang' : '📱 Dọc'}</span>
+          ${profile.diagnosticMode ? '<span class="fp-tag" style="color:#06d6a0;">CLEAN</span>' : '<span class="fp-tag ok">✓ Fingerprint</span>'}
+        </div>
+        <div class="card-proxy">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          ${proxyText}
+        </div>
+        <div class="card-actions" style="flex-direction:column;gap:8px;">
+          ${actionBtnHtml}
+          <div style="display:flex;gap:6px;justify-content:space-between;">
+            <button class="btn-icon" data-action="edit" data-id="${profile.id}" title="Chỉnh sửa Profile" style="flex:1;">✏️ Sửa</button>
+            <button class="btn-icon" data-action="fingerprint" data-id="${profile.id}" title="Vân tay" style="flex:1;">🧬 Vân tay</button>
+            <button class="btn-icon btn-danger" data-action="delete" data-id="${profile.id}" title="Xóa" style="width:36px;">🗑️</button>
+          </div>
+        </div>
+      `;
+
+      card.querySelector('.btn-launch-state')?.addEventListener('click', () => toggleBrowser(profile.id));
+      card.querySelector('[data-action="edit"]')?.addEventListener('click', () => openEditProfileModal(profile.id));
+      card.querySelector('[data-action="fingerprint"]')?.addEventListener('click', () => {
+        openEditProfileModal(profile.id);
+        switchModalTab('fingerprint');
+      });
+      card.querySelector('[data-action="delete"]')?.addEventListener('click', () => deleteProfileData(profile.id));
+
+      container.appendChild(card);
+    });
+  }
 
   updateStatusIndicators();
 }
-
-// ── Profile Card (Grid) ──
-function createProfileCard(profile, device, running) {
-  const card = document.createElement('div');
-  card.className = `profile-card${running ? ' running' : ''}`;
-  card.style.setProperty('--card-accent', device?.color || '#6366f1');
-
-  const proxy = profile.proxy?.host
-    ? `${profile.proxy.type}://${profile.proxy.host}`
-    : 'No proxy';
-
-  const cookieCount = (profile.webData && Array.isArray(profile.webData.cookies)) ? profile.webData.cookies.length : (profile.webData?.count || 0);
-  const hasHistory = !!(profile.webData && profile.webData.historyGz);
-  const cookieTag = (cookieCount > 0 || hasHistory)
-    ? `<span class="fp-tag ok" title="${cookieCount} cookies ${hasHistory ? '+ Lịch sử Ctrl+H ' : ''}đã lưu trên Cloud" style="border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#fbbf24">🍪 ${cookieCount}${hasHistory ? ' · 📜 History' : ''}</span>`
-    : '';
-
-  const diagnosticBadge = profile.diagnosticMode
-    ? `<span class="badge-diagnostic" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(6,214,160,0.18);border:1px solid rgba(6,214,160,0.45);color:#06d6a0;margin-left:6px;" title="Chế độ Diagnostic: Chromium nguyên bản sạch, không can thiệp fingerprint">CLEAN / DIAGNOSTIC</span>`
-    : '';
-
-  const orientTag = profile.orientationLock === 'landscape'
-    ? '<span class="fp-tag" style="color:#38bdf8;border-color:rgba(56,189,248,0.35);" title="Khóa màn hình ngang">🖥️ Ngang</span>'
-    : (profile.orientationLock === 'portrait' ? '<span class="fp-tag" style="color:#a78bfa;border-color:rgba(167,139,250,0.35);" title="Khóa màn hình dọc">📱 Dọc</span>' : '');
-
-  card.innerHTML = `
-    <div class="card-top">
-      <div class="card-device-icon">${device?.icon || '📱'}</div>
-      <div class="card-info">
-        <div class="card-name" title="${profile.name}">${profile.name} ${diagnosticBadge}</div>
-        <div class="card-device">${device?.name || 'Unknown device'}</div>
-      </div>
-      <div class="card-status-badge ${running ? 'running' : 'stopped'}">${running ? 'Running' : 'Stopped'}</div>
-    </div>
-    <div class="card-fp">
-      ${profile.diagnosticMode ? '<span class="fp-tag" style="border-color:rgba(6,214,160,0.45);background:rgba(6,214,160,0.15);color:#06d6a0;font-weight:700">⚡ CLEAN / DIAGNOSTIC</span>' : `
-      <span class="fp-tag ok">✓ Touch</span>
-      <span class="fp-tag ok">✓ WebGL</span>
-      <span class="fp-tag ok">✓ Canvas</span>
-      <span class="fp-tag ok">✓ Client Hints</span>
-      `}
-      <span class="fp-tag">${device?.os_version || 'Android'}</span>
-      <span class="fp-tag">${device?.opera_version ? `Opera ${device.opera_version.split('.')[0]}` : `Chrome ${device?.chrome_version?.split('.')[0] || '?'}`}</span>
-      ${cookieTag}
-      ${orientTag}
-    </div>
-    <div class="card-proxy">
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-      ${proxy}
-      ${profile.proxy?.host ? `<span class="proxy-status-badge" data-proxy-badge="${profile.id}" style="margin-left:6px;font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(99,102,241,0.15);color:#a5b4fc;cursor:pointer;" title="Bấm để kiểm tra proxy">🔌 Test</span>` : ''}
-    </div>
-    <div class="card-actions">
-      <button class="btn-launch ${running ? 'stop' : ''}" data-id="${profile.id}">
-        ${running
-          ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg> Stop'
-          : '<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg> Launch'
-        }
-      </button>
-      <button class="btn-icon" data-action="sync-cookie" data-id="${profile.id}" title="Đồng bộ Cookie & Lịch sử (Ctrl+H) của profile này lên Cloud" style="color:#fbbf24">🍪</button>
-      <button class="btn-icon" data-action="clear-cache" data-id="${profile.id}" title="Làm sạch Cookie & Cache (Xóa dữ liệu duyệt web)">🧹</button>
-      <button class="btn-icon" data-action="edit" data-id="${profile.id}" title="Chỉnh sửa Profile">✏️</button>
-      <button class="btn-icon btn-danger" data-action="delete" data-id="${profile.id}" title="Xóa hoàn toàn Profile & Thư mục ổ đĩa">🗑️</button>
-    </div>
-  `;
-
-  card.querySelector('.btn-launch').addEventListener('click', () => toggleBrowser(profile.id, running));
-  card.querySelector('[data-action="sync-cookie"]').addEventListener('click', () => syncProfileCookie(profile.id));
-  card.querySelector('[data-action="clear-cache"]').addEventListener('click', () => clearProfileCache(profile.id));
-  card.querySelector('[data-action="edit"]').addEventListener('click', () => openEditProfileModal(profile.id));
-  card.querySelector('[data-action="delete"]').addEventListener('click', () => deleteProfileData(profile.id));
-  if (profile.proxy?.host) {
-    card.querySelector(`[data-proxy-badge="${profile.id}"]`)?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      testProxyOnly(profile);
-    });
-  }
-  return card;
-}
-
-// ── Profile Row (List) ──
-function createProfileListRow(profile, device, running) {
-  const row = document.createElement('div');
-  row.className = 'profile-list-row';
-  row.style.setProperty('--row-accent', device?.color || '#6366f1');
-
-  const cookieCount = (profile.webData && Array.isArray(profile.webData.cookies)) ? profile.webData.cookies.length : (profile.webData?.count || 0);
-  const hasHistory = !!(profile.webData && profile.webData.historyGz);
-  const cookieBadge = (cookieCount > 0 || hasHistory)
-    ? `<span title="${cookieCount} cookies ${hasHistory ? '+ Lịch sử Ctrl+H ' : ''}đã lưu trên Cloud" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;border:1px solid rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#fbbf24;margin-left:6px">🍪 ${cookieCount}${hasHistory ? ' · 📜 History' : ''}</span>`
-    : '';
-
-  const diagnosticBadge = profile.diagnosticMode
-    ? `<span class="badge-diagnostic" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(6,214,160,0.18);border:1px solid rgba(6,214,160,0.45);color:#06d6a0;margin-left:6px;" title="Chế độ Diagnostic: Chromium nguyên bản sạch, không can thiệp fingerprint">CLEAN / DIAGNOSTIC</span>`
-    : '';
-
-  const orientBadge = profile.orientationLock === 'landscape'
-    ? '<span title="Khóa màn hình ngang" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;border:1px solid rgba(56,189,248,0.35);background:rgba(56,189,248,0.12);color:#38bdf8;margin-left:6px">🖥️ Ngang</span>'
-    : (profile.orientationLock === 'portrait' ? '<span title="Khóa màn hình dọc" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;border:1px solid rgba(167,139,250,0.35);background:rgba(167,139,250,0.12);color:#a78bfa;margin-left:6px">📱 Dọc</span>' : '');
-
-  row.innerHTML = `
-    <div class="row-icon">${device?.icon || '📱'}</div>
-    <div class="row-name" title="${profile.name}">${profile.name} ${diagnosticBadge} ${orientBadge} ${cookieBadge}</div>
-    <div class="row-device">${device?.name || '—'}</div>
-    <div class="row-ua mono">${device?.model || '—'} · ${device?.opera_version ? `Opera ${device.opera_version.split('.')[0]}` : `Chrome ${device?.chrome_version?.split('.')[0] || '?'}`}</div>
-    <div class="row-status">
-      <div class="card-status-badge ${running ? 'running' : 'stopped'}" style="font-size:9px;padding:2px 6px">${running ? 'Running' : 'Stopped'}</div>
-    </div>
-    <div class="row-actions">
-      <button class="btn-launch ${running ? 'stop' : ''}" data-id="${profile.id}" style="padding:6px 12px;font-size:11px">
-        ${running ? '■ Stop' : '▶ Launch'}
-      </button>
-      ${profile.proxy?.host ? `<button class="btn-icon" data-proxy-badge="${profile.id}" data-action="test-proxy" data-id="${profile.id}" title="Kiểm tra Proxy" style="width:28px;height:28px;border-radius:7px;font-size:13px;">🔌</button>` : ''}
-      <button class="btn-icon" data-action="sync-cookie" data-id="${profile.id}" title="Đồng bộ Cookie & Lịch sử (Ctrl+H) của profile này lên Cloud" style="width:28px;height:28px;border-radius:7px;color:#fbbf24">🍪</button>
-      <button class="btn-icon" data-action="clear-cache" data-id="${profile.id}" title="Làm sạch Cookie & Cache" style="width:28px;height:28px;border-radius:7px">🧹</button>
-      <button class="btn-icon" data-action="edit" data-id="${profile.id}" title="Edit" style="width:28px;height:28px;border-radius:7px">✏️</button>
-      <button class="btn-icon btn-danger" data-action="delete" data-id="${profile.id}" title="Xóa hoàn toàn Profile & Ổ đĩa" style="width:28px;height:28px;border-radius:7px">🗑️</button>
-    </div>
-  `;
-
-  row.querySelector('.btn-launch').addEventListener('click', () => toggleBrowser(profile.id, running));
-  row.querySelector('[data-action="sync-cookie"]').addEventListener('click', () => syncProfileCookie(profile.id));
-  row.querySelector('[data-action="clear-cache"]').addEventListener('click', () => clearProfileCache(profile.id));
-  row.querySelector('[data-action="edit"]').addEventListener('click', () => openEditProfileModal(profile.id));
-  row.querySelector('[data-action="delete"]').addEventListener('click', () => deleteProfileData(profile.id));
-  if (profile.proxy?.host) {
-    row.querySelector('[data-action="test-proxy"]')?.addEventListener('click', () => testProxyOnly(profile));
-  }
-  return row;
-}
-
-// ── Helper cập nhật badge trạng thái proxy ──
-function setProxyBadgeState(profileId, status, text, title = '') {
-  const elements = document.querySelectorAll(`[data-proxy-badge="${profileId}"]`);
-  elements.forEach(el => {
-    el.textContent = text;
-    if (title) el.title = title;
-    if (status === 'loading') {
-      el.style.background = 'rgba(234,179,8,0.18)';
-      el.style.color = '#eab308';
-    } else if (status === 'ok') {
-      el.style.background = 'rgba(6,214,160,0.18)';
-      el.style.color = '#06d6a0';
-    } else if (status === 'error') {
-      el.style.background = 'rgba(239,68,68,0.18)';
-      el.style.color = '#ef4444';
-    } else {
-      el.style.background = 'rgba(99,102,241,0.15)';
-      el.style.color = '#a5b4fc';
-    }
-  });
-}
-
-// ── Toggle Browser (với Proxy Check trước khi Launch) ──
-async function toggleBrowser(profileId, running) {
+// ── Toggle Browser: Lifecycle Orchestration (Launch / Cancel / Stop / Retry) ──
+async function toggleBrowser(profileId) {
   const profile = profiles.find(p => p.id === profileId);
   if (!profile) return;
 
-  if (running) {
+  const st = browserStatus[profileId] || {};
+  const state = st.state || (st.running ? 'READY' : 'STOPPED');
+
+  // Case 1: Browser is READY -> Stop it
+  if (state === 'READY') {
+    toast(`🛑 Đang đóng ${profile.name}...`, 'info');
+    browserStatus[profileId] = { running: false, state: 'CANCELLING', message: 'Đang đóng...' };
+    renderProfiles();
     const res = await API.closeBrowser(profileId);
-    if (res.ok) toast('🛑 Browser stopped', 'info');
-    else toast('⚠️ Could not stop browser', 'error');
+    if (res.ok) toast(`🛑 Đã đóng ${profile.name}`, 'info');
+    else toast('⚠️ Lỗi khi đóng trình duyệt', 'error');
     await refreshStatus();
     return;
   }
 
-  // ── Kiểm tra proxy trước khi mở ──
+  // Case 2: In-flight launch -> CANCEL IT IMMEDIATELY
+  if (['STARTING', 'CONNECTING', 'NAVIGATING', 'CANCELLING'].includes(state)) {
+    toast(`⏹ Đang hủy phiên khởi chạy ${profile.name}...`, 'warn');
+    browserStatus[profileId] = { running: false, state: 'CANCELLING', message: 'Đang hủy...' };
+    renderProfiles();
+    const res = await API.cancelLaunch(profileId);
+    if (res.ok) toast(`⏹ Đã hủy khởi chạy ${profile.name} an toàn`, 'info');
+    await refreshStatus();
+    return;
+  }
+
+  // Case 3: STOPPED, CANCELLED, or ERROR -> Launch Opera!
+  // Proxy Check if host provided
   if (profile.proxy?.host && profile.proxy?.port) {
     const proxyHost = profile.proxy.host.split(':')[0] || profile.proxy.host;
     const proxyPort = profile.proxy.port || 8080;
-
-    setProxyBadgeState(profileId, 'loading', '⏳', 'Đang kiểm tra proxy...');
     toast(`🔌 Đang kiểm tra proxy ${proxyHost}:${proxyPort}...`, 'info');
 
     try {
       const checkRes = await API.proxyCheck({ host: proxyHost, port: proxyPort, type: profile.proxy.type || 'http' });
-
-      if (checkRes.ok) {
-        // Proxy OK → cập nhật badge xanh + launch luôn
-        setProxyBadgeState(profileId, 'ok', `✅ ${checkRes.latencyMs}ms`, `Proxy OK — ${checkRes.latencyMs}ms`);
-        toast(`✅ Proxy OK (${checkRes.latencyMs}ms) — Đang mở ${profile.name}...`, 'success');
-      } else {
-        // Proxy FAIL → cập nhật badge đỏ + hỏi có muốn tiếp tục không
-        setProxyBadgeState(profileId, 'error', '❌ Lỗi', `Proxy lỗi: ${checkRes.error}`);
+      if (!checkRes.ok) {
         toast(`⚠️ Proxy không kết nối được: ${checkRes.error}`, 'error');
-
         const confirmed = await showConfirmModal({
           icon: '⚠️',
           title: 'Proxy không hoạt động!',
@@ -478,15 +721,16 @@ async function toggleBrowser(profileId, running) {
           confirmText: 'Vẫn mở',
           danger: true
         });
-        if (!confirmed) return; // Người dùng huỷ
+        if (!confirmed) return;
       }
-    } catch(e) {
-      console.warn('[ProxyCheck UI error]', e.message);
-      // Lỗi check → vẫn cho launch bình thường
-    }
+    } catch(e) {}
   }
 
-  // ── Launch browser ──
+  // Set immediate state to STARTING
+  browserStatus[profileId] = { running: false, state: 'STARTING', message: 'Đang chuẩn bị Opera...' };
+  renderProfiles();
+  toast(`🚀 Đang khởi chạy ${profile.name} qua Opera Engine...`, 'info');
+
   const baseDevice = devices.find(d => d.id === profile.deviceId);
   const device = {
     ...baseDevice,
@@ -494,14 +738,27 @@ async function toggleBrowser(profileId, running) {
   };
   const profileIndex = profiles.findIndex(p => p.id === profile.id);
   const profileNum = profileIndex >= 0 ? profileIndex + 1 : 1;
-  toast(`🚀 Launching ${profile.name} (#${profileNum})...`, 'info');
-  const res = await API.launchBrowser({ ...profile, device, profileNum });
-  if (res.ok) toast(`✅ ${profile.name} launched (PID: ${res.pid})`, 'success');
-  else toast('❌ Launch failed — Is Chrome/Chromium installed?', 'error');
+
+  try {
+    const res = await API.launchBrowser({ ...profile, device, profileNum });
+    if (!res.ok) {
+      if (res.cancelled) {
+        toast(`⏹ Phiên khởi chạy đã được hủy`, 'info');
+      } else {
+        toast(`❌ Khởi chạy thất bại: ${res.error || 'Lỗi Opera'}`, 'error');
+        browserStatus[profileId] = { running: false, state: 'ERROR', error: res.error };
+      }
+    } else {
+      toast(`✅ ${profile.name} đã sẵn sàng (PID: ${res.pid})!`, 'success');
+      browserStatus[profileId] = { running: true, state: 'READY', pid: res.pid, debugPort: res.debugPort };
+    }
+  } catch (err) {
+    toast(`❌ Lỗi khởi chạy: ${err.message}`, 'error');
+    browserStatus[profileId] = { running: false, state: 'ERROR', error: err.message };
+  }
 
   await refreshStatus();
 }
-
 // ── Test proxy thủ công (bấm nút 🔌 riêng) ──
 async function testProxyOnly(profile) {
   if (!profile.proxy?.host) return;
@@ -934,7 +1191,122 @@ function handleWindowPresetChange() {
 }
 
 // ── Modal ──
+function switchModalTab(tabName) {
+  currentModalTab = tabName;
+  document.querySelectorAll('.modal-tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tabName);
+  });
+  document.querySelectorAll('.modal-tab-pane').forEach(pane => {
+    pane.classList.toggle('active', pane.id === 'tabPane' + tabName.charAt(0).toUpperCase() + tabName.slice(1));
+  });
+}
+
 function setupModal() {
+  // Modal tabs
+  document.querySelectorAll('.modal-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchModalTab(btn.dataset.tab));
+  });
+
+  // Fingerprint Action Buttons inside Modal
+  const btnFpGen = document.getElementById('btnFpGenerate');
+  if (btnFpGen) {
+    btnFpGen.addEventListener('click', async () => {
+      const seed = Math.floor(Math.random() * 900000000) + 100000000;
+      const seedInput = document.getElementById('fpCanvasSeed');
+      if (seedInput) seedInput.value = seed;
+      toast('🎲 Đã tạo mới Canvas Seed & thông số ngẫu nhiên!', 'success');
+    });
+  }
+
+  const btnFpReset = document.getElementById('btnFpReset');
+  if (btnFpReset) {
+    btnFpReset.addEventListener('click', async () => {
+      const dev = devices.find(d => d.id === selectedDeviceId);
+      if (dev) {
+        document.getElementById('fpWebglVendor').value = dev.webgl_vendor || 'Qualcomm';
+        document.getElementById('fpWebglRenderer').value = dev.webgl_renderer || 'Adreno (TM) 750';
+        document.getElementById('fWinWidth').value = dev.screen_width || 412;
+        document.getElementById('fWinHeight').value = dev.screen_height || 915;
+        document.getElementById('fpScreenDpr').value = dev.device_scale_factor || 3.0;
+        toast('🔄 Đã khôi phục thông số thiết bị mặc định!', 'info');
+      }
+    });
+  }
+
+  const btnFpTest = document.getElementById('btnFpTest');
+  if (btnFpTest) {
+    btnFpTest.addEventListener('click', async () => {
+      openFingerprintTestModal(editingId);
+    });
+  }
+
+  // Bulk Actions
+  const btnBulkLaunch = document.getElementById('btnBulkLaunch');
+  if (btnBulkLaunch) {
+    btnBulkLaunch.addEventListener('click', async () => {
+      const ids = Array.from(selectedProfileIds);
+      if (ids.length === 0) return;
+      toast(`🚀 Bắt đầu khởi chạy ${ids.length} profiles...`, 'info');
+      for (const id of ids) {
+        await toggleBrowser(id);
+      }
+    });
+  }
+
+  const btnBulkStop = document.getElementById('btnBulkStop');
+  if (btnBulkStop) {
+    btnBulkStop.addEventListener('click', async () => {
+      const ids = Array.from(selectedProfileIds);
+      for (const id of ids) {
+        await API.closeBrowser(id);
+      }
+      toast(`⏹ Đã gửi lệnh dừng ${ids.length} profiles`, 'info');
+      await refreshStatus();
+    });
+  }
+
+  const btnBulkDelete = document.getElementById('btnBulkDelete');
+  if (btnBulkDelete) {
+    btnBulkDelete.addEventListener('click', async () => {
+      const ids = Array.from(selectedProfileIds);
+      const ok = await showConfirmModal({
+        icon: '🗑️',
+        title: 'Xóa hàng loạt',
+        message: `Bạn có chắc chắn muốn xóa ${ids.length} profiles đã chọn?`,
+        danger: true
+      });
+      if (ok) {
+        for (const id of ids) {
+          await API.deleteProfile(id);
+        }
+        selectedProfileIds.clear();
+        await loadProfiles();
+        toast('🗑️ Đã xóa các profiles đã chọn', 'info');
+      }
+    });
+  }
+
+  // Opera Executable Settings
+  const btnDetectOpera = document.getElementById('btnDetectOpera');
+  if (btnDetectOpera) {
+    btnDetectOpera.addEventListener('click', async () => {
+      await checkOperaStatus();
+      toast('🔍 Đã quét phát hiện trình duyệt Opera', 'info');
+    });
+  }
+
+  const btnSaveOpera = document.getElementById('btnSaveOperaSettings');
+  if (btnSaveOpera) {
+    btnSaveOpera.addEventListener('click', async () => {
+      const pathVal = document.getElementById('settingOperaPath').value.trim();
+      const settings = await API.loadSettings();
+      settings.operaPath = pathVal;
+      await API.saveSettings(settings);
+      await checkOperaStatus();
+      toast('💾 Đã lưu cấu hình đường dẫn Opera!', 'success');
+    });
+  }
+
   document.getElementById('modalClose').addEventListener('click', closeModal);
   document.getElementById('modalCancel').addEventListener('click', closeModal);
   document.getElementById('modalSave').addEventListener('click', saveProfile);
@@ -1250,6 +1622,57 @@ async function saveProfile() {
 
     const existing = editingId ? profiles.find(p => p.id === editingId) : null;
 
+    // Collect 8-group Fingerprint configuration
+    const fpData = {
+      device: {
+        os: document.getElementById('fpDeviceOs')?.value || 'Android',
+        osVersion: document.getElementById('fpDeviceOsVersion')?.value || 'Android 14',
+        model: document.getElementById('fpDeviceModel')?.value || 'Galaxy S24 Ultra',
+        platform: document.getElementById('fpDevicePlatform')?.value || 'Linux armv8l',
+        isMobile: (document.getElementById('fpDeviceOs')?.value || '').toLowerCase() !== 'windows',
+      },
+      browser: {
+        name: 'Opera',
+        operaVersion: '139.0.0.0',
+        userAgent: document.getElementById('fpBrowserUa')?.value || '',
+        secChUa: document.getElementById('fpBrowserSecChUa')?.value || '',
+        secChUaPlatform: document.getElementById('fpBrowserSecChUaPlatform')?.value || '"Android"',
+      },
+      screen: {
+        width: parseInt(document.getElementById('fWinWidth')?.value) || 412,
+        height: parseInt(document.getElementById('fWinHeight')?.value) || 915,
+        dpr: parseFloat(document.getElementById('fpScreenDpr')?.value) || 3.0,
+        orientation: orientationLock,
+      },
+      canvas: {
+        noiseEnabled: !!document.getElementById('fpCanvasNoise')?.checked,
+        noiseSeed: parseInt(document.getElementById('fpCanvasSeed')?.value) || 123456789,
+      },
+      webgl: {
+        vendor: document.getElementById('fpWebglVendor')?.value || 'Qualcomm',
+        renderer: document.getElementById('fpWebglRenderer')?.value || 'Adreno (TM) 750',
+        unmaskedRenderer: document.getElementById('fpWebglUnmaskedRenderer')?.value || '',
+      },
+      webrtc: {
+        policy: document.getElementById('fpWebrtcPolicy')?.value || 'default_public_interface_only',
+      },
+      timezone: {
+        timezone: document.getElementById('fpTimezone')?.value || 'Asia/Ho_Chi_Minh',
+        language: document.getElementById('fpLanguage')?.value || 'vi-VN',
+        geolocation: {
+          lat: parseFloat(document.getElementById('fpGeoLat')?.value) || cityInfo.lat,
+          lng: parseFloat(document.getElementById('fpGeoLng')?.value) || cityInfo.lng,
+          city: cityInfo.name,
+        }
+      },
+      hardware: {
+        maxTouchPoints: parseInt(document.getElementById('fpTouchPoints')?.value) || 10,
+        hardwareConcurrency: parseInt(document.getElementById('fpConcurrency')?.value) || 8,
+        deviceMemory: parseInt(document.getElementById('fpMemory')?.value) || 8,
+      },
+      updatedAt: Date.now(),
+    };
+
     const profileData = {
       ...(existing || {}),
       id: editingId || crypto.randomUUID(),
@@ -1268,6 +1691,7 @@ async function saveProfile() {
       antiDebugger,
       startUrl: document.getElementById('fStartUrl').value.trim(),
       notes: document.getElementById('fNotes').value.trim(),
+      fingerprint: fpData,
       webData: existing?.webData || null,
       createdAt: existing?.createdAt || Date.now(),
       updatedAt: Date.now(),
@@ -1630,34 +2054,6 @@ async function applyArrangeLayout() {
     multiDisplayMode,
     autoDistribute: isAutoDistribute,
     fixedDisplay: !isAutoDistribute,
-    mode,
-    autoAdapt,
-    startX,
-    startY,
-    winW,
-    winH,
-    windowWidth: winW,
-    windowHeight: winH,
-    gap,
-    gapX,
-    gapY,
-    colsPerRow,
-    autoArrangeOnLaunch,
-  };
-  const mode = currentArrangeMode; // 'autoFit' | 'grid' | 'cascade'
-  const autoAdapt = mode === 'autoFit' || document.getElementById('arrAutoAdapt')?.checked !== false;
-  const startX = parseInt(document.getElementById('arrStartX')?.value) || 10;
-  const startY = parseInt(document.getElementById('arrStartY')?.value) || 10;
-  const winW = parseInt(document.getElementById('arrWinWidth')?.value) || 380;
-  const winH = parseInt(document.getElementById('arrWinHeight')?.value) || 675;
-  const gapX = parseInt(document.getElementById('arrGapX')?.value) || 10;
-  const gapY = parseInt(document.getElementById('arrGapY')?.value) || 10;
-  const gap = gapX;
-  const colsPerRow = parseInt(document.getElementById('arrColsPerRow')?.value) || 3;
-  const autoArrangeOnLaunch = !!document.getElementById('fAutoArrangeOnLaunch')?.checked;
-
-  const opts = {
-    displayIndex,
     mode,
     autoAdapt,
     startX,

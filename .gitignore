@@ -34,3 +34,7 @@ Thumbs.db
 supabase_session.json
 /supabase_session.json
 *.session.json
+ 
+*.bak
+
+test/temp_app_data/
