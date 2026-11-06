@@ -726,6 +726,20 @@ function setupModal() {
     handleProxyInput(e.target.value);
   });
 
+  // Tự động vô hiệu hóa antiDebugger khi bật chế độ Diagnostic (Clean Profile)
+  const diagInput = document.getElementById('fDiagnosticMode');
+  const antiDbgInput = document.getElementById('fAntiDebugger');
+  if (diagInput && antiDbgInput) {
+    diagInput.addEventListener('change', () => {
+      if (diagInput.checked) {
+        antiDbgInput.checked = false;
+        antiDbgInput.disabled = true;
+      } else {
+        antiDbgInput.disabled = false;
+      }
+    });
+  }
+
   buildDevicePicker();
 }
 
@@ -814,7 +828,10 @@ function openNewProfileModal() {
   const diagEl = document.getElementById('fDiagnosticMode');
   if (diagEl) diagEl.checked = false;
   const antiDbgEl = document.getElementById('fAntiDebugger');
-  if (antiDbgEl) antiDbgEl.checked = false;
+  if (antiDbgEl) {
+    antiDbgEl.checked = false;
+    antiDbgEl.disabled = false;
+  }
 
   // Reset Custom Window Size
   const winPresetEl = document.getElementById('fWinPreset');
@@ -853,7 +870,15 @@ function openEditProfileModal(profileId) {
   const diagEl = document.getElementById('fDiagnosticMode');
   if (diagEl) diagEl.checked = !!p.diagnosticMode;
   const antiDbgEl = document.getElementById('fAntiDebugger');
-  if (antiDbgEl) antiDbgEl.checked = !!p.antiDebugger;
+  if (antiDbgEl) {
+    if (p.diagnosticMode) {
+      antiDbgEl.checked = false;
+      antiDbgEl.disabled = true;
+    } else {
+      antiDbgEl.checked = !!p.antiDebugger;
+      antiDbgEl.disabled = false;
+    }
+  }
 
   // Load Custom Window Size for Profile
   if (p.customWindow && p.customWindow.preset) {
@@ -943,7 +968,10 @@ async function saveProfile() {
     }
 
     const diagnosticMode = !!document.getElementById('fDiagnosticMode')?.checked;
-    const antiDebugger = !!document.getElementById('fAntiDebugger')?.checked;
+    let antiDebugger = !!document.getElementById('fAntiDebugger')?.checked;
+    if (diagnosticMode) {
+      antiDebugger = false; // Tắt cưỡng chế antiDebugger khi chẩn đoán sạch
+    }
 
     const profileData = {
       id: editingId || crypto.randomUUID(),

@@ -181,7 +181,7 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
 
     // ── Diagnostic Mode (Clean Profile): Không can thiệp fingerprint hay tiêm script giả mạo ──
     if (profile && profile.diagnosticMode === true) {
-      console.log(`[CDP] 🧪 Diagnostic Mode kích hoạt cho Profile "${profile.name || profile.id}": Bỏ qua giả mạo fingerprint & CDP device emulation.`);
+      console.log(`[CDP] 🧪 Diagnostic Mode kích hoạt cho Profile "${profile.name || profile.id}": Bỏ qua giả mạo fingerprint, CDP emulation & anti-debugger (Chromium sạch 100%).`);
       try {
         const winInfo = await client.send('Browser.getWindowForTarget');
         const windowId = winInfo && winInfo.windowId;
@@ -192,13 +192,6 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
           });
         }
       } catch (e) {}
-
-      if (profile && profile.antiDebugger === true) {
-        try {
-          await client.send('Debugger.enable');
-          await client.send('Debugger.setSkipAllPauses', { skip: true });
-        } catch(e) {}
-      }
 
       if (startUrl && startUrl !== 'about:blank' && startUrl.startsWith('http')) {
         try {
@@ -458,7 +451,7 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
     await client.send('Emulation.setAutomationOverride', { enabled: false });
 
     // ── Anti-Debugger Bypass (Bỏ qua toàn bộ bẫy debugger; của game/website khi mở DevTools F12) ──
-    if (profile && profile.antiDebugger === true) {
+    if (profile && profile.antiDebugger === true && !profile.diagnosticMode) {
       try {
         await client.send('Debugger.enable');
         await client.send('Debugger.setSkipAllPauses', { skip: true });
@@ -504,7 +497,7 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
               }).catch(() => {});
             }
             await newClient.send('Emulation.setAutomationOverride', { enabled: false }).catch(() => {});
-            if (profile && profile.antiDebugger === true) {
+            if (profile && profile.antiDebugger === true && !profile.diagnosticMode) {
               await newClient.send('Debugger.enable').catch(() => {});
               await newClient.send('Debugger.setSkipAllPauses', { skip: true }).catch(() => {});
             }
@@ -3616,7 +3609,7 @@ async function handleApiRequest(req, res) {
     let body;
     try { body = await readBody(req); } catch(e) { return sendJSON(res, 400, { ok: false, error: e.message }); }
 
-    const { name, deviceId, proxy, cityKey, startUrl, notes, customWindow, selectedExtensions } = body;
+    const { name, deviceId, proxy, cityKey, startUrl, notes, customWindow, selectedExtensions, diagnosticMode, antiDebugger } = body;
 
     // Validation
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -3668,6 +3661,9 @@ async function handleApiRequest(req, res) {
       }
     }
 
+    const isDiag = !!diagnosticMode;
+    const isAntiDbg = isDiag ? false : !!antiDebugger;
+
     // Tạo profile
     const newProfile = {
       id: require('crypto').randomUUID(),
@@ -3681,6 +3677,8 @@ async function handleApiRequest(req, res) {
       language: 'vi-VN',
       selectedExtensions: Array.isArray(selectedExtensions) ? selectedExtensions : [],
       customWindow: customWindow || null,
+      diagnosticMode: isDiag,
+      antiDebugger: isAntiDbg,
       startUrl: (startUrl || '').trim(),
       notes: (notes || '').trim(),
       createdAt: Date.now(),
@@ -3695,8 +3693,43 @@ async function handleApiRequest(req, res) {
       mainWindow.webContents.send('profiles:reload');
     }
 
-    console.log(`[API] ✅ Tạo profile: "${newProfile.name}" | device: ${chosenDevice.name} | city: ${cityInfo.name}`);
+    console.log(`[API] ✅ Tạo profile: "${newProfile.name}" | device: ${chosenDevice.name} | city: ${cityInfo.name} | diag: ${isDiag} | antiDbg: ${isAntiDbg}`);
     return sendJSON(res, 201, { ok: true, message: 'Profile đã được tạo thành công.', profile: newProfile });
+  }
+
+  // ── PUT /api/profiles/:id ── cập nhật profile
+  if (method === 'PUT' && matchSingle) {
+    const id = matchSingle[1];
+    let body;
+    try { body = await readBody(req); } catch(e) { return sendJSON(res, 400, { ok: false, error: e.message }); }
+
+    let profiles = loadProfilesFromDisk();
+    const idx = profiles.findIndex(p => p.id === id);
+    if (idx < 0) return sendJSON(res, 404, { ok: false, error: `Profile "${id}" không tồn tại.` });
+
+    const existing = profiles[idx];
+    const isDiag = body.diagnosticMode !== undefined ? !!body.diagnosticMode : !!existing.diagnosticMode;
+    const isAntiDbg = isDiag ? false : (body.antiDebugger !== undefined ? !!body.antiDebugger : !!existing.antiDebugger);
+
+    profiles[idx] = {
+      ...existing,
+      name: body.name ? body.name.trim() : existing.name,
+      deviceId: body.deviceId || existing.deviceId,
+      proxy: body.proxy !== undefined ? body.proxy : existing.proxy,
+      startUrl: body.startUrl !== undefined ? body.startUrl.trim() : existing.startUrl,
+      notes: body.notes !== undefined ? body.notes.trim() : existing.notes,
+      customWindow: body.customWindow !== undefined ? body.customWindow : existing.customWindow,
+      selectedExtensions: Array.isArray(body.selectedExtensions) ? body.selectedExtensions : existing.selectedExtensions,
+      diagnosticMode: isDiag,
+      antiDebugger: isAntiDbg,
+      updatedAt: Date.now(),
+    };
+
+    saveProfilesToDisk(profiles);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('profiles:reload');
+    }
+    return sendJSON(res, 200, { ok: true, message: 'Profile đã được cập nhật.', profile: profiles[idx] });
   }
 
   // ── DELETE /api/profiles/:id ── soft-delete profile vào Thùng Rác
@@ -3720,9 +3753,11 @@ async function handleApiRequest(req, res) {
     } catch(e) { console.warn('[API Trash] Lỗi ghi trash.json:', e.message); }
 
     // Xóa thư mục data của profile nếu tồn tại
-    const profileDir = path.join(APP_DATA_DIR, 'profiles', id);
-    if (fs.existsSync(profileDir)) {
-      try { fs.rmSync(profileDir, { recursive: true, force: true }); } catch(e) { console.warn('[API] Không xóa được thư mục:', e.message); }
+    for (const pName of [String(id), `clean_${id}`]) {
+      const profileDir = path.join(APP_DATA_DIR, 'profiles', pName);
+      if (fs.existsSync(profileDir)) {
+        try { fs.rmSync(profileDir, { recursive: true, force: true }); } catch(e) { console.warn('[API] Không xóa được thư mục:', e.message); }
+      }
     }
 
     // Notify renderer
