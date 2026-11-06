@@ -144,6 +144,55 @@ function runAspectRatioTests() {
     assert.strictEqual(typeof state1.needsResize, 'boolean');
   });
 
+  // --- 5. Kiểm thử Xoay Vòng Dọc -> Ngang -> Dọc (Auto Mode Roundtrip) ---
+  console.log('\n--- 5. Chu kỳ Xoay Vòng Dọc -> Ngang -> Dọc (Auto Mode Roundtrip) ---');
+  test('Chu kỳ Dọc -> Ngang -> Dọc trong chế độ auto: isLandscape và screenOrientation đồng bộ chuẩn xác', () => {
+    // Bước 1: Khởi đầu dọc (400x800)
+    const step1 = computeEmulationState({
+      currentWinW: 400,
+      currentWinH: 800,
+      device: phoneDevice,
+      orientationLock: 'auto'
+    });
+    assert.strictEqual(step1.isLandscape, false, 'Bước 1: Phải là portrait');
+    assert.strictEqual(step1.screenOrientation.type, 'portraitPrimary');
+    assert.strictEqual(step1.screenOrientation.angle, 0);
+
+    // Bước 2: Kéo dãn sang ngang (900x450)
+    const step2 = computeEmulationState({
+      currentWinW: 900,
+      currentWinH: 450,
+      lastKnownWinW: 400,
+      lastKnownWinH: 800,
+      device: phoneDevice,
+      orientationLock: 'auto'
+    });
+    assert.strictEqual(step2.isLandscape, true, 'Bước 2: Phải chuyển sang landscape');
+    assert.strictEqual(step2.screenOrientation.type, 'landscapePrimary');
+    assert.strictEqual(step2.screenOrientation.angle, 90);
+
+    // Bước 3: Kéo thu hẹp lại về dọc (420x820)
+    const step3 = computeEmulationState({
+      currentWinW: 420,
+      currentWinH: 820,
+      lastKnownWinW: 900,
+      lastKnownWinH: 450,
+      device: phoneDevice,
+      orientationLock: 'auto'
+    });
+    assert.strictEqual(step3.isLandscape, false, 'Bước 3: Phải chuyển ngược lại portrait');
+    assert.strictEqual(step3.screenOrientation.type, 'portraitPrimary');
+    assert.strictEqual(step3.screenOrientation.angle, 0);
+  });
+
+  test('computeEmulationState: Tương thích gọi hàm bằng tham số vị trí computeEmulationState(w, h)', () => {
+    const posState = computeEmulationState(400, 800);
+    assert.strictEqual(typeof posState.viewportW, 'number');
+    assert.strictEqual(typeof posState.viewportH, 'number');
+    assert.strictEqual(typeof posState.isLandscape, 'boolean');
+    assert.strictEqual(posState.isLandscape, false);
+  });
+
   console.log('\n====================================================');
   console.log(`📊 TỔNG KẾT ASPECT RATIO: ${passed}/${total} TESTS PASS`);
   console.log('====================================================\n');

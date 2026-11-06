@@ -13,6 +13,8 @@
 const assert = require('assert');
 const {
   calculateGridPosition,
+  getPageLayerOffset,
+  getDisplayCapacity,
   MIN_WIN_WIDTH,
   MIN_WIN_HEIGHT
 } = require('../src/layoutEngine');
@@ -141,6 +143,44 @@ function runGridMathTests() {
     const pos = calculateGridPosition(0, 2, null, { mode: 'autoFit' }, dummy, display2);
     assert(pos.posX >= 1920, `posX (${pos.posX}) phải >= 1920`);
     assert(pos.posX + pos.winW <= 3840, `Cửa sổ tràn ra ngoài màn 2: ${pos.posX + pos.winW}`);
+  });
+
+  test('Multi-Display Tự Phân Bổ: Khi displayIndex: 0 được thiết lập, profile vượt sức chứa màn 1 tự động chuyển sang màn 2', () => {
+    const disp1 = { id: 1, bounds: { x: 0, y: 0, width: 1366, height: 768 }, workArea: { x: 0, y: 0, width: 1366, height: 728 } };
+    const disp2 = { id: 2, bounds: { x: 1366, y: 0, width: 1366, height: 768 }, workArea: { x: 1366, y: 0, width: 1366, height: 728 } };
+    const cap1 = getDisplayCapacity(disp1.workArea).capacity; // 18 ô
+
+    // Profile thứ 0 (vẫn nằm trên màn 1)
+    const dummy = { id: 'test_p', orientationLock: 'portrait', device: { viewport: { width: 412, height: 915 } } };
+    const pos0 = calculateGridPosition(0, 25, null, { mode: 'autoFit', displayIndex: 0, displays: [disp1, disp2] }, dummy);
+    assert(pos0.posX >= 0 && pos0.posX < 1366, `Profile 0 phải ở màn 1 (posX = ${pos0.posX})`);
+
+    // Profile thứ 19 (vượt sức chứa cap1 = 18 ô, phải tự động tràn sang màn 2 mặc dù displayIndex: 0 được lưu)
+    const pos19 = calculateGridPosition(19, 25, null, { mode: 'autoFit', displayIndex: 0, displays: [disp1, disp2] }, dummy);
+    assert(pos19.posX >= 1366, `Profile 19 phải tự chuyển sang màn 2 (posX: ${pos19.posX} >= 1366)`);
+    assert(pos19.posX + pos19.winW <= 2732, `Profile 19 không được tràn khỏi màn 2 (posX+winW = ${pos19.posX + pos19.winW})`);
+  });
+
+  // --- 4. Kiểm tra Layered Paging Non-Repeating Offset ---
+  console.log('\n--- 4. Kiểm tra Layered Paging Non-Repeating Offset ---');
+  test('Layered Paging Non-Repeating: getPageLayerOffset từ layer 0 đến 10 không lặp lại (0,0) và có offset khác biệt', () => {
+    const offset0 = getPageLayerOffset(0);
+    assert.strictEqual(offset0.offsetX, 0, 'Layer 0 offsetX phải là 0');
+    assert.strictEqual(offset0.offsetY, 0, 'Layer 0 offsetY phải là 0');
+
+    const seenOffsets = new Set();
+    seenOffsets.add(`${offset0.offsetX},${offset0.offsetY}`);
+
+    for (let layer = 1; layer <= 10; layer++) {
+      const off = getPageLayerOffset(layer);
+      // Mọi layer > 0 đều phải có offset non-zero >= 20px
+      assert(off.offsetX >= 20, `Layer ${layer}: offsetX (${off.offsetX}) phải >= 20`);
+      assert(off.offsetY >= 20, `Layer ${layer}: offsetY (${off.offsetY}) phải >= 20`);
+
+      const key = `${off.offsetX},${off.offsetY}`;
+      assert(!seenOffsets.has(key), `Trùng lặp tọa độ offset tại layer ${layer}: ${key}`);
+      seenOffsets.add(key);
+    }
   });
 
   // --- 4. Hỗn hợp Dọc / Ngang trên cùng 1 Grid ---

@@ -98,10 +98,8 @@ async function runChromiumEmulationTests() {
   console.log('\n--- 2. Live Chromium / CDP: Đo window.innerWidth, innerHeight & orientation ---');
 
   const chromeBin = findChromeBinary();
-  if (!chromeBin) {
-    console.log('  ⚠️ Bỏ qua Live Chromium vì không tìm thấy binary Chrome trên máy.');
-  } else {
-    console.log(`  🔍 Tìm thấy browser binary: ${chromeBin}`);
+  assert(chromeBin, 'BẮT BUỘC tìm thấy Chromium binary (Chrome hoặc Edge) trên Windows để thực thi Live CDP tests.');
+  console.log(`  🔍 Tìm thấy browser binary: ${chromeBin}`);
 
     await testAsync('Live CDP Portrait: innerWidth < innerHeight & screen.orientation="portraitPrimary"', async () => {
       const port = 9333;
@@ -228,7 +226,159 @@ async function runChromiumEmulationTests() {
         try { fs.rmSync(tempUserData, { recursive: true, force: true }); } catch (e) {}
       }
     });
-  }
+
+    await testAsync('Live CDP Dynamic Auto-Orientation: Xoay vòng Dọc -> Ngang -> Dọc và phát orientationchange', async () => {
+      const port = 9335;
+      const tempUserData = path.join(os.tmpdir(), `test_chrome_roundtrip_${Date.now()}`);
+      fs.mkdirSync(tempUserData, { recursive: true });
+
+      const proc = spawn(chromeBin, [
+        `--remote-debugging-port=${port}`,
+        `--user-data-dir=${tempUserData}`,
+        '--headless=new',
+        '--no-first-run',
+        '--no-default-browser-check',
+        'about:blank'
+      ]);
+
+      try {
+        await new Promise(r => setTimeout(r, 1500));
+        const browser = await puppeteer.connect({ browserURL: `http://127.0.0.1:${port}` });
+        const pages = await browser.pages();
+        const page = pages[0] || (await browser.newPage());
+        const client = await page.createCDPSession();
+
+        const fpScript = generateFingerprintScript({ viewport: { width: 412, height: 915 } }, 'auto');
+        await client.send('Page.addScriptToEvaluateOnNewDocument', { source: fpScript });
+
+        // Phase 1: Portrait ban đầu (380x800)
+        await client.send('Emulation.setDeviceMetricsOverride', {
+          width: 380,
+          height: 800,
+          deviceScaleFactor: 3.0,
+          mobile: true,
+          screenOrientation: { type: 'portraitPrimary', angle: 0 },
+          screenWidth: 380,
+          screenHeight: 800
+        });
+
+        const testHtml = `data:text/html,<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body>
+          <script>
+            window.__orientEvents = [];
+            window.addEventListener('orientationchange', function() {
+              window.__orientEvents.push({
+                type: screen.orientation ? screen.orientation.type : null,
+                angle: screen.orientation ? screen.orientation.angle : null,
+                winAngle: typeof window.orientation !== 'undefined' ? window.orientation : null
+              });
+            });
+          </script>
+          Roundtrip Test
+        </body></html>`;
+        await page.goto(testHtml);
+
+        const m1 = await page.evaluate(() => ({
+          w: window.innerWidth,
+          h: window.innerHeight,
+          orient: screen.orientation?.type,
+          events: window.__orientEvents.length
+        }));
+        assert.strictEqual(m1.w, 380, 'P1 innerWidth');
+        assert.strictEqual(m1.h, 800, 'P1 innerHeight');
+        assert.strictEqual(m1.orient, 'portrait-primary', 'P1 orientation');
+        assert.strictEqual(m1.events, 0, 'P1 ban đầu chưa phát orientationchange');
+
+        // Phase 2: Kéo dãn sang Landscape (800x380) và phát hiện chuyển hướng
+        await client.send('Emulation.setDeviceMetricsOverride', {
+          width: 800,
+          height: 380,
+          deviceScaleFactor: 3.0,
+          mobile: true,
+          screenOrientation: { type: 'landscapePrimary', angle: 90 },
+          screenWidth: 800,
+          screenHeight: 380
+        });
+
+        // Kích hoạt Dynamic Auto-Orientation script của main.js
+        await client.send('Runtime.evaluate', {
+          expression: `(function() {
+            try {
+              if (typeof screen !== 'undefined' && screen.orientation) {
+                Object.defineProperty(screen.orientation, 'type', { get: function() { return "landscape-primary"; }, configurable: true });
+                Object.defineProperty(screen.orientation, 'angle', { get: function() { return 90; }, configurable: true });
+              }
+              if (typeof window !== 'undefined') {
+                Object.defineProperty(window, 'orientation', { get: function() { return 90; }, configurable: true });
+                window.dispatchEvent(new Event('orientationchange'));
+              }
+            } catch(e){}
+          })()`,
+          returnByValue: true
+        });
+
+        const m2 = await page.evaluate(() => ({
+          w: window.innerWidth,
+          h: window.innerHeight,
+          orient: screen.orientation?.type,
+          angle: screen.orientation?.angle,
+          events: window.__orientEvents.length,
+          lastEvent: window.__orientEvents[window.__orientEvents.length - 1]
+        }));
+        assert.strictEqual(m2.w, 800, 'P2 innerWidth');
+        assert.strictEqual(m2.h, 380, 'P2 innerHeight');
+        assert.strictEqual(m2.orient, 'landscape-primary', 'P2 orientation');
+        assert.strictEqual(m2.angle, 90, 'P2 angle');
+        assert(m2.events >= 1, 'P2 phải nhận sự kiện orientationchange');
+        assert.strictEqual(m2.lastEvent.type, 'landscape-primary');
+
+        // Phase 3: Thu hẹp lại về Portrait (380x800) và phát hiện chuyển hướng lần 2
+        await client.send('Emulation.setDeviceMetricsOverride', {
+          width: 380,
+          height: 800,
+          deviceScaleFactor: 3.0,
+          mobile: true,
+          screenOrientation: { type: 'portraitPrimary', angle: 0 },
+          screenWidth: 380,
+          screenHeight: 800
+        });
+
+        await client.send('Runtime.evaluate', {
+          expression: `(function() {
+            try {
+              if (typeof screen !== 'undefined' && screen.orientation) {
+                Object.defineProperty(screen.orientation, 'type', { get: function() { return "portrait-primary"; }, configurable: true });
+                Object.defineProperty(screen.orientation, 'angle', { get: function() { return 0; }, configurable: true });
+              }
+              if (typeof window !== 'undefined') {
+                Object.defineProperty(window, 'orientation', { get: function() { return 0; }, configurable: true });
+                window.dispatchEvent(new Event('orientationchange'));
+              }
+            } catch(e){}
+          })()`,
+          returnByValue: true
+        });
+
+        const m3 = await page.evaluate(() => ({
+          w: window.innerWidth,
+          h: window.innerHeight,
+          orient: screen.orientation?.type,
+          angle: screen.orientation?.angle,
+          events: window.__orientEvents.length,
+          lastEvent: window.__orientEvents[window.__orientEvents.length - 1]
+        }));
+        assert.strictEqual(m3.w, 380, 'P3 innerWidth');
+        assert.strictEqual(m3.h, 800, 'P3 innerHeight');
+        assert.strictEqual(m3.orient, 'portrait-primary', 'P3 orientation');
+        assert.strictEqual(m3.angle, 0, 'P3 angle');
+        assert(m3.events > m2.events, 'P3 chu kỳ hoàn tất phải nhận thêm sự kiện orientationchange khi xoay ngược về dọc');
+        assert.strictEqual(m3.lastEvent.type, 'portrait-primary');
+
+        await browser.close();
+      } finally {
+        try { proc.kill('SIGKILL'); } catch (e) {}
+        try { fs.rmSync(tempUserData, { recursive: true, force: true }); } catch (e) {}
+      }
+    });
 
   console.log('\n====================================================');
   console.log(`📊 TỔNG KẾT LIVE EMULATION: ${passed}/${total} TESTS PASS`);

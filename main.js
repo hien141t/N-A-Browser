@@ -424,33 +424,35 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
           }
         }
 
+        // Lưu hướng cũ trước khi gọi applyMetricsOverride() để so sánh trước/sau chính xác
+        const prevOrientationType = currentMetricsState?.screenOrientation?.type;
+
         await applyMetricsOverride(state.viewportW, state.viewportH, state.screenOrientation);
 
         // Đồng bộ hóa động runtime screen.orientation trong chế độ 'auto' khi xoay khung hình
-        if (orientationLock === 'auto' && state.screenOrientation) {
-          const currentType = currentMetricsState?.screenOrientation?.type;
-          if (currentType !== state.screenOrientation.type) {
-            console.log(`[CDP] 🔄 Auto Orientation dynamically switched: ${state.screenOrientation.type} (${state.viewportW}x${state.viewportH})`);
-            try {
-              const orientJs = state.isLandscape ? 'landscape-primary' : 'portrait-primary';
-              const orientAngle = state.isLandscape ? 90 : 0;
-              await client.send('Runtime.evaluate', {
-                expression: `(function() {
-                  try {
-                    if (typeof screen !== 'undefined' && screen.orientation) {
-                      Object.defineProperty(screen.orientation, 'type', { get: function() { return "${orientJs}"; }, configurable: true });
-                      Object.defineProperty(screen.orientation, 'angle', { get: function() { return ${orientAngle}; }, configurable: true });
-                    }
-                    if (typeof window !== 'undefined') {
-                      Object.defineProperty(window, 'orientation', { get: function() { return ${orientAngle}; }, configurable: true });
-                      window.dispatchEvent(new Event('orientationchange'));
-                    }
-                  } catch(e){}
-                })()`,
-                returnByValue: true
-              }).catch(() => {});
-            } catch(e){}
-          }
+        if (orientationLock === 'auto' && state.screenOrientation && prevOrientationType && prevOrientationType !== state.screenOrientation.type) {
+          console.log(`[CDP] 🔄 Auto Orientation dynamically switched: ${prevOrientationType} -> ${state.screenOrientation.type} (${state.viewportW}x${state.viewportH})`);
+          // Xác định hướng mới trực tiếp từ state.screenOrientation.type thay vì phụ thuộc state.isLandscape
+          const isLandscape = state.screenOrientation.type.toLowerCase().includes('landscape');
+          const orientJs = isLandscape ? 'landscape-primary' : 'portrait-primary';
+          const orientAngle = isLandscape ? 90 : 0;
+          try {
+            await client.send('Runtime.evaluate', {
+              expression: `(function() {
+                try {
+                  if (typeof screen !== 'undefined' && screen.orientation) {
+                    Object.defineProperty(screen.orientation, 'type', { get: function() { return "${orientJs}"; }, configurable: true });
+                    Object.defineProperty(screen.orientation, 'angle', { get: function() { return ${orientAngle}; }, configurable: true });
+                  }
+                  if (typeof window !== 'undefined') {
+                    Object.defineProperty(window, 'orientation', { get: function() { return ${orientAngle}; }, configurable: true });
+                    window.dispatchEvent(new Event('orientationchange'));
+                  }
+                } catch(e){}
+              })()`,
+              returnByValue: true
+            }).catch(() => {});
+          } catch(e){}
         }
       } catch(e) {}
     };
