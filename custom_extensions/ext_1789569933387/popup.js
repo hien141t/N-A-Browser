@@ -7,9 +7,22 @@ const DEFAULT_WEBSITES = [
     "https://m.9922999.com/Account/Register"
 ];
 
-// Telegram Bot Settings (Cấu hình sẵn của bạn)
-const TELEGRAM_TOKEN = "8757422276:AAGEBdveh9KtnSqg9bIxu3hzDP8P_VN71PI";
-const TELEGRAM_CHAT_ID = "7651644672";
+// Token nhạy cảm đã được tách khỏi mã nguồn để đảm bảo bảo mật.
+// Người dùng cấu hình qua giao diện cài đặt tiện ích hoặc chrome.storage.local.
+let TELEGRAM_TOKEN = "";
+let TELEGRAM_CHAT_ID = "";
+chrome.storage?.local?.get(['telegram_token', 'telegram_chat_id'], (items) => {
+    if (items?.telegram_token) TELEGRAM_TOKEN = items.telegram_token;
+    if (items?.telegram_chat_id) TELEGRAM_CHAT_ID = items.telegram_chat_id;
+});
+if (chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local') {
+            if (changes.telegram_token) TELEGRAM_TOKEN = changes.telegram_token.newValue || "";
+            if (changes.telegram_chat_id) TELEGRAM_CHAT_ID = changes.telegram_chat_id.newValue || "";
+        }
+    });
+}
 
 // ==========================================
 // UTILITY FUNCTIONS & RANDOM GENERATORS

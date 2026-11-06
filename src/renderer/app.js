@@ -297,20 +297,26 @@ function createProfileCard(profile, device, running) {
     ? `<span class="fp-tag ok" title="${cookieCount} cookies ${hasHistory ? '+ Lịch sử Ctrl+H ' : ''}đã lưu trên Cloud" style="border-color:rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#fbbf24">🍪 ${cookieCount}${hasHistory ? ' · 📜 History' : ''}</span>`
     : '';
 
+  const diagnosticBadge = profile.diagnosticMode
+    ? `<span class="badge-diagnostic" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(6,214,160,0.18);border:1px solid rgba(6,214,160,0.45);color:#06d6a0;margin-left:6px;" title="Chế độ Diagnostic: Chromium nguyên bản sạch, không can thiệp fingerprint">CLEAN / DIAGNOSTIC</span>`
+    : '';
+
   card.innerHTML = `
     <div class="card-top">
       <div class="card-device-icon">${device?.icon || '📱'}</div>
       <div class="card-info">
-        <div class="card-name" title="${profile.name}">${profile.name}</div>
+        <div class="card-name" title="${profile.name}">${profile.name} ${diagnosticBadge}</div>
         <div class="card-device">${device?.name || 'Unknown device'}</div>
       </div>
       <div class="card-status-badge ${running ? 'running' : 'stopped'}">${running ? 'Running' : 'Stopped'}</div>
     </div>
     <div class="card-fp">
+      ${profile.diagnosticMode ? '<span class="fp-tag" style="border-color:rgba(6,214,160,0.45);background:rgba(6,214,160,0.15);color:#06d6a0;font-weight:700">⚡ CLEAN / DIAGNOSTIC</span>' : `
       <span class="fp-tag ok">✓ Touch</span>
       <span class="fp-tag ok">✓ WebGL</span>
       <span class="fp-tag ok">✓ Canvas</span>
       <span class="fp-tag ok">✓ Client Hints</span>
+      `}
       <span class="fp-tag">${device?.os_version || 'Android'}</span>
       <span class="fp-tag">${device?.opera_version ? `Opera ${device.opera_version.split('.')[0]}` : `Chrome ${device?.chrome_version?.split('.')[0] || '?'}`}</span>
       ${cookieTag}
@@ -360,9 +366,13 @@ function createProfileListRow(profile, device, running) {
     ? `<span title="${cookieCount} cookies ${hasHistory ? '+ Lịch sử Ctrl+H ' : ''}đã lưu trên Cloud" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;border:1px solid rgba(245,158,11,0.4);background:rgba(245,158,11,0.12);color:#fbbf24;margin-left:6px">🍪 ${cookieCount}${hasHistory ? ' · 📜 History' : ''}</span>`
     : '';
 
+  const diagnosticBadge = profile.diagnosticMode
+    ? `<span class="badge-diagnostic" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(6,214,160,0.18);border:1px solid rgba(6,214,160,0.45);color:#06d6a0;margin-left:6px;" title="Chế độ Diagnostic: Chromium nguyên bản sạch, không can thiệp fingerprint">CLEAN / DIAGNOSTIC</span>`
+    : '';
+
   row.innerHTML = `
     <div class="row-icon">${device?.icon || '📱'}</div>
-    <div class="row-name" title="${profile.name}">${profile.name} ${cookieBadge}</div>
+    <div class="row-name" title="${profile.name}">${profile.name} ${diagnosticBadge} ${cookieBadge}</div>
     <div class="row-device">${device?.name || '—'}</div>
     <div class="row-ua mono">${device?.model || '—'} · ${device?.opera_version ? `Opera ${device.opera_version.split('.')[0]}` : `Chrome ${device?.chrome_version?.split('.')[0] || '?'}`}</div>
     <div class="row-status">
@@ -800,6 +810,12 @@ function openNewProfileModal() {
   document.getElementById('fNotes').value = '';
   document.getElementById('proxyAuthRow').style.display = 'none';
 
+  // Reset Diagnostic & Anti-Debugger
+  const diagEl = document.getElementById('fDiagnosticMode');
+  if (diagEl) diagEl.checked = false;
+  const antiDbgEl = document.getElementById('fAntiDebugger');
+  if (antiDbgEl) antiDbgEl.checked = false;
+
   // Reset Custom Window Size
   const winPresetEl = document.getElementById('fWinPreset');
   if (winPresetEl) winPresetEl.value = 'default';
@@ -832,6 +848,12 @@ function openEditProfileModal(profileId) {
   document.getElementById('fStartUrl').value = p.startUrl || '';
   document.getElementById('fNotes').value = p.notes || '';
   document.getElementById('proxyAuthRow').style.display = p.proxy?.type ? 'flex' : 'none';
+
+  // Load Diagnostic & Anti-Debugger settings
+  const diagEl = document.getElementById('fDiagnosticMode');
+  if (diagEl) diagEl.checked = !!p.diagnosticMode;
+  const antiDbgEl = document.getElementById('fAntiDebugger');
+  if (antiDbgEl) antiDbgEl.checked = !!p.antiDebugger;
 
   // Load Custom Window Size for Profile
   if (p.customWindow && p.customWindow.preset) {
@@ -920,6 +942,9 @@ async function saveProfile() {
       customWindow = { preset: winPreset, width: w, height: h };
     }
 
+    const diagnosticMode = !!document.getElementById('fDiagnosticMode')?.checked;
+    const antiDebugger = !!document.getElementById('fAntiDebugger')?.checked;
+
     const profileData = {
       id: editingId || crypto.randomUUID(),
       name,
@@ -932,6 +957,8 @@ async function saveProfile() {
       language: 'vi-VN',
       selectedExtensions,
       customWindow,
+      diagnosticMode,
+      antiDebugger,
       startUrl: document.getElementById('fStartUrl').value.trim(),
       notes: document.getElementById('fNotes').value.trim(),
       webData: editingId ? (profiles.find(p => p.id === editingId)?.webData || null) : null,

@@ -1,0 +1,39 @@
+================================================================================
+    N/A DEV - BỘ TOOL EXTENSION WM CASINO AI (DÀNH CHO SERVER UBUNTU)
+    Server Cloud Backend: https://powerai.duckdns.org (Port 8422)
+================================================================================
+
+Thư mục này là phiên bản Extension đầy đủ được cấu hình riêng để kết nối tới
+Server Ubuntu cá nhân của bạn (powerai.duckdns.org).
+
+--------------------------------------------------------------------------------
+BƯỚC 1: CÀI ĐẶT EXTENSION VÀO TRÌNH DUYỆT (CHROME / CỐC CỐC / EDGE / HIDE)
+--------------------------------------------------------------------------------
+1. Mở trình duyệt Chrome (hoặc bất kỳ trình duyệt Chromium / Anti-detect nào).
+2. Truy cập vào trang quản lý tiện ích:
+   chrome://extensions/
+3. Bật công tắc "Chế độ dành cho nhà phát triển" (Developer mode) ở góc trên bên phải.
+4. Bấm nút "Tải tiện ích đã giải nén" (Load unpacked).
+5. Chọn đúng thư mục này:
+   D:\tool game\tool wm\ubuntu demo
+6. Tiện ích "N/A DEV - Tool WM AI" sẽ xuất hiện trên thanh công cụ của trình duyệt.
+
+--------------------------------------------------------------------------------
+BƯỚC 2: KÍCH HOẠT HOẶC CẤP QUYỀN MÁY TÍNH (NATIVE BRIDGE)
+--------------------------------------------------------------------------------
+1. Vào thư mục:
+   D:\tool game\tool wm\ubuntu demo\windows
+2. Chạy file:
+   ActivateWM.bat
+3. Nhập mã License Key được tạo từ trang quản trị:
+   https://powerai.duckdns.org/admin
+   (Nếu máy này đã từng kích hoạt key hợp lệ trên server, bridge sẽ tự động nhận diện).
+4. Sau khi báo "KÍCH HOẠT THÀNH CÔNG!", dịch vụ nền sẽ tự động chạy ngầm, không cần mở thêm bất kỳ cửa sổ nào.
+
+--------------------------------------------------------------------------------
+BƯỚC 3: SỬ DỤNG
+--------------------------------------------------------------------------------
+- Đăng nhập vào trang game WM Casino.
+- Mở bàn cược Baccarat bất kỳ.
+- Bảng điều khiển Tool WM AI sẽ tự động xuất hiện bên cạnh bàn cược để hỗ trợ soi cầu, dự đoán và đặt cược tự động theo thuật toán AI Master Brain!
+================================================================================

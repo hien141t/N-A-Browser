@@ -8,8 +8,9 @@ const DEFAULT_WEBSITES = [
 ];
 
 const OCR_SERVER = "http://180.93.106.208:5588";
-const TELEGRAM_TOKEN = "8757422276:AAGEBdveh9KtnSqg9bIxu3hzDP8P_VN71PI";
-const TELEGRAM_CHAT_ID = "7651644672";
+// Token nhạy cảm đã được tách khỏi mã nguồn để đảm bảo bảo mật.
+let TELEGRAM_TOKEN = "";
+let TELEGRAM_CHAT_ID = "";
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "runFullSequence") {

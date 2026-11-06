@@ -1,0 +1,89 @@
+{
+  "manifest_version": 3,
+  "name": "N/A DEV - Tool WM AI",
+  "version": "2.0.0",
+  "description": "Extension tự động soi cầu Baccarat học sâu, nhận diện đa bàn và tự động đặt cược sảnh WM Casino bởi N/A DEV",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAoH36k9nxRUorpK3ftwASBxN699DYKTJUbfvVPMt14hzO2XiB3K2UA0ze1MAAecmPrbXlgpwkJcvQavyynLWLmUVdZuclFjsVJMdofrfysgErnNeRSS0avnU2EQB3KROVFxQDRGJ2f21Uon3HrR9Cs8PiJ9gdJa3NADMq6bYVWnAiwFYGX0k7eDU1V+sTTuJTSWADkFULM1JbSuQ0wAwT9vpRRx0PznuG16UzucUxgQeUhNn/VsOJlK/Etb8HRXcp3Zlrq3JipATnZKNQaqbCEjA8edw7Y2QoF2eOHhHleH+SKbcA4TcvqzuPbCNG5Tn2btPjSttW+8Vx5sFlNJrI0wIDAQAB",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://*/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src 'self' http://127.0.0.1:48903 https: http: ws: wss:;"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*/*",
+        "http://*/*"
+      ],
+      "js": [
+        "ws-hook.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://*/*",
+        "http://*/*"
+      ],
+      "js": [
+        "cloud-ai-client.js",
+        "content.js"
+      ],
+      "css": [
+        "style.css"
+      ],
+      "run_at": "document_end",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "https://*/*",
+        "http://*/*"
+      ],
+      "js": [
+        "iframe-injector.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "ws-hook.js",
+        "icons/*"
+      ],
+      "matches": [
+        "https://*/*",
+        "http://*/*"
+      ]
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  }
+}

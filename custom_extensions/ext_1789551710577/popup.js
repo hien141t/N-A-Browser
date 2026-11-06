@@ -11,9 +11,22 @@ const WEBSITES = [
     "https://m.hi889999.com/Account/Register"
 ];
 
-// Telegram config (sửa lại cho đúng của bạn)
-const TELEGRAM_TOKEN = "8757422276:AAGEBdveh9KtnSqg9bIxu3hzDP8P_VN71PI";
-const TELEGRAM_CHAT_ID = "7651644672";
+// Token nhạy cảm đã được tách khỏi mã nguồn để đảm bảo bảo mật.
+// Người dùng cấu hình qua giao diện cài đặt tiện ích hoặc chrome.storage.local.
+let TELEGRAM_TOKEN = "";
+let TELEGRAM_CHAT_ID = "";
+chrome.storage?.local?.get(['telegram_token', 'telegram_chat_id'], (items) => {
+    if (items?.telegram_token) TELEGRAM_TOKEN = items.telegram_token;
+    if (items?.telegram_chat_id) TELEGRAM_CHAT_ID = items.telegram_chat_id;
+});
+if (chrome.storage?.onChanged) {
+    chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === 'local') {
+            if (changes.telegram_token) TELEGRAM_TOKEN = changes.telegram_token.newValue || "";
+            if (changes.telegram_chat_id) TELEGRAM_CHAT_ID = changes.telegram_chat_id.newValue || "";
+        }
+    });
+}
 
 // ==========================================
 // UTILITY FUNCTIONS
@@ -277,7 +290,19 @@ async function runAll() {
 // TELEGRAM NOTIFICATION
 // ==========================================
 
-function sendTelegram(username, password, fullname, phone, site) {
+async function sendTelegram(username, password, fullname, phone, site) {
+    if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
+        try {
+            const items = await chrome.storage?.local?.get(['telegram_token', 'telegram_chat_id']);
+            if (items?.telegram_token) TELEGRAM_TOKEN = items.telegram_token;
+            if (items?.telegram_chat_id) TELEGRAM_CHAT_ID = items.telegram_chat_id;
+        } catch (e) {}
+    }
+    if (!TELEGRAM_TOKEN || !TELEGRAM_CHAT_ID) {
+        console.warn('Chưa cấu hình Telegram Token/Chat ID');
+        addLog('Chưa cấu hình Telegram Token/Chat ID (trong chrome.storage.local)', 'error');
+        return;
+    }
     const text = `🟢 HI88 ĐĂNG KÝ MỚI\n👤 TK: ${username}\n🔑 MK: ${password}\n📝 Tên: ${fullname}\n📱 SĐT: ${phone}\n🌐 Site: ${site}`;
     fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
         method: 'POST',

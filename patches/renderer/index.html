@@ -881,6 +881,26 @@ print(response.json())</pre>
         <label>Notes <span class="optional">(optional)</span></label>
         <input type="text" id="fNotes" placeholder="Ghi chú..." class="form-input"/>
       </div>
+      <!-- Tùy chọn Chẩn đoán & Debugger -->
+      <div class="form-group" style="background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px;">
+        <label style="margin: 0; font-weight: 600; color: #fff; font-size: 13px; display: flex; align-items: center; gap: 6px;">
+          🛠️ Diagnostic & CDP Debugger
+        </label>
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+          <div>
+            <div style="font-size: 12px; font-weight: 600; color: #fff;">Chế độ Diagnostic (Clean Profile)</div>
+            <div style="font-size: 11px; color: var(--txt3);">Chạy Chromium nguyên bản hoàn toàn sạch, không can thiệp fingerprint, không nạp extension, phục vụ so sánh kiểm thử.</div>
+          </div>
+          <label class="toggle" style="flex-shrink: 0;"><input type="checkbox" id="fDiagnosticMode"/><span class="toggle-slider"></span></label>
+        </div>
+        <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.06);">
+          <div>
+            <div style="font-size: 12px; font-weight: 600; color: #fff;">Chống bẫy F12 Debugger qua CDP</div>
+            <div style="font-size: 11px; color: var(--txt3);">Mặc định tắt, chỉ bật khi trang web có hành vi cố tình đóng băng bằng debugger; khi mở DevTools.</div>
+          </div>
+          <label class="toggle" style="flex-shrink: 0;"><input type="checkbox" id="fAntiDebugger"/><span class="toggle-slider"></span></label>
+        </div>
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn-secondary" id="modalCancel">Cancel</button>

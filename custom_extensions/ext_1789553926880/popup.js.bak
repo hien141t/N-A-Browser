@@ -6,9 +6,9 @@ const DEFAULT_WEBSITES = [
     "https://m.i9bet331.com/Account/Register?r=NR6K77"
 ];
 
-// Telegram Bot Settings (Cấu hình sẵn của bạn)
-const TELEGRAM_TOKEN = "8757422276:AAGEBdveh9KtnSqg9bIxu3hzDP8P_VN71PI";
-const TELEGRAM_CHAT_ID = "7651644672";
+// Token nhạy cảm đã được tách khỏi mã nguồn để đảm bảo bảo mật.
+let TELEGRAM_TOKEN = "";
+let TELEGRAM_CHAT_ID = "";
 
 // ==========================================
 // UTILITY FUNCTIONS & RANDOM GENERATORS
