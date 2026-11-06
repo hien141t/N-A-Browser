@@ -1986,38 +1986,11 @@ ipcMain.handle('browser:launch', async (event, profile) => {
     }
 
     const extPaths = [];
+    let injectScript = null;
+
     if (!isDiagnostic) {
-      // Write fingerprint inject script & Chrome extension (MV2 for Blocking Proxy Auth)
-      const injectScript = generateFingerprintScript(profile.device);
-
-      const extDir = path.join(profileDir, 'cloak_ext');
-      fs.mkdirSync(extDir, { recursive: true });
-
-      const manifestJson = {
-        manifest_version: 3,
-        name: `NA Stealth Fingerprint ${profile.id}`,
-        version: '1.0.0',
-        description: 'Native C++ Level Stealth Fingerprint Injector',
-        content_scripts: [
-          {
-            matches: ['<all_urls>'],
-            js: ['inject.js'],
-            run_at: 'document_start',
-            all_frames: true,
-            world: 'MAIN'
-          }
-        ]
-      };
-
-      // Proxy auth được xử lý hoàn toàn qua CDP Fetch.authRequired (native, không cần extension).
-      // Extension chỉ inject fingerprint script — không cần background.js cho proxy.
-
-      fs.writeFileSync(path.join(extDir, 'manifest.json'), JSON.stringify(manifestJson, null, 2));
-
-      const extensionContentJs = injectScript;
-      fs.writeFileSync(path.join(extDir, 'inject.js'), extensionContentJs);
-
-      extPaths.push(extDir);
+      // Fingerprint được tiêm độc quyền và an toàn qua CDP Page.addScriptToEvaluateOnNewDocument (tránh tiêm 2 lần)
+      injectScript = generateFingerprintScript(profile.device);
 
       const selectedIds = new Set(Array.isArray(profile.selectedExtensions) ? profile.selectedExtensions : []);
       const allExtsFile = path.join(APP_DATA_DIR, 'extensions.json');
@@ -2797,6 +2770,19 @@ function generateFingerprintScript(device) {
 
   return `(function() {
   'use strict';
+
+  // ── IDEMPOTENCY GUARD: Chống tiêm/chạy trùng lặp nhiều lần ──
+  if (typeof window !== 'undefined' && window.__NA_STEALTH_APPLIED__) return;
+  try {
+    Object.defineProperty(window, '__NA_STEALTH_APPLIED__', {
+      value: true,
+      writable: false,
+      enumerable: false,
+      configurable: false
+    });
+  } catch(e) {
+    if (typeof window !== 'undefined') window.__NA_STEALTH_APPLIED__ = true;
+  }
 
   // ── STEALTH NATIVE FUNCTION MASKING ──
   // Che giấu dấu vết Function override để vượt qua kiểm tra toString() & Proxy detection của Anti-bot
@@ -3782,31 +3768,11 @@ async function handleApiRequest(req, res) {
       fs.mkdirSync(profileDir, { recursive: true });
 
       const extPaths = [];
+      let injectScript = null;
+
       if (!isDiagnostic) {
-        // Fingerprint extension
-        const injectScript = generateFingerprintScript(device);
-        const extDir = path.join(profileDir, 'cloak_ext');
-        fs.mkdirSync(extDir, { recursive: true });
-
-        const manifestJson = {
-          manifest_version: 3,
-          name: `NA Stealth ${id}`,
-          version: '1.0.0',
-          content_scripts: [
-            {
-              matches: ['<all_urls>'],
-              js: ['inject.js'],
-              run_at: 'document_start',
-              all_frames: true,
-              world: 'MAIN'
-            }
-          ]
-        };
-
-        fs.writeFileSync(path.join(extDir, 'manifest.json'), JSON.stringify(manifestJson, null, 2));
-        fs.writeFileSync(path.join(extDir, 'inject.js'), injectScript);
-
-        extPaths.push(extDir);
+        // Fingerprint được tiêm độc quyền và an toàn qua CDP Page.addScriptToEvaluateOnNewDocument (tránh tiêm 2 lần)
+        injectScript = generateFingerprintScript(device);
 
         const selectedIds = new Set(Array.isArray(profile.selectedExtensions) ? profile.selectedExtensions : []);
         const allExtsFile = path.join(APP_DATA_DIR, 'extensions.json');
