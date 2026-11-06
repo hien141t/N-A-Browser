@@ -18,6 +18,7 @@ const { runDiagnosticModeTests } = require('./test_diagnostic_mode');
 const { runApiCompatibilityTests } = require('./test_api_compatibility');
 const { runChromiumEmulationTests } = require('./test_chromium_emulation_live');
 const { runMultiProfilesSimulation } = require('./test_multi_profiles_sim');
+const { runOperaLaunchAndFpTests } = require('./test_opera_launch_and_fp');
 const { runOtaUpgradeTests } = require('./test_ota_upgrade');
 
 async function main() {
@@ -55,9 +56,13 @@ async function main() {
   const simRes = runMultiProfilesSimulation();
   results.push({ name: 'Multi-Window 5-25 Profiles Sim', ...simRes });
 
-  // 8. Hot-Patch OTA Upgrade & Module Distribution
+  // 8. Opera Launcher & Fingerprint Manager (State Machine, Cancel, Live Opera CDP)
+  const operaRes = await runOperaLaunchAndFpTests();
+  results.push({ name: 'Opera Launcher & Fingerprint Mgr', ...operaRes });
+
+  // 9. Hot-Patch OTA Upgrade & Module Distribution (Patch #19)
   const otaRes = runOtaUpgradeTests();
-  results.push({ name: 'OTA Patch #18 Distribution', ...otaRes });
+  results.push({ name: 'OTA Patch #19 Distribution', ...otaRes });
 
   console.log('============================================================');
   console.log('                 BẢNG TỔNG KẾT KẾT QUẢ KIỂM THỬ             ');

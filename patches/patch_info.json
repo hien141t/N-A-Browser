@@ -1,7 +1,7 @@
 {
-  "patchNumber": 18,
-  "version": "1.0.18",
-  "title": "Bản vá Hot-Patch #18: Phân phối module LayoutEngine, FingerprintGenerator, Bố cục Auto Fit chống tràn & Đồng bộ Viewport",
-  "changelog": "Ban va #18: Phan phoi day du module src/layoutEngine.js va src/fingerprintGenerator.js qua OTA, khac phuc bo cuc man hinh nho vuot qua suc chua, dong bo orientation runtime va chong loi Cannot find module.",
-  "appliedAt": "2026-11-06T22:38:53.908Z"
+  "patchNumber": 19,
+  "version": "1.0.19",
+  "title": "Bản vá Hot-Patch #19: Khởi chạy Opera Engine v139 thật độc lập, Fingerprint Manager 8 nhóm, Giao diện Hidemium Profile và Dọn rác toàn diện",
+  "changelog": "Khởi chạy Opera Engine v139 thật độc lập, Fingerprint Manager 8 nhóm, Giao diện Hidemium Profile và Dọn rác toàn diện",
+  "appliedAt": "2026-11-06T23:30:55.831Z"
 }

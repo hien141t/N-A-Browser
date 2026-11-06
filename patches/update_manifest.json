@@ -1,10 +1,17 @@
 {
-  "version": "1.0.18",
-  "patchNumber": 18,
-  "title": "Bản vá Hot-Patch #18: Phân phối module LayoutEngine, FingerprintGenerator, Bố cục Auto Fit chống tràn & Đồng bộ Viewport",
-  "changelog": "Ban va #18: Phan phoi day du module src/layoutEngine.js va src/fingerprintGenerator.js qua OTA, khac phuc bo cuc man hinh nho vuot qua suc chua, dong bo orientation runtime va chong loi Cannot find module.",
-  "updatedAt": "2026-11-06T22:38:53.908Z",
+  "version": "1.0.19",
+  "patchNumber": 19,
+  "title": "Bản vá Hot-Patch #19: Khởi chạy Opera Engine v139 thật độc lập, Fingerprint Manager 8 nhóm, Giao diện Hidemium Profile và Dọn rác toàn diện",
+  "changelog": "Khởi chạy Opera Engine v139 thật độc lập, Fingerprint Manager 8 nhóm, Giao diện Hidemium Profile và Dọn rác toàn diện",
+  "updatedAt": "2026-11-06T23:30:55.830Z",
   "history": [
+    {
+      "patchNumber": 18,
+      "version": "1.0.18",
+      "title": "Bản vá Hot-Patch #18: Phân phối module LayoutEngine, FingerprintGenerator, Bố cục Auto Fit chống tràn & Đồng bộ Viewport",
+      "changelog": "Ban va #18: Phan phoi day du module src/layoutEngine.js va src/fingerprintGenerator.js qua OTA, khac phuc bo cuc man hinh nho vuot qua suc chua, dong bo orientation runtime va chong loi Cannot find module.",
+      "updatedAt": "2026-11-06T22:38:53.908Z"
+    },
     {
       "patchNumber": 17,
       "version": "1.0.17",
@@ -43,26 +50,6 @@
   ],
   "files": [
     {
-      "filename": "fingerprintGenerator.js",
-      "dest": "patches/fingerprintGenerator.js",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/fingerprintGenerator.js"
-    },
-    {
-      "filename": "layoutEngine.js",
-      "dest": "patches/layoutEngine.js",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/layoutEngine.js"
-    },
-    {
-      "filename": "fingerprintGenerator.js",
-      "dest": "src/fingerprintGenerator.js",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/src/fingerprintGenerator.js"
-    },
-    {
-      "filename": "layoutEngine.js",
-      "dest": "src/layoutEngine.js",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/src/layoutEngine.js"
-    },
-    {
       "filename": "app.js",
       "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/renderer/app.js"
     },
@@ -100,6 +87,56 @@
       "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/apply_window_icon.ps1"
     },
     {
+      "filename": "layoutEngine.js",
+      "dest": "src/layoutEngine.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/src/layoutEngine.js"
+    },
+    {
+      "filename": "layoutEngine.js",
+      "dest": "patches/layoutEngine.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/layoutEngine.js"
+    },
+    {
+      "filename": "fingerprintGenerator.js",
+      "dest": "src/fingerprintGenerator.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/src/fingerprintGenerator.js"
+    },
+    {
+      "filename": "fingerprintGenerator.js",
+      "dest": "patches/fingerprintGenerator.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/fingerprintGenerator.js"
+    },
+    {
+      "filename": "fingerprintManager.js",
+      "dest": "src/fingerprintManager.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/src/fingerprintManager.js"
+    },
+    {
+      "filename": "fingerprintManager.js",
+      "dest": "patches/fingerprintManager.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/fingerprintManager.js"
+    },
+    {
+      "filename": "operaLauncher.js",
+      "dest": "src/operaLauncher.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/src/operaLauncher.js"
+    },
+    {
+      "filename": "operaLauncher.js",
+      "dest": "patches/operaLauncher.js",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/operaLauncher.js"
+    },
+    {
+      "filename": "devices.json",
+      "dest": "src/devices.json",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/src/devices.json"
+    },
+    {
+      "filename": "devices.json",
+      "dest": "patches/devices.json",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/devices.json"
+    },
+    {
       "filename": "badge_1.png",
       "dest": "profile_icons/badge_1.png",
       "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_1.png"
@@ -108,6 +145,16 @@
       "filename": "badge_10.png",
       "dest": "profile_icons/badge_10.png",
       "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_10.png"
+    },
+    {
+      "filename": "badge_11.png",
+      "dest": "profile_icons/badge_11.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_11.png"
+    },
+    {
+      "filename": "badge_12.png",
+      "dest": "profile_icons/badge_12.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/badge_12.png"
     },
     {
       "filename": "badge_2.png",
@@ -168,6 +215,26 @@
       "filename": "profile_10.png",
       "dest": "profile_icons/profile_10.png",
       "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_10.png"
+    },
+    {
+      "filename": "profile_11.ico",
+      "dest": "profile_icons/profile_11.ico",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_11.ico"
+    },
+    {
+      "filename": "profile_11.png",
+      "dest": "profile_icons/profile_11.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_11.png"
+    },
+    {
+      "filename": "profile_12.ico",
+      "dest": "profile_icons/profile_12.ico",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_12.ico"
+    },
+    {
+      "filename": "profile_12.png",
+      "dest": "profile_icons/profile_12.png",
+      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_12.png"
     },
     {
       "filename": "profile_2.ico",
@@ -248,86 +315,6 @@
       "filename": "profile_9.png",
       "dest": "profile_icons/profile_9.png",
       "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/profile_9.png"
-    },
-    {
-      "filename": "background.js",
-      "dest": "custom_extensions/ext_1786469361479/background.js",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/background.js"
-    },
-    {
-      "filename": "content.js",
-      "dest": "custom_extensions/ext_1786469361479/content.js",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/content.js"
-    },
-    {
-      "filename": "icon128.png",
-      "dest": "custom_extensions/ext_1786469361479/icon128.png",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/icon128.png"
-    },
-    {
-      "filename": "local_ocr_server.py",
-      "dest": "custom_extensions/ext_1786469361479/local_ocr_server.py",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/local_ocr_server.py"
-    },
-    {
-      "filename": "manifest.json",
-      "dest": "custom_extensions/ext_1786469361479/manifest.json",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/manifest.json"
-    },
-    {
-      "filename": "popup.html",
-      "dest": "custom_extensions/ext_1786469361479/popup.html",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/popup.html"
-    },
-    {
-      "filename": "popup.js",
-      "dest": "custom_extensions/ext_1786469361479/popup.js",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/popup.js"
-    },
-    {
-      "filename": "README.md",
-      "dest": "custom_extensions/ext_1786469361479/README.md",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/README.md"
-    },
-    {
-      "filename": "run_local_ocr.bat",
-      "dest": "custom_extensions/ext_1786469361479/run_local_ocr.bat",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786469361479/run_local_ocr.bat"
-    },
-    {
-      "filename": "background.js",
-      "dest": "custom_extensions/ext_1786515448618/background.js",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/background.js"
-    },
-    {
-      "filename": "content.js",
-      "dest": "custom_extensions/ext_1786515448618/content.js",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/content.js"
-    },
-    {
-      "filename": "icon128.jpeg",
-      "dest": "custom_extensions/ext_1786515448618/icon128.jpeg",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/icon128.jpeg"
-    },
-    {
-      "filename": "icon128.png",
-      "dest": "custom_extensions/ext_1786515448618/icon128.png",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/icon128.png"
-    },
-    {
-      "filename": "manifest.json",
-      "dest": "custom_extensions/ext_1786515448618/manifest.json",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/manifest.json"
-    },
-    {
-      "filename": "popup.html",
-      "dest": "custom_extensions/ext_1786515448618/popup.html",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/popup.html"
-    },
-    {
-      "filename": "popup.js",
-      "dest": "custom_extensions/ext_1786515448618/popup.js",
-      "url": "https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/ext_1786515448618/popup.js"
     },
     {
       "filename": "extensions.json",

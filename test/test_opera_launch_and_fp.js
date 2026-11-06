@@ -195,6 +195,9 @@ async function runTests() {
     // Verify session cleaned up
     const statuses = getAllBrowserStatuses();
     assert.ok(!statuses['test_cancel_prof'] || !statuses['test_cancel_prof'].running);
+
+    // Give Windows OS process manager 600ms to complete handle recycling before launching live profile
+    await new Promise(r => setTimeout(r, 600));
   });
 
   // ── 4. LIVE REAL OPERA LAUNCH VERIFICATION ──
@@ -244,13 +247,17 @@ async function runTests() {
   } catch(e) {}
 
   console.log('\n====================================================');
-  console.log(`📊 TỔNG KẾT AGENT 1: ${passed}/${total} TESTS PASS (${Math.round(passed/total*100)}%)`);
-  console.log('====================================================');
+  console.log(`📊 TỔNG KẾT OPERA & FINGERPRINT: ${passed}/${total} TESTS PASS (${Math.round(passed/total*100)}%)`);
+  console.log('====================================================\n');
 
-  if (passed < total) process.exit(1);
+  return { passedTests: passed, totalTests: total, success: passed === total };
 }
 
-runTests().catch(err => {
-  console.error('Test Suite Failed:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  runTests().catch(err => {
+    console.error('Test Suite Failed:', err);
+    process.exit(1);
+  });
+}
+
+module.exports = { runOperaLaunchAndFpTests: runTests };

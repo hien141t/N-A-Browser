@@ -14,12 +14,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearProfileCache: (id) => ipcRenderer.invoke('profile:clearCache', id),
   showConfirm: (opts) => ipcRenderer.invoke('dialog:confirm', opts),
 
-  // Browser
+  // Browser Lifecycle (Opera Engine)
   launchBrowser: (profile) => ipcRenderer.invoke('browser:launch', profile),
+  cancelLaunch:  (profileId) => ipcRenderer.invoke('browser:cancel', profileId),
   closeBrowser:  (id)      => ipcRenderer.invoke('browser:close', id),
   getBrowserStatus: ()     => ipcRenderer.invoke('browser:status'),
+  onLaunchStateChanged: (callback) => {
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on('browser:state-changed', listener);
+    return () => ipcRenderer.removeListener('browser:state-changed', listener);
+  },
+  getOperaInfo: (customPath) => ipcRenderer.invoke('opera:info', customPath),
   arrangeWindows: (opts)   => ipcRenderer.invoke('browser:arrangeWindows', opts),
   getDisplays: ()          => ipcRenderer.invoke('displays:get'),
+
+  // Fingerprint Manager
+  fingerprintGet:      (profileId) => ipcRenderer.invoke('fingerprint:get', profileId),
+  fingerprintUpdate:   (profileId, settings) => ipcRenderer.invoke('fingerprint:update', profileId, settings),
+  fingerprintGenerate: (profileId, opts) => ipcRenderer.invoke('fingerprint:generate', profileId, opts),
+  fingerprintReset:    (profileId) => ipcRenderer.invoke('fingerprint:reset', profileId),
+  fingerprintValidate: (profileId) => ipcRenderer.invoke('fingerprint:validate', profileId),
 
   // Extensions
   loadExtensions:        () => ipcRenderer.invoke('extensions:load'),
@@ -71,6 +85,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Proxy Check
   proxyCheck: (cfg) => ipcRenderer.invoke('proxy:check', cfg),
 
-  // API Server events - tu reload khi profile duoc tao/xoa qua HTTP API
+  // API Server events
   onProfilesReload: (callback) => ipcRenderer.on('profiles:reload', () => callback()),
 });

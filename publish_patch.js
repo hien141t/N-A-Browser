@@ -39,17 +39,16 @@ if (fs.existsSync(rootManifest)) {
   try { fs.unlinkSync(rootManifest); console.log('  - Đã xóa update_manifest.json thừa ở thư mục gốc'); } catch(e){}
 }
 
-// Xóa các extension rác cũ không còn trong extensions.json
-const validExtIds = ['ext_1786469361479', 'ext_1786515448618'];
+// Dọn dẹp toàn bộ các thư mục extension đóng gói sẵn cũ khỏi repo
 const customExtDir = path.join(rootDir, 'custom_extensions');
 if (fs.existsSync(customExtDir)) {
   const allExtDirs = fs.readdirSync(customExtDir);
   for (const d of allExtDirs) {
-    if (!validExtIds.includes(d)) {
+    if (d.startsWith('ext_')) {
       const junkDir = path.join(customExtDir, d);
       try {
         fs.rmSync(junkDir, { recursive: true, force: true });
-        console.log(`  - Đã dọn dẹp thư mục tiện ích cũ: ${d}`);
+        console.log(`  - Đã dọn dẹp thư mục tiện ích đóng gói: ${d}`);
       } catch(e){}
     }
   }
@@ -109,8 +108,8 @@ coreScripts.forEach(f => {
 });
 console.log('✅ Đã nạp mã nguồn chính (main.js, ps1 scripts) vào bản vá');
 
-// 2b. Copy src modules (layoutEngine.js, fingerprintGenerator.js, devices.json)
-const srcModules = ['layoutEngine.js', 'fingerprintGenerator.js', 'devices.json'];
+// 2b. Copy src modules (layoutEngine.js, fingerprintGenerator.js, fingerprintManager.js, operaLauncher.js, devices.json)
+const srcModules = ['layoutEngine.js', 'fingerprintGenerator.js', 'fingerprintManager.js', 'operaLauncher.js', 'devices.json'];
 const patchesSrcDir = path.join(patchesDir, 'src');
 fs.mkdirSync(patchesSrcDir, { recursive: true });
 
@@ -135,7 +134,7 @@ srcModules.forEach(f => {
     });
   }
 });
-console.log('✅ Đã nạp các module phụ thuộc mới (layoutEngine.js, fingerprintGenerator.js) vào bản vá');
+console.log('✅ Đã nạp các module phụ thuộc mới (layoutEngine.js, fingerprintGenerator.js, fingerprintManager.js, operaLauncher.js) vào bản vá');
 
 // 3. Copy Profile Icons & Overlay Badges
 const iconDir = path.join(rootDir, 'profile_icons');
@@ -154,15 +153,15 @@ if (fs.existsSync(iconDir)) {
   console.log(`✅ Đã nạp ${iconFiles.length} Profile Icons & Huy hiệu Taskbar Badge vào bản vá`);
 }
 
-// 4. Copy Official Custom Extensions (Tool i9 & Tool hi88)
-validExtIds.forEach(extId => {
-  const srcExt = path.join(rootDir, 'custom_extensions', extId);
-  const destExt = path.join(patchesExtDir, extId);
-  if (fs.existsSync(srcExt)) {
-    copyDirRecursive(srcExt, destExt, '', rawBaseExt + extId + '/', 'custom_extensions/' + extId);
-    console.log(`✅ Đã nén tiện ích ${extId} vào bản vá`);
+// 4. Clean out packaged extensions from patch
+if (fs.existsSync(patchesExtDir)) {
+  const oldPatchedExts = fs.readdirSync(patchesExtDir);
+  for (const d of oldPatchedExts) {
+    if (d.startsWith('ext_')) {
+      try { fs.rmSync(path.join(patchesExtDir, d), { recursive: true, force: true }); } catch (e) {}
+    }
   }
-});
+}
 
 // 5. Copy extensions.json
 const srcExtJson = path.join(rootDir, 'extensions.json');
@@ -222,39 +221,43 @@ fs.writeFileSync(patchInfoPath, JSON.stringify(patchInfo, null, 2), 'utf-8');
 fs.writeFileSync(manifestPath, JSON.stringify(newManifest, null, 2), 'utf-8');
 console.log(`\n🎉 Đã tạo thành công Bản vá #${nextPatchNum} gồm ${patchFilesList.length} files: "${commitMsg}"`);
 
-// 7. Git commit & push đồng thời lên CẢ 2 NGUỒN (origin: hien151306-byte & backup: hien141t)
-try {
-  console.log('🚀 Đang commit bản vá...');
-  execSync('git add -A && git commit -m "release: hot-patch #' + nextPatchNum + ' - ' + commitMsg.replace(/"/g, '') + '"', { cwd: rootDir, stdio: 'inherit' });
-
-  // Đẩy lên origin (hien151306-byte)
-  let pushOriginSuccess = false;
+// 7. Git commit & push đồng thời lên CẢ 2 NGUỒN (nếu không có flag --no-git)
+if (!process.argv.includes('--no-git')) {
   try {
-    console.log('📡 Đang đẩy lên origin (hien151306-byte)...');
-    execSync('git push origin main', { cwd: rootDir, stdio: 'inherit' });
-    pushOriginSuccess = true;
-    console.log('✅ Đã đẩy thành công lên hien151306-byte/N-A-Browser');
-  } catch (e1) {
-    console.warn('⚠️ Chưa đẩy được lên origin (hien151306-byte): ' + e1.message);
-  }
+    console.log('🚀 Đang commit bản vá...');
+    execSync('git -c safe.directory=* add -A && git -c safe.directory=* commit -m "release: hot-patch #' + nextPatchNum + ' - ' + commitMsg.replace(/"/g, '') + '"', { cwd: rootDir, stdio: 'inherit' });
 
-  // Đẩy lên backup (hien141t)
-  let pushBackupSuccess = false;
-  try {
-    console.log('📡 Đang đẩy lên backup (hien141t)...');
-    execSync('git push backup main', { cwd: rootDir, stdio: 'inherit' });
-    pushBackupSuccess = true;
-    console.log('✅ Đã đẩy thành công lên hien141t/N-A-Browser');
-  } catch (e2) {
-    console.warn('⚠️ Chưa đẩy được lên backup (hien141t): ' + e2.message);
-  }
+    // Đẩy lên origin (hien151306-byte)
+    let pushOriginSuccess = false;
+    try {
+      console.log('📡 Đang đẩy lên origin (hien151306-byte)...');
+      execSync('git -c safe.directory=* push origin main', { cwd: rootDir, stdio: 'inherit' });
+      pushOriginSuccess = true;
+      console.log('✅ Đã đẩy thành công lên hien151306-byte/N-A-Browser');
+    } catch (e1) {
+      console.warn('⚠️ Chưa đẩy được lên origin (hien151306-byte): ' + e1.message);
+    }
 
-  if (pushOriginSuccess || pushBackupSuccess) {
-    console.log(`\n🌟 XUẤT BẢN THÀNH CÔNG! Bản vá #${nextPatchNum} đã lên GitHub.`);
-    console.log('Hệ thống N/A Browser tự động đồng bộ từ cả 2 nguồn Git (hien151306-byte và hien141t).');
-  } else {
-    console.error('\n❌ Không thể đẩy lên cả 2 nguồn Git!');
+    // Đẩy lên backup (hien141t)
+    let pushBackupSuccess = false;
+    try {
+      console.log('📡 Đang đẩy lên backup (hien141t)...');
+      execSync('git -c safe.directory=* push backup main', { cwd: rootDir, stdio: 'inherit' });
+      pushBackupSuccess = true;
+      console.log('✅ Đã đẩy thành công lên hien141t/N-A-Browser');
+    } catch (e2) {
+      console.warn('⚠️ Chưa đẩy được lên backup (hien141t): ' + e2.message);
+    }
+
+    if (pushOriginSuccess || pushBackupSuccess) {
+      console.log(`\n🌟 XUẤT BẢN THÀNH CÔNG! Bản vá #${nextPatchNum} đã lên GitHub.`);
+      console.log('Hệ thống N/A Browser tự động đồng bộ từ cả 2 nguồn Git (hien151306-byte và hien141t).');
+    } else {
+      console.warn('\n⚠️ Không thể đẩy lên remote git (có thể do offline hoặc thiếu quyền truy cập SSH/token).');
+    }
+  } catch (err) {
+    console.warn('⚠️ Ghi chú khi commit/đẩy bản vá:', err.message);
   }
-} catch (err) {
-  console.error('❌ Lỗi khi commit/đẩy bản vá:', err.message);
+} else {
+  console.log('ℹ️ Bỏ qua commit & push git theo yêu cầu flag --no-git');
 }

@@ -332,7 +332,7 @@ async function launchOperaProfile({
     // 9. State: CONNECTING (CDP Connection with Retry & Timeout)
     broadcastState(profileId, LAUNCH_STATES.CONNECTING, 'Đang kết nối giao thức CDP...');
     let browser = null;
-    const maxRetries = 35; // 35 * 300ms = 10.5 seconds max
+    const maxRetries = 60; // 60 * 300ms = 18.0 seconds max for cold starts under Windows load
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       if (session.isCancelled) {
         return handleAbortedSession(session);

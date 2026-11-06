@@ -87,6 +87,56 @@ const {
 } = fingerprintManagerModule;
 
 // ══════════════════════════════════════════════════════════════════
+// ── MIGRATION: DỌN DẸP EXTENSION RÁC ĐÓNG GÓI CŨ TRÊN MÁY KHÁCH ───
+// Tự động gỡ các extension rác mẫu cũ khỏi custom_extensions và
+// extensions.json mà KHÔNG làm mất profile, cookie hay dữ liệu người dùng.
+// ══════════════════════════════════════════════════════════════════
+function runLegacyExtensionCleanupMigration() {
+  try {
+    const LEGACY_PACKAGED_EXTENSIONS = [
+      'ext_1786469361479', 'ext_1786515448618', 'ext_1789551710577',
+      'ext_1789553895819', 'ext_1789553926880', 'ext_1789554568979',
+      'ext_1789569933387', 'ext_1791086690787', 'ext_1793961703501',
+      'ext_1793995763303', 'ext_1794001027896'
+    ];
+
+    const dirsToClean = [
+      path.join(APP_DATA_DIR, 'custom_extensions'),
+      path.join(APP_DATA_DIR, 'patches', 'custom_extensions')
+    ];
+
+    dirsToClean.forEach(dir => {
+      if (fs.existsSync(dir)) {
+        LEGACY_PACKAGED_EXTENSIONS.forEach(extId => {
+          const target = path.join(dir, extId);
+          if (fs.existsSync(target)) {
+            try {
+              fs.rmSync(target, { recursive: true, force: true });
+            } catch (err) {}
+          }
+        });
+      }
+    });
+
+    const extJsonPath = path.join(APP_DATA_DIR, 'extensions.json');
+    if (fs.existsSync(extJsonPath)) {
+      try {
+        let list = JSON.parse(fs.readFileSync(extJsonPath, 'utf8'));
+        if (Array.isArray(list)) {
+          const filtered = list.filter(item => !LEGACY_PACKAGED_EXTENSIONS.includes(item.id));
+          if (filtered.length !== list.length) {
+            fs.writeFileSync(extJsonPath, JSON.stringify(filtered, null, 2), 'utf8');
+          }
+        }
+      } catch (err) {}
+    }
+  } catch (e) {
+    console.warn('[Migration] Legacy extension cleanup notice:', e.message);
+  }
+}
+runLegacyExtensionCleanupMigration();
+
+// ══════════════════════════════════════════════════════════════════
 // ── LOCAL PROXY SERVER (AdsPower/Hidemium style) ──────────────────
 // Khi proxy có user:pass, khởi động 1 local HTTP proxy server trên
 // 127.0.0.1:randomPort. Server này tự thêm Proxy-Authorization header

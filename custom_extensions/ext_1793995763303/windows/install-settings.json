@@ -1,9 +1,0 @@
-{
-  "api_url": "https://powerai.duckdns.org",
-  "extension_id": "ckbbfkpiagcdimpojifnelmegkohfpjb",
-  "allowed_extension_ids": [
-    "ckbbfkpiagcdimpojifnelmegkohfpjb",
-    "ohnfofmfinknechmdehfapnhnjdhclkn"
-  ],
-  "localhost_fallback": true
-}

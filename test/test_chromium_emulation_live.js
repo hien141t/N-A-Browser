@@ -29,6 +29,10 @@ function findChromeBinary() {
   }
 
   const standardPaths = [
+    path.join(os.homedir(), 'AppData\\Local\\Programs\\Opera\\opera.exe'),
+    path.join(os.homedir(), 'AppData\\Local\\Programs\\Opera\\launcher.exe'),
+    'C:\\Program Files\\Opera\\launcher.exe',
+    'C:\\Program Files (x86)\\Opera\\launcher.exe',
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     path.join(os.homedir(), 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe'),
