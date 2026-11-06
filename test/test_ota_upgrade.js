@@ -126,6 +126,66 @@ function runOtaUpgradeTests() {
     }
   });
 
+  test('Nâng cấp tuần tự Patch #17 -> #18: Cài đặt Patch 17 cũ, sau đó nhận bản vá 18 và chuyển đổi version 1.0.17 -> 1.0.18 hoàn hảo', () => {
+    const tempOldClient = path.join(os.tmpdir(), `test_ota_p17_to_p18_${Date.now()}`);
+    fs.mkdirSync(tempOldClient, { recursive: true });
+
+    try {
+      // 1. Tạo bản cài đặt Patch #17 cũ:
+      const p17Info = { patchNumber: 17, version: '1.0.17', title: 'Patch #17 Old' };
+      fs.writeFileSync(path.join(tempOldClient, 'patch_info.json'), JSON.stringify(p17Info, null, 2));
+      fs.mkdirSync(path.join(tempOldClient, 'patches'), { recursive: true });
+      fs.writeFileSync(path.join(tempOldClient, 'patches', 'patch_info.json'), JSON.stringify(p17Info, null, 2));
+
+      // Bản cũ CHƯA có src/layoutEngine.js và src/fingerprintGenerator.js
+      assert(!fs.existsSync(path.join(tempOldClient, 'src', 'layoutEngine.js')), 'Ban đầu không được có layoutEngine.js');
+
+      // 2. Chạy quy trình OTA Updater: Áp dụng manifest Patch #18
+      const rootDir = path.join(__dirname, '..');
+      for (const item of manifest.files) {
+        if (!item.dest) continue;
+        let srcPath = path.join(rootDir, item.dest);
+        if (!fs.existsSync(srcPath)) {
+          srcPath = path.join(rootDir, 'patches', item.dest.replace(/^patches\//, ''));
+        }
+        const destPath = path.join(tempOldClient, item.dest);
+        if (fs.existsSync(srcPath)) {
+          fs.mkdirSync(path.dirname(destPath), { recursive: true });
+          fs.copyFileSync(srcPath, destPath);
+        }
+      }
+
+      // Cập nhật patch_info lên bản mới
+      fs.writeFileSync(path.join(tempOldClient, 'patch_info.json'), JSON.stringify({
+        patchNumber: manifest.patchNumber,
+        version: manifest.version,
+        updatedAt: new Date().toISOString()
+      }, null, 2));
+
+      // 3. Xác minh tính toàn vẹn sau khi nâng cấp
+      const upgradedInfo = JSON.parse(fs.readFileSync(path.join(tempOldClient, 'patch_info.json'), 'utf8'));
+      assert.strictEqual(upgradedInfo.patchNumber, 18, 'Phải nâng lên patchNumber = 18');
+      assert.strictEqual(upgradedInfo.version, '1.0.18', 'Phải nâng lên version = 1.0.18');
+
+      // Cả hai module mới phải tồn tại và nạp thành công
+      const layoutFile = path.join(tempOldClient, 'src', 'layoutEngine.js');
+      const fpFile = path.join(tempOldClient, 'src', 'fingerprintGenerator.js');
+      assert(fs.existsSync(layoutFile), 'Thiếu src/layoutEngine.js sau nâng cấp');
+      assert(fs.existsSync(fpFile), 'Thiếu src/fingerprintGenerator.js sau nâng cấp');
+
+      const layoutMod = require(layoutFile);
+      const fpMod = require(fpFile);
+      assert.strictEqual(typeof layoutMod.calculateGridPosition, 'function');
+      assert.strictEqual(typeof fpMod.generateFingerprintScript, 'function');
+
+      const samplePos = layoutMod.calculateGridPosition(0, 5, null, { mode: 'autoFit' }, { device: { viewport: { width: 412, height: 915 } } }, { workArea: { x: 0, y: 0, width: 1920, height: 1040 } });
+      assert(samplePos.winW >= 200);
+      assert(samplePos.winH >= 180);
+    } finally {
+      try { fs.rmSync(tempOldClient, { recursive: true, force: true }); } catch (e) {}
+    }
+  });
+
   console.log('\n====================================================');
   console.log(`📊 TỔNG KẾT OTA UPGRADE: ${passed}/${total} TESTS PASS`);
   console.log('====================================================\n');

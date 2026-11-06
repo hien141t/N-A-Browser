@@ -1081,12 +1081,18 @@ user:pass@113.187.249.232:20028" class="form-input mono" style="font-size:11px;l
       <button class="modal-close" id="arrangeModalClose">✕</button>
     </div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
-      <!-- Màn hình hiển thị -->
-      <div class="form-group-row">
-        <label class="fg-label">Màn hình hiển thị</label>
-        <select id="arrScreen" class="form-select" style="flex:1">
-          <option value="0">Màn hình 1 (Chính)</option>
-        </select>
+      <!-- Màn hình hiển thị & Chế độ phân bổ -->
+      <div class="form-group-row" style="align-items:flex-start;">
+        <label class="fg-label" style="margin-top:6px;">Màn hình hiển thị</label>
+        <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+          <select id="arrScreen" class="form-select" style="width:100%">
+            <option value="auto">🌐 Tự phân bổ nhiều màn hình (Auto-Distribute)</option>
+            <option value="0">📌 Cố định: Màn hình 1 (Chính)</option>
+          </select>
+          <div style="font-size:11px; color:#94a3b8; line-height:1.4;" id="arrScreenDesc">
+            🌐 Tự động tràn qua màn hình phụ khi màn hình hiện tại hết sức chứa.
+          </div>
+        </div>
       </div>
 
       <!-- Chế độ sắp xếp -->

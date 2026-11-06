@@ -1465,20 +1465,82 @@ function setupArrangeModal() {
   document.getElementById('arrBtnApply')?.addEventListener('click', applyArrangeLayout);
 }
 
+let cachedDisplays = [];
+
+function updateCapacityWarning() {
+  const sel = document.getElementById('arrScreen');
+  const warnEl = document.getElementById('arrCapacityWarning');
+  const descEl = document.getElementById('arrScreenDesc');
+  if (!warnEl) return;
+
+  const selectedVal = sel?.value || 'auto';
+  const runningCount = Object.values(browserStatus || {}).filter(b => b && b.running).length;
+
+  let targetWorkArea = null;
+  let targetName = '';
+  let totalCap = 0;
+
+  if (selectedVal === 'auto' && Array.isArray(cachedDisplays) && cachedDisplays.length > 1) {
+    // Đa màn hình tự động phân bổ: Tính tổng sức chứa tất cả màn hình theo workArea thực tế
+    cachedDisplays.forEach(d => {
+      const w = d.workArea || d.bounds || { width: 1920, height: 1040 };
+      const cols = Math.max(1, Math.floor((w.width - 20 + 10) / 210));
+      const rows = Math.max(1, Math.floor((w.height - 20 + 10) / 190));
+      totalCap += (cols * rows);
+    });
+    targetName = `${cachedDisplays.length} màn hình`;
+    if (descEl) descEl.textContent = '🌐 Tự động tràn qua màn hình phụ khi màn hình hiện tại hết sức chứa.';
+  } else {
+    // Cố định màn hình được chọn: Đọc workArea của màn hình đích chính xác
+    const dispIdx = (selectedVal === 'auto') ? 0 : (parseInt(selectedVal) || 0);
+    const d = (cachedDisplays && cachedDisplays[dispIdx]) || null;
+    targetWorkArea = d?.workArea || d?.bounds || { width: window.screen?.availWidth || 1920, height: window.screen?.availHeight || 1040 };
+    targetName = d?.name || `Màn hình ${dispIdx + 1}`;
+    const cols = Math.max(1, Math.floor((targetWorkArea.width - 20 + 10) / 210));
+    const rows = Math.max(1, Math.floor((targetWorkArea.height - 20 + 10) / 190));
+    totalCap = cols * rows;
+    if (descEl) descEl.textContent = `📌 Cố định toàn bộ cửa sổ tại ${targetName} (${targetWorkArea.width}×${targetWorkArea.height}).`;
+  }
+
+  if (runningCount > totalCap) {
+    const totalPages = Math.ceil(runningCount / Math.max(1, totalCap));
+    warnEl.style.display = 'block';
+    warnEl.innerHTML = `⚠️ <b>Cảnh báo sức chứa màn hình (${targetName}):</b> Bạn đang mở <b>${runningCount}</b> profile, vượt sức chứa tối ưu (<b>${totalCap} ô</b>, ${targetWorkArea ? targetWorkArea.width + '×' + targetWorkArea.height : 'vùng làm việc'}). Hệ thống sẽ tự động kích hoạt phân trang/phân lớp (<b>${totalPages} trang</b>) để chống đè lấn tọa độ.`;
+  } else {
+    warnEl.style.display = 'none';
+  }
+}
+
 async function openArrangeModal() {
+  const sel = document.getElementById('arrScreen');
+  if (sel && !sel.__capacityBound) {
+    sel.addEventListener('change', updateCapacityWarning);
+    sel.__capacityBound = true;
+  }
+
   // Load available displays
   if (API.getDisplays) {
     try {
       const displays = await API.getDisplays();
-      const sel = document.getElementById('arrScreen');
-      if (sel && Array.isArray(displays) && displays.length > 0) {
-        sel.innerHTML = '';
-        displays.forEach((d, idx) => {
-          const opt = document.createElement('option');
-          opt.value = String(d.id !== undefined ? d.id : idx);
-          opt.textContent = d.name || `Màn hình ${idx + 1}`;
-          sel.appendChild(opt);
-        });
+      if (Array.isArray(displays) && displays.length > 0) {
+        cachedDisplays = displays;
+        if (sel) {
+          sel.innerHTML = '';
+          if (displays.length > 1) {
+            const optAuto = document.createElement('option');
+            optAuto.value = 'auto';
+            optAuto.textContent = '🌐 Tự phân bổ nhiều màn hình (Auto-Distribute)';
+            sel.appendChild(optAuto);
+          }
+          displays.forEach((d, idx) => {
+            const opt = document.createElement('option');
+            opt.value = String(idx);
+            const wArea = d.workArea || d.bounds || {};
+            const resTxt = wArea.width ? ` (${wArea.width}×${wArea.height})` : '';
+            opt.textContent = `📌 Cố định: ${d.name || 'Màn hình ' + (idx + 1)}${resTxt}`;
+            sel.appendChild(opt);
+          });
+        }
       }
     } catch(e) {
       console.warn('[Displays Load Error]', e);
@@ -1496,8 +1558,9 @@ async function openArrangeModal() {
           setActiveArrangeMode('autoFit');
         }
 
-        if (s.displayIndex !== undefined) {
-          const sel = document.getElementById('arrScreen');
+        if (s.multiDisplayMode === 'auto' || s.displayIndex === 'auto') {
+          if (sel) sel.value = 'auto';
+        } else if (s.displayIndex !== undefined) {
           if (sel) sel.value = String(s.displayIndex);
         }
         if (s.autoArrangeOnLaunch !== undefined) {
@@ -1526,24 +1589,7 @@ async function openArrangeModal() {
   }
 
   updateArrangeFormState();
-
-  // Kiểm tra sức chứa màn hình để hiển thị cảnh báo
-  const runningCount = Object.values(browserStatus || {}).filter(b => b && b.running).length;
-  const warnEl = document.getElementById('arrCapacityWarning');
-  if (warnEl) {
-    const scrWidth = window.screen?.width || 1920;
-    const scrHeight = window.screen?.height || 1080;
-    const maxCols = Math.max(1, Math.floor((scrWidth - 20 + 10) / 210));
-    const maxRows = Math.max(1, Math.floor((scrHeight - 60 + 10) / 190));
-    const capacity = maxCols * maxRows;
-
-    if (runningCount > capacity) {
-      warnEl.style.display = 'block';
-      warnEl.innerHTML = `⚠️ <b>Cảnh báo sức chứa:</b> Bạn đang mở <b>${runningCount}</b> profile, vượt sức chứa tối ưu (${capacity} ô) của màn hình hiện tại (${scrWidth}×${scrHeight}). Hệ thống Auto Fit sẽ tự động phân lớp phân trang hoặc phân bổ sang màn hình thứ 2 để chống đè lấn.`;
-    } else {
-      warnEl.style.display = 'none';
-    }
-  }
+  updateCapacityWarning();
 
   const overlay = document.getElementById('arrangeModalOverlay');
   if (overlay) {
@@ -1562,7 +1608,42 @@ function closeArrangeModal() {
 }
 
 async function applyArrangeLayout() {
-  const displayIndex = parseInt(document.getElementById('arrScreen')?.value) || 0;
+  const screenVal = document.getElementById('arrScreen')?.value || 'auto';
+  const isAutoDistribute = (screenVal === 'auto');
+  const displayIndex = isAutoDistribute ? 0 : (parseInt(screenVal) || 0);
+  const multiDisplayMode = isAutoDistribute ? 'auto' : 'fixed';
+
+  const mode = currentArrangeMode; // 'autoFit' | 'grid' | 'cascade'
+  const autoAdapt = mode === 'autoFit' || document.getElementById('arrAutoAdapt')?.checked !== false;
+  const startX = parseInt(document.getElementById('arrStartX')?.value) || 10;
+  const startY = parseInt(document.getElementById('arrStartY')?.value) || 10;
+  const winW = parseInt(document.getElementById('arrWinWidth')?.value) || 380;
+  const winH = parseInt(document.getElementById('arrWinHeight')?.value) || 675;
+  const gapX = parseInt(document.getElementById('arrGapX')?.value) || 10;
+  const gapY = parseInt(document.getElementById('arrGapY')?.value) || 10;
+  const gap = gapX;
+  const colsPerRow = parseInt(document.getElementById('arrColsPerRow')?.value) || 3;
+  const autoArrangeOnLaunch = !!document.getElementById('fAutoArrangeOnLaunch')?.checked;
+
+  const opts = {
+    displayIndex,
+    multiDisplayMode,
+    autoDistribute: isAutoDistribute,
+    fixedDisplay: !isAutoDistribute,
+    mode,
+    autoAdapt,
+    startX,
+    startY,
+    winW,
+    winH,
+    windowWidth: winW,
+    windowHeight: winH,
+    gap,
+    gapX,
+    gapY,
+    colsPerRow,
+    autoArrangeOnLaunch,
+  };
   const mode = currentArrangeMode; // 'autoFit' | 'grid' | 'cascade'
   const autoAdapt = mode === 'autoFit' || document.getElementById('arrAutoAdapt')?.checked !== false;
   const startX = parseInt(document.getElementById('arrStartX')?.value) || 10;

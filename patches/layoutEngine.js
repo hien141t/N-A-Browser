@@ -167,12 +167,18 @@ function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null,
     ? opts.displays
     : displays;
 
+  const isFixedDisplay = (opts.multiDisplayMode === 'fixed' || opts.fixedDisplay === true) && opts.displayIndex !== 'auto';
+
   if (displayOverride) {
     targetDisplay = displayOverride;
+  } else if (isFixedDisplay && opts.displayIndex !== undefined && availableDisplays) {
+    // Chế độ Cố định màn hình được chọn: Toàn bộ profile chỉ mở trên màn hình chỉ định
+    const fixedIdx = Math.max(0, Math.min(availableDisplays.length - 1, parseInt(opts.displayIndex) || 0));
+    targetDisplay = availableDisplays[fixedIdx];
   } else if (Array.isArray(availableDisplays) && availableDisplays.length > 1) {
-    // Multi-display distribution: distribute across screens by capacity.
-    // If opts.displayIndex is set (even displayIndex: 0), start from that display and overflow to others!
-    const startDisp = (opts.displayIndex !== undefined && !isNaN(parseInt(opts.displayIndex)) && availableDisplays[parseInt(opts.displayIndex)])
+    // Chế độ Tự phân bổ thông minh nhiều màn hình (Auto-distribute):
+    // Phân bổ lần lượt theo sức chứa của từng màn hình; vượt sức chứa sẽ tràn sang màn tiếp theo
+    const startDisp = (opts.displayIndex !== undefined && opts.displayIndex !== 'auto' && !isNaN(parseInt(opts.displayIndex)) && availableDisplays[parseInt(opts.displayIndex)])
       ? parseInt(opts.displayIndex)
       : 0;
 
@@ -207,7 +213,7 @@ function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null,
       effectiveIndex = overflowIndex % lastCap;
       effectiveTotal = lastCap;
     }
-  } else if (opts.displayIndex !== undefined && availableDisplays && availableDisplays[parseInt(opts.displayIndex)]) {
+  } else if (opts.displayIndex !== undefined && opts.displayIndex !== 'auto' && availableDisplays && availableDisplays[parseInt(opts.displayIndex)]) {
     targetDisplay = availableDisplays[parseInt(opts.displayIndex)];
   }
 
@@ -223,7 +229,13 @@ function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null,
 
   // Check display capacity to prevent crowding and coordinate collisions
   const capacityInfo = getDisplayCapacity(workArea, gapX, gapY, startX, startY);
-  const { maxCols, maxRows, capacity } = capacityInfo;
+  const { maxCols, maxRows } = capacityInfo;
+
+  // Sức chứa thực tế của trang theo lưới Auto Fit (cols * rows thực tế)
+  let { cols: optCols, rows: optRows } = calculateOptimalGridCols(totalRunning, width, height, gapX, startX, maxCols);
+  optCols = Math.min(optCols, maxCols);
+  optRows = Math.min(optRows, maxRows);
+  const capacity = Math.max(1, optCols * optRows);
 
   if (effectiveIndex >= capacity) {
     // Layered Paging (Phân trang phân lớp)
@@ -353,7 +365,21 @@ function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null,
       }
     }
 
-    return { posX, posY, winW, winH, colsPerRow: cols, rows, mode: 'autoFit', pageLayer, displayId: targetDisplay.id || 0 };
+    return {
+      posX,
+      posY,
+      winW,
+      winH,
+      colsPerRow: cols,
+      rows,
+      mode: 'autoFit',
+      page: pageLayer,
+      pageLayer,
+      pageIndex: effectiveIndex,
+      totalPages: Math.max(1, Math.ceil(totalRunning / capacity)),
+      capacity,
+      displayId: targetDisplay.id || 0
+    };
   }
 
   if (mode === 'cascade') {
@@ -449,7 +475,21 @@ function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null,
     }
   }
 
-  return { posX, posY, winW, winH, colsPerRow: cols, rows, mode: 'grid', pageLayer };
+  return {
+    posX,
+    posY,
+    winW,
+    winH,
+    colsPerRow: cols,
+    rows,
+    mode: 'grid',
+    page: pageLayer,
+    pageLayer,
+    pageIndex: effectiveIndex,
+    totalPages: Math.max(1, Math.ceil(totalRunning / capacity)),
+    capacity,
+    displayId: targetDisplay.id || 0
+  };
 }
 
 /**

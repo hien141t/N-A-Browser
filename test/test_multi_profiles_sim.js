@@ -256,6 +256,62 @@ function runMultiProfilesSimulation() {
     });
   }
 
+  // --- 6. Mô phỏng Quy Mô Lớn 50–100 Profiles (True Paging, Chống Tràn & Chống Đè Lấn Tọa Độ) ---
+  console.log('\n--- 6. Mô phỏng Quy Mô Lớn 50–100 Profiles (True Paging) ---');
+  const massiveCounts = [50, 100];
+  for (const count of massiveCounts) {
+    test(`Quy mô lớn ${count} profiles đồng thời: Phân trang thực sự (totalPages > 1), đạt min bounds, KHÔNG đè khít tọa độ`, () => {
+      const profiles = [];
+      for (let i = 0; i < count; i++) {
+        profiles.push({
+          id: `prof_massive_${count}_${i}`,
+          name: `Massive Profile ${i}`,
+          device: sampleDevices[i % sampleDevices.length],
+          orientationLock: orientations[i % orientations.length],
+          diagnosticMode: (i % 5 === 0)
+        });
+      }
+
+      const windows = [];
+      for (let i = 0; i < count; i++) {
+        const pos = calculateGridPosition(i, count, null, { mode: 'autoFit' }, profiles[i], displayFHD);
+        windows.push(pos);
+
+        // Kích thước chuẩn
+        assert(pos.winW >= MIN_WIN_WIDTH, `Profile ${i}: winW (${pos.winW}) < MIN_WIN_WIDTH`);
+        assert(pos.winH >= MIN_WIN_HEIGHT, `Profile ${i}: winH (${pos.winH}) < MIN_WIN_HEIGHT`);
+
+        // Nằm trọn trong workArea
+        assert(pos.posX >= displayFHD.workArea.x, `Profile ${i}: posX âm`);
+        assert(pos.posY >= displayFHD.workArea.y, `Profile ${i}: posY âm`);
+        assert(pos.posX + pos.winW <= displayFHD.workArea.width, `Profile ${i}: Tràn phải`);
+        assert(pos.posY + pos.winH <= displayFHD.workArea.height, `Profile ${i}: Tràn đáy`);
+
+        // Siêu dữ liệu phân trang thực sự (True Paging)
+        assert(pos.totalPages >= 2, `Cần ít nhất 2 trang cho ${count} profiles (hiện tại: ${pos.totalPages})`);
+        assert(pos.page >= 0, 'Số trang hợp lệ');
+        assert(pos.pageIndex < pos.capacity, 'Chỉ mục trong trang phải < sức chứa trang');
+      }
+
+      // Xác minh tuyệt đối KHÔNG có 2 cửa sổ nào có cùng tọa độ (X, Y)
+      const coordSet = new Set();
+      for (let i = 0; i < windows.length; i++) {
+        const key = `${windows[i].posX},${windows[i].posY}`;
+        assert(!coordSet.has(key), `LỖI ĐÈ KHÍT TỌA ĐỘ Ở QUY MÔ ${count} CỬA SỔ: Cửa sổ ${i} trùng tọa độ (${key})`);
+        coordSet.add(key);
+      }
+
+      // Các cửa sổ cùng một trang (page) tuyệt đối không được chồng lấn
+      for (let i = 0; i < windows.length; i++) {
+        for (let j = i + 1; j < windows.length; j++) {
+          if (windows[i].page === windows[j].page) {
+            assert(!isOverlapping(windows[i], windows[j]), `Trùng lấn giữa cửa sổ ${i} và ${j} trên cùng trang ${windows[i].page}`);
+          }
+        }
+      }
+    });
+  }
+
   console.log('\n====================================================');
   console.log(`📊 TỔNG KẾT MULTI-PROFILES SIMULATION: ${passed}/${total} TESTS PASS`);
   console.log('====================================================\n');
