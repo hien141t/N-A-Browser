@@ -303,61 +303,81 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
       }
     } catch(e) {}
 
-    const getContentSize = async () => {
+    const lockedAspect = getLockedAspect(profile, dev);
+    let lastOuterWidth = 0, lastOuterHeight = 0;
+
+    // Native Chrome toolbar is measured once; lock the WEB CONTENT ratio, not the outer window ratio.
+    const getContentSize = async (initial = false) => {
+      let bounds = null;
       try {
-        if (windowId) {
-          const { bounds } = await client.send('Browser.getWindowBounds', { windowId });
-          if (bounds && bounds.width) {
-            return {
-              w: Math.max(Math.round(bounds.width  - uiDeltaX), 1),
-              h: Math.max(Math.round(bounds.height - uiDeltaY), 1),
-            };
-          }
+        if (windowId) bounds = (await client.send('Browser.getWindowBounds', {windowId})).bounds;
+      } catch (e) {}
+      if (!bounds) return {w:Math.max(1,winW-uiDeltaX),h:Math.max(1,winH-uiDeltaY)};
+      let w = Math.max(1,Math.round(bounds.width-uiDeltaX));
+      let h = Math.max(1,Math.round(bounds.height-uiDeltaY));
+      if (lockedAspect && windowId) {
+        // First render respects device width. Later resizes fit INSIDE the user's requested rectangle.
+        if (initial) h = Math.max(1,Math.round(w/lockedAspect));
+        else if (w/h > lockedAspect) w = Math.max(1,Math.floor(h*lockedAspect));
+        else h = Math.max(1,Math.floor(w/lockedAspect));
+        try {
+          const {screen} = require('electron');
+          const display = screen.getDisplayNearestPoint({x:bounds.left||0,y:bounds.top||0});
+          const work = display.workArea;
+          const maxW = Math.max(1,work.x+work.width-(bounds.left||0)-uiDeltaX-6);
+          const maxH = Math.max(1,work.y+work.height-(bounds.top||0)-uiDeltaY-6);
+          const factor=Math.min(1,maxW/w,maxH/h);
+          w=Math.max(1,Math.floor(w*factor)); h=Math.max(1,Math.round(w/lockedAspect));
+        } catch(e) {}
+        const outerW=w+uiDeltaX,outerH=h+uiDeltaY;
+        if (Math.abs(bounds.width-outerW)>2 || Math.abs(bounds.height-outerH)>2) {
+          await client.send('Browser.setWindowBounds', {
+            windowId, bounds: {width:outerW,height:outerH,windowState:'normal'}
+          }).catch(e => console.warn('[CDP] Orientation lock bounds:',e.message));
         }
-      } catch(e) {}
-      return { w: winW, h: winH };
+      }
+      lastOuterWidth=bounds.width; lastOuterHeight=bounds.height;
+      return {w,h};
     };
 
-    const setDeviceMetrics = async (w, h) => {
+    const setDeviceMetrics = async (w,h) => {
+      const landscape = profile?.orientationLock === 'landscape' ||
+        (profile?.orientationLock !== 'portrait' && w > h);
       await client.send('Emulation.setDeviceMetricsOverride', {
-        width:             w,
-        height:            h,
-        deviceScaleFactor: dpr,
-        mobile:            true,
-        screenWidth:       w,   // screen.* = đúng màn hình đang hiển thị
-        screenHeight:      h,
-        positionX:         0,
-        positionY:         0,
+        width:w,height:h,deviceScaleFactor:dpr,mobile:true,
+        screenWidth:w,screenHeight:h,
+        screenOrientation:{type:landscape?'landscapePrimary':'portraitPrimary',angle:landscape?90:0},
+        positionX:0,positionY:0
       });
     };
 
-    const initBounds = await getContentSize();
-    await setDeviceMetrics(initBounds.w, initBounds.h);
+    const initBounds = await getContentSize(true);
+    await setDeviceMetrics(initBounds.w,initBounds.h);
 
-    // ── Theo dõi resize: cập nhật viewport ngay khi người dùng kéo thay đổi kích thước cửa sổ ──
-    let resizeTimer = null;
-    let lastAppliedW = initBounds.w, lastAppliedH = initBounds.h;
+    // Resize sync: locked profiles preserve aspect; free profiles remain responsive.
+    let resizeTimer=null;
+    let lastAppliedW=initBounds.w,lastAppliedH=initBounds.h;
     const syncViewportIfChanged = async () => {
       try {
-        const b = await getContentSize();
-        if (b.w !== lastAppliedW || b.h !== lastAppliedH) {
-          lastAppliedW = b.w; lastAppliedH = b.h;
-          await setDeviceMetrics(b.w, b.h);
-          console.log(`[CDP] 🔄 Viewport resized → ${b.w}x${b.h}`);
+        const b=await getContentSize(false);
+        if(b.w!==lastAppliedW || b.h!==lastAppliedH) {
+          lastAppliedW=b.w;lastAppliedH=b.h;
+          await setDeviceMetrics(b.w,b.h);
+          console.log('[CDP] Viewport resized', b.w,b.h);
         }
-      } catch(e) {}
+      } catch(e) { console.warn('[CDP] Resize:',e.message); }
     };
-    client.on('Browser.windowBoundsChanged', () => {
+    client.on('Browser.windowBoundsChanged',()=>{
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(syncViewportIfChanged, 120); // debounce — tránh spam CDP khi đang kéo resize liên tục
+      resizeTimer=setTimeout(syncViewportIfChanged,150);
     });
-    // Dự phòng: một số build Chromium không phát sự kiện windowBoundsChanged cho page session
-    const resizePoller = setInterval(syncViewportIfChanged, 1000);
-    page.on('close', () => clearInterval(resizePoller));
-    browser.on('disconnected', () => {
-      clearInterval(resizePoller);
-      clearTimeout(resizeTimer);
+    const resizePoller=setInterval(syncViewportIfChanged,1000);
+    page.on('close',()=>clearInterval(resizePoller));
+    browser.on('disconnected',()=>{
+      clearInterval(resizePoller);clearTimeout(resizeTimer);
     });
+
+
 
     // ── 3. User-Agent & Client Hints (Chuẩn Hóa High Entropy) ──
     const isOpera    = ua.includes('OPR/') || ua.includes('Opera/') || dev.browser_type === 'opera' || !!dev.opera_version;
@@ -1558,7 +1578,7 @@ ipcMain.handle('extensions:importPath', async (event, selectedPath) => {
 // Load app settings
 function getAppSettings() {
   const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
-  const defaultSettings = { windowWidth: 380, windowHeight: 675, preset: '380x675' };
+  const defaultSettings = { windowWidth: 380, windowHeight: 675, preset: '380x675', autoArrangeOnLaunch: false, autoAdapt: true };
   if (!fs.existsSync(settingsPath)) return defaultSettings;
   try {
     const loaded = { ...defaultSettings, ...JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) };
@@ -1764,64 +1784,90 @@ ipcMain.handle('displays:get', async () => {
   }
 });
 
-// Calculate window position with Grid or Cascade layout options
-function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null, customOpts = null) {
-  try {
-    const { screen } = require('electron');
-    const displays = screen.getAllDisplays();
-    const settings = getAppSettings();
-    const opts = { ...settings, ...(customOpts || {}) };
+// Calculate aspect-preserving positions for portrait/landscape windows.
+function getLockedAspect(profile, device) {
+ const lock=profile && profile.orientationLock;
+ if(lock!=="portrait" && lock!=="landscape") return null;
+ const custom=profile.customWindow || {};
+ const native=(device || profile.device || {}).viewport || {};
+ const w=Math.max(1,Number(custom.width)||Number(native.width)||380);
+ const h=Math.max(1,Number(custom.height)||Number(native.height)||675);
+ const portrait=Math.min(w,h)/Math.max(w,h);
+ return lock==="landscape" ? 1/portrait : portrait;
+}
 
-    const displayIdx = parseInt(opts.displayIndex) || 0;
-    const targetDisplay = displays[displayIdx] || screen.getPrimaryDisplay();
-    const { x, y, width, height } = targetDisplay.workArea;
+function getPreferredWindowSize(profile, opts, area) {
+ const custom=(profile&&profile.customWindow)||{};
+ const rawW=Number(custom.width)||Number(opts.winW)||Number(opts.windowWidth)||380;
+ const rawH=Number(custom.height)||Number(opts.winH)||Number(opts.windowHeight)||675;
+ const aspect=getLockedAspect(profile,(profile||{}).device);
+ const reserve=125; // estimated native Chrome toolbar; CDP measures the exact inset later
+ let w=Math.max(180,rawW),h=Math.max(220,rawH);
+ if(aspect) {
+   if(profile.orientationLock==="landscape") w=Math.max(rawW,rawH);
+   else w=Math.min(rawW,rawH);
+   h=Math.round(w/aspect+reserve);
+ }
+ const scale=Math.min(1,(area.width-20)/w,(area.height-20)/h);
+ return {w:Math.max(1,Math.round(w*scale)),h:Math.max(1,Math.round(h*scale))};
+}
 
-    const mode = opts.mode || 'grid'; // 'grid' | 'cascade'
-    const autoAdapt = opts.autoAdapt !== false;
-    // Chú ý: dùng || thay vì ?? — parseInt('') trả NaN, mà NaN ?? 10 vẫn là NaN!
-    const startX = parseInt(opts.startX) || 10;
-    const startY = parseInt(opts.startY) || 10;
-    const gapX = parseInt(opts.gapX) || 10;
-    const gapY = parseInt(opts.gapY) || 10;
+function tileWindowLayouts(items,opts,area) {
+ if(!items.length) return [];
+ const n=items.length;
+ const startX=Math.max(0,Number(opts.startX) || 10);
+ const startY=Math.max(0,Number(opts.startY) || 10);
+ const gapX=Math.max(0,Number(opts.gapX) || 10);
+ const gapY=Math.max(0,Number(opts.gapY) || 10);
+ const usableW=Math.max(1,area.width-startX-10);
+ const usableH=Math.max(1,area.height-startY-10);
+ const sizes=items.map(p=>getPreferredWindowSize(p,opts,area));
+ if(opts.mode==="cascade") {
+   return sizes.map((sz,i)=>{
+     const maxX=Math.max(0,usableW-sz.w), maxY=Math.max(0,usableH-sz.h);
+     return {posX:area.x+startX+Math.min(i*gapX,maxX),posY:area.y+startY+Math.min(i*gapY,maxY),
+       winW:sz.w,winH:sz.h,colsPerRow:1,mode:"cascade"};
+   });
+ }
+ const auto=opts.autoAdapt!==false;
+ let best=null;
+ const colsStart=auto?1:Math.max(1,Math.min(n,parseInt(opts.colsPerRow,10)||3));
+ const colsEnd=auto?n:colsStart;
+ for(let cols=colsStart;cols<=colsEnd;cols++){
+   const rows=Math.ceil(n/cols);
+   const cellW=Math.max(1,Math.floor((usableW-gapX*(cols-1))/cols));
+   const cellH=Math.max(1,Math.floor((usableH-gapY*(rows-1))/rows));
+   const cells=sizes.map((s,i)=>{
+     const factor=auto?Math.min(1,cellW/s.w,cellH/s.h):1;
+     const w=Math.max(1,Math.floor(s.w*factor)),h=Math.max(1,Math.floor(s.h*factor));
+     const col=i%cols,row=Math.floor(i/cols);
+     return {posX:area.x+startX+col*(cellW+gapX)+Math.floor(Math.max(0,cellW-w)/2),
+       posY:area.y+startY+row*(cellH+gapY)+Math.floor(Math.max(0,cellH-h)/2),
+       winW:w,winH:h,colsPerRow:cols,mode:"grid"};
+   });
+   const score=cells.reduce((v,c)=>v+c.winW*c.winH,0);
+   if(!best || score>best.score) best={score,cells};
+ }
+ return best.cells;
+}
 
-    let winW = parseInt(opts.winW) || parseInt(opts.windowWidth) || 380;
-    let winH = parseInt(opts.winH) || parseInt(opts.windowHeight) || 675;
-
-    if (profileCustomWin && profileCustomWin.width && profileCustomWin.height) {
-      winW = parseInt(profileCustomWin.width) || winW;
-      winH = parseInt(profileCustomWin.height) || winH;
-    }
-    // Clamp kích thước — chỉ giới hạn trên (không vượt màn hình), tôn trọng giá trị người dùng nhập
-    // Windows/OS sẽ tự enforce minimum vật lý (~112px) nếu giá trị quá nhỏ
-    winW = Math.min(Math.max(winW, 1), width - 50);
-    winH = Math.min(Math.max(winH, 1), height - 40);
-
-    let colsPerRow = parseInt(opts.colsPerRow) || 3;
-    if (autoAdapt) {
-      colsPerRow = Math.max(1, Math.floor((width - startX) / (winW + gapX)));
-    }
-
-    let posX = x + startX;
-    let posY = y + startY;
-
-    if (mode === 'cascade') {
-      posX = x + startX + (index * gapX);
-      posY = y + startY + (index * gapY);
-    } else {
-      const colIndex = index % colsPerRow;
-      const rowIndex = Math.floor(index / colsPerRow);
-      posX = x + startX + (colIndex * (winW + gapX));
-      posY = y + startY + (rowIndex * (winH + gapY));
-    }
-
-    return { posX, posY, winW, winH, colsPerRow, mode };
-  } catch(e) {
-    return { posX: 10 + (index * 20), posY: 10 + (index * 20), winW: 380, winH: 675, colsPerRow: 3, mode: 'grid' };
-  }
+function calculateGridPosition(index, totalRunning=1, profileCustomWin=null, customOpts=null, profile=null) {
+ try {
+   const {screen}=require("electron");
+   const settings=getAppSettings();
+   const opts={...settings,...(customOpts||{})};
+   const displays=screen.getAllDisplays();
+   const area=(displays[parseInt(opts.displayIndex,10)||0]||screen.getPrimaryDisplay()).workArea;
+   const effectiveProfile=profile || {customWindow:profileCustomWin};
+   const positions=tileWindowLayouts(Array.from({length:Math.max(1,totalRunning)},()=>effectiveProfile),opts,area);
+   return positions[Math.max(0,Math.min(index,positions.length-1))];
+ }catch(e){
+   return {posX:10+index*20,posY:10+index*20,winW:380,winH:675,colsPerRow:3,mode:"grid"};
+ }
 }
 
 // Rearrange all currently running browser windows into clean layout
-ipcMain.handle('browser:arrangeWindows', async (event, customOpts = {}) => {
+async function arrangeRunningWindows(customOpts = {}) {
   const runningList = [];
   for (const [id, info] of launchedBrowsers) {
     try {
@@ -1849,12 +1895,24 @@ ipcMain.handle('browser:arrangeWindows', async (event, customOpts = {}) => {
 
   const N = runningList.length;
   const puppeteer = require('puppeteer-core');
+  const {screen} = require('electron');
+  const mergedOpts = {...getAppSettings(),...(customOpts||{})};
+  const areas = screen.getAllDisplays();
+  const area = (areas[parseInt(mergedOpts.displayIndex,10)||0]||screen.getPrimaryDisplay()).workArea;
+  const records = loadProfilesFromDisk();
+  const devices = loadDevicesFromDisk();
+  const deviceList = Array.isArray(devices) ? devices : (devices.devices||[]);
+  const profiles = runningList.map(p => {
+    const profile=records.find(r=>r.id===p.id)||{};
+    return {...profile,device:deviceList.find(d=>d.id===profile.deviceId)||profile.device||{}};
+  });
+  const positions = tileWindowLayouts(profiles,mergedOpts,area);
 
   for (let idx = 0; idx < runningList.length; idx++) {
     const pInfo = runningList[idx];
-    const pos = calculateGridPosition(idx, N, null, customOpts);
+    const pos = positions[idx];
 
-    const profileDir = path.join(APP_DATA_DIR, 'profiles', pInfo.id);
+    const profileDir = path.join(APP_DATA_DIR, 'profiles', profiles[idx].diagnosticMode ? `clean_${pInfo.id}` : pInfo.id);
     setChromiumWindowPreferences(profileDir, pos.posX, pos.posY, pos.winW, pos.winH);
 
     // CDP DevTools Protocol live window move & resize (Works on Windows, Linux, Mac!)
@@ -1888,8 +1946,9 @@ ipcMain.handle('browser:arrangeWindows', async (event, customOpts = {}) => {
     }
   }
 
-  return { ok: true, count: N, mode: customOpts.mode || 'grid' };
-});
+  return { ok: true, count: N, mode: mergedOpts.mode || 'grid', columns: positions[0]?.colsPerRow||1 };
+}
+ipcMain.handle('browser:arrangeWindows', (event, opts = {}) => arrangeRunningWindows(opts));
 
 // ── Helper xác định đường dẫn trình duyệt Chromium / Chrome / CloakHQ ──
 function getSystemBrowserBinary() {
@@ -1983,7 +2042,7 @@ ipcMain.handle('browser:launch', async (event, profile) => {
 
     if (!isDiagnostic) {
       // Fingerprint được tiêm độc quyền và an toàn qua CDP Page.addScriptToEvaluateOnNewDocument (tránh tiêm 2 lần)
-      injectScript = generateFingerprintScript(profile.device);
+      injectScript = generateFingerprintScript(profile.device, profile.orientationLock);
 
       const selectedIds = new Set(Array.isArray(profile.selectedExtensions) ? profile.selectedExtensions : []);
       const allExtsFile = path.join(APP_DATA_DIR, 'extensions.json');
@@ -2036,7 +2095,7 @@ ipcMain.handle('browser:launch', async (event, profile) => {
 
     // Auto-calculate position on screen grid so windows don't overlap
     const runningCount = launchedBrowsers.size;
-    const gridPos = calculateGridPosition(runningCount, runningCount + 1, profile.customWindow);
+    const gridPos = calculateGridPosition(runningCount, runningCount + 1, profile.customWindow, null, profile.device ? profile : {...profile,device});
 
     // ── Kích thước cửa sổ VẬT LÝ = gridPos (nhỏ gọn, có thể resize tự do) ──
     // ── Viewport JS báo cho web    = device.viewport (cố định qua CDP)     ──
@@ -2188,6 +2247,9 @@ ipcMain.handle('browser:launch', async (event, profile) => {
         applyCDPDeviceEmulation(debugPort, profile.device, profile.proxy, winW, winH, targetUrl, profile, injectScript).catch(e => {
           console.error('[CDP Apply Error]', e.message);
         });
+        if (getAppSettings().autoArrangeOnLaunch) {
+          setTimeout(() => arrangeRunningWindows().catch(e=>console.warn('[Auto tile]',e.message)),2500);
+        }
       }, 500);
     });
   } catch (err) {
@@ -2200,6 +2262,9 @@ ipcMain.handle('browser:launch', async (event, profile) => {
 ipcMain.handle('browser:close', async (event, profileId) => {
   try {
     await gracefulCloseProfile(profileId);
+    if (getAppSettings().autoArrangeOnLaunch) {
+      arrangeRunningWindows().catch(e=>console.warn('[Auto tile after close]',e.message));
+    }
     return { ok: true };
   } catch (err) {
     console.error('[Close Browser Error]', err);
@@ -2741,7 +2806,7 @@ ipcMain.handle('app:info', () => ({
 }));
 
 // ── Generate fingerprint injection script (Stealth Native Patch) ──
-function generateFingerprintScript(device) {
+function generateFingerprintScript(device, orientationLock = 'auto') {
   device = device || {};
   const tz = device.timezone || 'Asia/Ho_Chi_Minh';
   const touchPoints = device.max_touch_points || 10;
@@ -2803,6 +2868,8 @@ function generateFingerprintScript(device) {
   const navProto = (typeof Navigator !== 'undefined' && Navigator.prototype) || (typeof navigator !== 'undefined' ? Object.getPrototypeOf(navigator) : {});
   const screenProto = (typeof Screen !== 'undefined' && Screen.prototype) || (typeof screen !== 'undefined' ? Object.getPrototypeOf(screen) : {});
   const deviceSeed = ${deviceSeed};
+  const orientationMode = ${JSON.stringify(orientationLock)};
+  const isLandscapeView = () => orientationMode === 'landscape' || (orientationMode !== 'portrait' && window.innerWidth > window.innerHeight);
 
   // ── ANTI-ANTI-DEBUGGING & F12 DEVTOOLS PROTECTION ──
   // Ngăn chặn các trang game (như winv79, PG Soft...) kích hoạt vòng lặp debugger; đóng băng trang khi bật F12
@@ -3317,12 +3384,12 @@ function generateFingerprintScript(device) {
       if (typeof ScreenOrientation !== 'undefined' && ScreenOrientation.prototype) {
         try {
           Object.defineProperty(ScreenOrientation.prototype, 'type', {
-            get: makeNative(function type() { return 'portrait-primary'; }, 'get type'),
+            get: makeNative(function type() { return isLandscapeView() ? 'landscape-primary' : 'portrait-primary'; }, 'get type'),
             configurable: true,
             enumerable: true
           });
           Object.defineProperty(ScreenOrientation.prototype, 'angle', {
-            get: makeNative(function angle() { return 0; }, 'get angle'),
+            get: makeNative(function angle() { return isLandscapeView() ? 90 : 0; }, 'get angle'),
             configurable: true,
             enumerable: true
           });
@@ -3334,12 +3401,12 @@ function generateFingerprintScript(device) {
       if (screen.orientation) {
         try {
           Object.defineProperty(screen.orientation, 'type', {
-            get: makeNative(function type() { return 'portrait-primary'; }, 'get type'),
+            get: makeNative(function type() { return isLandscapeView() ? 'landscape-primary' : 'portrait-primary'; }, 'get type'),
             configurable: true,
             enumerable: true
           });
           Object.defineProperty(screen.orientation, 'angle', {
-            get: makeNative(function angle() { return 0; }, 'get angle'),
+            get: makeNative(function angle() { return isLandscapeView() ? 90 : 0; }, 'get angle'),
             configurable: true,
             enumerable: true
           });
@@ -3355,7 +3422,7 @@ function generateFingerprintScript(device) {
       try {
         if (typeof window !== 'undefined') {
           Object.defineProperty(window, 'orientation', {
-            get: makeNative(function orientation() { return 0; }, 'get orientation'),
+            get: makeNative(function orientation() { return isLandscapeView() ? 90 : 0; }, 'get orientation'),
             configurable: true,
             enumerable: true
           });
@@ -3677,6 +3744,7 @@ async function handleApiRequest(req, res) {
       language: 'vi-VN',
       selectedExtensions: Array.isArray(selectedExtensions) ? selectedExtensions : [],
       customWindow: customWindow || null,
+      orientationLock: ['auto','portrait','landscape'].includes(body.orientationLock) ? body.orientationLock : 'auto',
       diagnosticMode: isDiag,
       antiDebugger: isAntiDbg,
       startUrl: (startUrl || '').trim(),
@@ -3719,6 +3787,7 @@ async function handleApiRequest(req, res) {
       startUrl: body.startUrl !== undefined ? body.startUrl.trim() : existing.startUrl,
       notes: body.notes !== undefined ? body.notes.trim() : existing.notes,
       customWindow: body.customWindow !== undefined ? body.customWindow : existing.customWindow,
+      orientationLock: ['auto','portrait','landscape'].includes(body.orientationLock) ? body.orientationLock : (existing.orientationLock||'auto'),
       selectedExtensions: Array.isArray(body.selectedExtensions) ? body.selectedExtensions : existing.selectedExtensions,
       diagnosticMode: isDiag,
       antiDebugger: isAntiDbg,
@@ -3807,7 +3876,7 @@ async function handleApiRequest(req, res) {
 
       if (!isDiagnostic) {
         // Fingerprint được tiêm độc quyền và an toàn qua CDP Page.addScriptToEvaluateOnNewDocument (tránh tiêm 2 lần)
-        injectScript = generateFingerprintScript(device);
+        injectScript = generateFingerprintScript(device, profile.orientationLock);
 
         const selectedIds = new Set(Array.isArray(profile.selectedExtensions) ? profile.selectedExtensions : []);
         const allExtsFile = path.join(APP_DATA_DIR, 'extensions.json');
@@ -3828,7 +3897,7 @@ async function handleApiRequest(req, res) {
 
       // Tính vị trí cửa sổ
       const runningCount = launchedBrowsers.size;
-      const gridPos = calculateGridPosition(runningCount, runningCount + 1, profile.customWindow);
+      const gridPos = calculateGridPosition(runningCount, runningCount + 1, profile.customWindow, null, profile.device ? profile : {...profile,device});
       setChromiumWindowPreferences(profileDir, gridPos.posX, gridPos.posY, gridPos.winW, gridPos.winH);
 
       const debugPort = getRandomDebugPort();
@@ -3944,6 +4013,9 @@ async function handleApiRequest(req, res) {
           launchedBrowsers.set(id, { pid: proc.pid, startTime: Date.now(), debugPort });
           // CDP: setup proxy auth → apply emulation → navigate URL thật
           applyCDPDeviceEmulation(debugPort, device, profile.proxy, gridPos.winW, gridPos.winH, startUrl, profile, injectScript).catch(e => {});
+          if (getAppSettings().autoArrangeOnLaunch) {
+            setTimeout(() => arrangeRunningWindows().catch(e=>console.warn('[API Auto tile]',e.message)),2500);
+          }
           // Notify renderer UI
           if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
           console.log(`[API] 🚀 Launched profile "${profile.name}" PID=${proc.pid} debugPort=${debugPort}`);
@@ -3964,6 +4036,9 @@ async function handleApiRequest(req, res) {
     const id = matchStop[1];
     stopLocalProxy(id); // Dừng local proxy server nếu có
     killProfileProcessTree(id);
+    if (getAppSettings().autoArrangeOnLaunch) {
+      arrangeRunningWindows().catch(e=>console.warn('[API Auto tile after stop]',e.message));
+    }
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
     return sendJSON(res, 200, { ok: true, message: `Profile ${id} đã dừng.` });
   }

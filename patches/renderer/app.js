@@ -208,7 +208,7 @@ function setupToolbar() {
     if (typeof syncWithCloud === 'function') await syncWithCloud(ACCESS_CODE);
     toast('🔄 Đã làm mới & đồng bộ hồ sơ', 'info');
   });
-  document.getElementById('btnArrangeWindows')?.addEventListener('click', openArrangeModal);
+  // Arrange button is wired once in setupArrangeModal().
 
   // Đọc chế độ xem đã lưu (Mặc định: List View)
   const savedViewMode = localStorage.getItem('viewMode') || 'list';
@@ -840,6 +840,7 @@ function openNewProfileModal() {
   if (customRow) customRow.style.display = 'none';
   document.getElementById('fWinWidth').value = '380';
   document.getElementById('fWinHeight').value = '675';
+  document.getElementById('fOrientationLock').value = 'auto';
 
   buildDevicePicker();
   buildProfileExtPicker(null); // Pre-select ALL extensions by default
@@ -879,6 +880,8 @@ function openEditProfileModal(profileId) {
       antiDbgEl.disabled = false;
     }
   }
+
+  document.getElementById('fOrientationLock').value = p.orientationLock || 'auto';
 
   // Load Custom Window Size for Profile
   if (p.customWindow && p.customWindow.preset) {
@@ -985,6 +988,7 @@ async function saveProfile() {
       language: 'vi-VN',
       selectedExtensions,
       customWindow,
+      orientationLock: document.getElementById('fOrientationLock')?.value || 'auto',
       diagnosticMode,
       antiDebugger,
       startUrl: document.getElementById('fStartUrl').value.trim(),
@@ -1140,6 +1144,8 @@ async function openArrangeModal() {
       document.getElementById('arrBtnModeGrid')?.classList.toggle('active', s.mode === 'grid');
       document.getElementById('arrBtnModeCascade')?.classList.toggle('active', s.mode === 'cascade');
     }
+    const launchAuto = document.getElementById('arrAutoOnLaunch');
+    if (launchAuto) launchAuto.checked = !!s.autoArrangeOnLaunch;
     if (s.autoAdapt !== undefined) {
       const el = document.getElementById('arrAutoAdapt');
       if (el) el.checked = !!s.autoAdapt;
@@ -1182,7 +1188,8 @@ async function applyArrangeLayout() {
   const gapY = parseInt(document.getElementById('arrGapY')?.value) || 10;
   const colsPerRow = parseInt(document.getElementById('arrColsPerRow')?.value) || 3;
 
-  const opts = { displayIndex, mode, autoAdapt, startX, startY, winW, winH, gapX, gapY, colsPerRow };
+  const autoArrangeOnLaunch = !!document.getElementById('arrAutoOnLaunch')?.checked;
+  const opts = { displayIndex, mode, autoAdapt, autoArrangeOnLaunch, startX, startY, winW, winH, gapX, gapY, colsPerRow };
 
   closeArrangeModal();
 
