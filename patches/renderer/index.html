@@ -945,7 +945,7 @@ print(response.json())</pre>
         <div id="fDimensionDetails" class="dim-preview-card">
           <div>
             <div class="dim-title">
-              <span>🌐</span> <span>Viewport thực tế (CDP Layout):</span>
+              <span>🌐</span> <span>Viewport dự kiến (Expected Viewport):</span>
             </div>
             <div id="fViewportDisplay" class="dim-value vp">
               364 × 805 px
@@ -1175,6 +1175,10 @@ user:pass@113.187.249.232:20028" class="form-input mono" style="font-size:11px;l
           <input type="number" id="arrStartY" value="10" class="form-input num-sm" style="width:75px !important;"/>
           <span class="small muted">px</span>
         </div>
+      </div>
+
+      <!-- Cảnh báo sức chứa màn hình nếu số profile quá lớn -->
+      <div id="arrCapacityWarning" style="display:none; margin: 10px 0; padding: 10px 14px; border-radius: 8px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); color: #fbbf24; font-size: 12px; line-height: 1.5;">
       </div>
 
       <!-- Toggle: Tự động sắp xếp lại khi mở / đóng Profile -->

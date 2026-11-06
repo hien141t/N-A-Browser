@@ -1526,6 +1526,25 @@ async function openArrangeModal() {
   }
 
   updateArrangeFormState();
+
+  // Kiểm tra sức chứa màn hình để hiển thị cảnh báo
+  const runningCount = Object.values(browserStatus || {}).filter(b => b && b.running).length;
+  const warnEl = document.getElementById('arrCapacityWarning');
+  if (warnEl) {
+    const scrWidth = window.screen?.width || 1920;
+    const scrHeight = window.screen?.height || 1080;
+    const maxCols = Math.max(1, Math.floor((scrWidth - 20 + 10) / 210));
+    const maxRows = Math.max(1, Math.floor((scrHeight - 60 + 10) / 190));
+    const capacity = maxCols * maxRows;
+
+    if (runningCount > capacity) {
+      warnEl.style.display = 'block';
+      warnEl.innerHTML = `⚠️ <b>Cảnh báo sức chứa:</b> Bạn đang mở <b>${runningCount}</b> profile, vượt sức chứa tối ưu (${capacity} ô) của màn hình hiện tại (${scrWidth}×${scrHeight}). Hệ thống Auto Fit sẽ tự động phân lớp phân trang hoặc phân bổ sang màn hình thứ 2 để chống đè lấn.`;
+    } else {
+      warnEl.style.display = 'none';
+    }
+  }
+
   const overlay = document.getElementById('arrangeModalOverlay');
   if (overlay) {
     overlay.style.display = 'flex';

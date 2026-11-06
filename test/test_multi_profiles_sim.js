@@ -204,6 +204,58 @@ function runMultiProfilesSimulation() {
     }
   });
 
+  // --- 5. Mô phỏng 15, 20, 25 Profiles Trên Màn Hình Nhỏ 1366x768 (Chống Tràn & Phân Tầng Offset) ---
+  console.log('\n--- 5. Mô phỏng 15, 20, 25 Profiles Trên Màn Hình Nhỏ 1366x768 (Laptop HD) ---');
+  const displayHD = {
+    bounds: { x: 0, y: 0, width: 1366, height: 768 },
+    workArea: { x: 0, y: 0, width: 1366, height: 728 }
+  };
+
+  const highCounts = [15, 20, 25];
+  for (const count of highCounts) {
+    test(`Màn hình 1366x768 với ${count} profiles: Đạt min size, không tràn viền, KHÔNG đè khít tọa độ`, () => {
+      const profiles = [];
+      for (let i = 0; i < count; i++) {
+        profiles.push({
+          id: `prof_hd_${count}_${i}`,
+          name: `Profile HD ${i}`,
+          device: sampleDevices[i % sampleDevices.length],
+          orientationLock: orientations[i % orientations.length],
+          diagnosticMode: (i % 4 === 0)
+        });
+      }
+
+      const windows = [];
+      for (let i = 0; i < count; i++) {
+        const pos = calculateGridPosition(i, count, null, { mode: 'autoFit' }, profiles[i], displayHD);
+        windows.push(pos);
+
+        // Kích thước tối thiểu chuẩn Windows OS
+        assert(pos.winW >= MIN_WIN_WIDTH, `Profile ${i}: winW (${pos.winW}) < MIN_WIN_WIDTH (${MIN_WIN_WIDTH})`);
+        assert(pos.winH >= MIN_WIN_HEIGHT, `Profile ${i}: winH (${pos.winH}) < MIN_WIN_HEIGHT (${MIN_WIN_HEIGHT})`);
+
+        // Không tràn mép màn hình
+        assert(pos.posX >= displayHD.workArea.x, `Profile ${i}: posX (${pos.posX}) âm`);
+        assert(pos.posY >= displayHD.workArea.y, `Profile ${i}: posY (${pos.posY}) âm`);
+        assert(pos.posX + pos.winW <= displayHD.workArea.x + displayHD.workArea.width, `Profile ${i}: Tràn mép phải (${pos.posX + pos.winW} > 1366)`);
+        assert(pos.posY + pos.winH <= displayHD.workArea.y + displayHD.workArea.height, `Profile ${i}: Tràn mép dưới (${pos.posY + pos.winH} > 728)`);
+      }
+
+      // Kiểm tra TUYỆT ĐỐI không có 2 cửa sổ nào bị đè khít cùng tọa độ (X, Y)
+      for (let i = 0; i < windows.length; i++) {
+        for (let j = i + 1; j < windows.length; j++) {
+          const exactSameCoords = (windows[i].posX === windows[j].posX && windows[i].posY === windows[j].posY);
+          assert(!exactSameCoords, `LỖI ĐÈ KHÍT TỌA ĐỘ: Cửa sổ ${i} và ${j} có cùng tọa độ (${windows[i].posX}, ${windows[i].posY})`);
+
+          // Nếu cùng trang/lớp (pageLayer), tuyệt đối không được chồng lấn
+          if (windows[i].pageLayer === windows[j].pageLayer) {
+            assert(!isOverlapping(windows[i], windows[j]), `Cửa sổ ${i} đè lên cửa sổ ${j} trên cùng pageLayer ${windows[i].pageLayer}`);
+          }
+        }
+      }
+    });
+  }
+
   console.log('\n====================================================');
   console.log(`📊 TỔNG KẾT MULTI-PROFILES SIMULATION: ${passed}/${total} TESTS PASS`);
   console.log('====================================================\n');

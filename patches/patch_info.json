@@ -1,7 +1,7 @@
 {
-  "patchNumber": 17,
-  "version": "1.0.17",
-  "title": "Bản vá Hot-Patch #17: Tích hợp hệ thống Dual-Git OTA Updater",
-  "changelog": "Ban va #17: Tich hop he thong Dual-Git OTA Updater - Dong bo tu ca 2 nguon Git hien151306-byte va hien141t",
-  "appliedAt": "2026-09-15T12:27:38.744Z"
+  "patchNumber": 18,
+  "version": "1.0.18",
+  "title": "Bản vá Hot-Patch #18: Phân phối module LayoutEngine, FingerprintGenerator, Bố cục Auto Fit chống tràn & Đồng bộ Viewport",
+  "changelog": "Ban va #18: Phan phoi day du module src/layoutEngine.js va src/fingerprintGenerator.js qua OTA, khac phuc bo cuc man hinh nho vuot qua suc chua, dong bo orientation runtime va chong loi Cannot find module.",
+  "appliedAt": "2026-11-06T22:38:53.908Z"
 }

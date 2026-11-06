@@ -13,18 +13,40 @@ const APP_DATA_DIR = __dirname;
 const SupabaseManager = require("./supabaseManager");
 const supabaseManager = new SupabaseManager(APP_DATA_DIR);
 
+let layoutEngineModule;
+try {
+  layoutEngineModule = require('./src/layoutEngine');
+} catch (e) {
+  try {
+    layoutEngineModule = require('./patches/layoutEngine');
+  } catch (e2) {
+    layoutEngineModule = require('./layoutEngine');
+  }
+}
 const {
   UI_DELTA_X,
   UI_DELTA_Y,
   MIN_WIN_WIDTH,
   MIN_WIN_HEIGHT,
   normalizeDeviceRatio,
+  getDisplayCapacity,
   calculateOptimalGridCols,
   calculateGridPosition: engineCalculateGridPosition,
   computeEmulationState: engineComputeEmulationState,
   getProfileDirectoryName,
-} = require('./src/layoutEngine');
-const { generateFingerprintScript } = require('./src/fingerprintGenerator');
+} = layoutEngineModule;
+
+let fingerprintGeneratorModule;
+try {
+  fingerprintGeneratorModule = require('./src/fingerprintGenerator');
+} catch (e) {
+  try {
+    fingerprintGeneratorModule = require('./patches/fingerprintGenerator');
+  } catch (e2) {
+    fingerprintGeneratorModule = require('./fingerprintGenerator');
+  }
+}
+const { generateFingerprintScript } = fingerprintGeneratorModule;
 
 // ══════════════════════════════════════════════════════════════════
 // ── LOCAL PROXY SERVER (AdsPower/Hidemium style) ──────────────────
@@ -403,6 +425,33 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
         }
 
         await applyMetricsOverride(state.viewportW, state.viewportH, state.screenOrientation);
+
+        // Đồng bộ hóa động runtime screen.orientation trong chế độ 'auto' khi xoay khung hình
+        if (orientationLock === 'auto' && state.screenOrientation) {
+          const currentType = currentMetricsState?.screenOrientation?.type;
+          if (currentType !== state.screenOrientation.type) {
+            console.log(`[CDP] 🔄 Auto Orientation dynamically switched: ${state.screenOrientation.type} (${state.viewportW}x${state.viewportH})`);
+            try {
+              const orientJs = state.isLandscape ? 'landscape-primary' : 'portrait-primary';
+              const orientAngle = state.isLandscape ? 90 : 0;
+              await client.send('Runtime.evaluate', {
+                expression: `(function() {
+                  try {
+                    if (typeof screen !== 'undefined' && screen.orientation) {
+                      Object.defineProperty(screen.orientation, 'type', { get: function() { return "${orientJs}"; }, configurable: true });
+                      Object.defineProperty(screen.orientation, 'angle', { get: function() { return ${orientAngle}; }, configurable: true });
+                    }
+                    if (typeof window !== 'undefined') {
+                      Object.defineProperty(window, 'orientation', { get: function() { return ${orientAngle}; }, configurable: true });
+                      window.dispatchEvent(new Event('orientationchange'));
+                    }
+                  } catch(e){}
+                })()`,
+                returnByValue: true
+              }).catch(() => {});
+            } catch(e){}
+          }
+        }
       } catch(e) {}
     };
 

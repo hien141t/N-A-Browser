@@ -3,9 +3,10 @@
  * Handles:
  * 1. Normalized Device Ratio (minDim / maxDim prevention of landscape-portrait inversion)
  * 2. Optimal Multi-Window Auto Fit Grid calculation for Windows OS
- * 3. CDP Emulation State calculation (Visual Viewport vs Window Bounds)
- * 4. Screen Orientation & Fingerprint generation
- * 5. Diagnostic Mode Profile directory mapping
+ * 3. Screen Capacity limits, Multi-Display distribution & Paging/Layering on overflow
+ * 4. CDP Emulation State calculation (Visual Viewport vs Window Bounds)
+ * 5. Screen Orientation & Fingerprint generation
+ * 6. Diagnostic Mode Profile directory mapping
  */
 
 const UI_DELTA_X = 16;  // Chromium window borders on Windows OS
@@ -64,8 +65,25 @@ function normalizeDeviceRatio(device = {}, orientationLock = 'auto') {
 }
 
 /**
+ * Calculates max capacity (maxCols, maxRows, totalCapacity) for a workArea
+ * taking into account Windows OS minimum window bounds and gaps.
+ */
+function getDisplayCapacity(workArea, gapX = 10, gapY = 10, startX = 10, startY = 10) {
+  const w = workArea.width || 1920;
+  const h = workArea.height || 1080;
+  const availW = Math.max(MIN_WIN_WIDTH, w - (startX * 2));
+  const availH = Math.max(MIN_WIN_HEIGHT, h - (startY * 2));
+
+  const maxCols = Math.max(1, Math.floor((availW + gapX) / (MIN_WIN_WIDTH + gapX)));
+  const maxRows = Math.max(1, Math.floor((availH + gapY) / (MIN_WIN_HEIGHT + gapY)));
+  const capacity = maxCols * maxRows;
+
+  return { maxCols, maxRows, capacity };
+}
+
+/**
  * Calculates optimal columns and rows for Auto Fit mode.
- * Adapts to screen workArea, total count, orientation, and Windows OS minimum limits.
+ * Deterministic for all windows in the same grid layout.
  */
 function calculateOptimalGridCols(total, workAreaWidth, workAreaHeight, gapX = 10, startX = 10) {
   const N = Math.max(1, total);
@@ -105,6 +123,7 @@ function calculateOptimalGridCols(total, workAreaWidth, workAreaHeight, gapX = 1
 
 /**
  * Core production algorithm to calculate window bounds and grid placement.
+ * Includes Multi-Display overflow distribution and Layered Paging on single screens.
  */
 function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null, customOpts = null, profile = null, displayOverride = null) {
   let displays = [];
@@ -116,15 +135,60 @@ function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null,
   } catch (e) {}
 
   const opts = { ...(customOpts || {}) };
-  const displayIdx = parseInt(opts.displayIndex) || 0;
+  const gap = opts.gap !== undefined ? parseInt(opts.gap) : (opts.gapX !== undefined ? parseInt(opts.gapX) : 10);
+  const gapX = opts.gapX !== undefined ? parseInt(opts.gapX) : (isNaN(gap) ? 10 : gap);
+  const gapY = opts.gapY !== undefined ? parseInt(opts.gapY) : (isNaN(gap) ? 10 : gap);
+  const startX = opts.startX !== undefined ? parseInt(opts.startX) : gapX;
+  const startY = opts.startY !== undefined ? parseInt(opts.startY) : gapY;
 
-  const targetDisplay = displayOverride || (displays && displays[displayIdx]) || {
-    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
-    workArea: { x: 0, y: 0, width: 1920, height: 1080 }
-  };
+  // Determine target display workArea
+  let targetDisplay = null;
+  let effectiveIndex = index;
+  let effectiveTotal = totalRunning;
+  let pageLayer = 0;
+
+  if (displayOverride) {
+    targetDisplay = displayOverride;
+  } else if (opts.displayIndex !== undefined && displays && displays[parseInt(opts.displayIndex)]) {
+    targetDisplay = displays[parseInt(opts.displayIndex)];
+  } else if (Array.isArray(displays) && displays.length > 1) {
+    // Multi-display distribution: distribute across screens by capacity
+    let accCapacity = 0;
+    for (let d = 0; d < displays.length; d++) {
+      const dWork = displays[d].workArea || displays[d].bounds;
+      const dCap = getDisplayCapacity(dWork, gapX, gapY, startX, startY).capacity;
+      if (index < accCapacity + dCap || d === displays.length - 1) {
+        targetDisplay = displays[d];
+        effectiveIndex = index - accCapacity;
+        effectiveTotal = Math.min(totalRunning - accCapacity, dCap);
+        break;
+      }
+      accCapacity += dCap;
+    }
+  }
+
+  if (!targetDisplay) {
+    targetDisplay = (displays && displays[0]) || {
+      bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+      workArea: { x: 0, y: 0, width: 1920, height: 1080 }
+    };
+  }
 
   const workArea = targetDisplay.workArea || targetDisplay.bounds || { x: 0, y: 0, width: 1920, height: 1080 };
   const { x, y, width, height } = workArea;
+
+  // Check display capacity to prevent crowding and coordinate collisions
+  const capacityInfo = getDisplayCapacity(workArea, gapX, gapY, startX, startY);
+  const { maxCols, maxRows, capacity } = capacityInfo;
+
+  if (effectiveIndex >= capacity) {
+    // Layered Paging (Phân trang phân lớp)
+    pageLayer = Math.floor(effectiveIndex / capacity);
+    effectiveIndex = effectiveIndex % capacity;
+    effectiveTotal = Math.min(totalRunning - pageLayer * capacity, capacity);
+  } else if (totalRunning > capacity) {
+    effectiveTotal = capacity;
+  }
 
   const actualProfile = profile || (profileCustomWin && (profileCustomWin.id || profileCustomWin.device || profileCustomWin.deviceId) ? profileCustomWin : null);
   const customWin = (profileCustomWin && profileCustomWin.width && profileCustomWin.height) ? profileCustomWin : (actualProfile ? actualProfile.customWindow : null);
@@ -160,12 +224,6 @@ function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null,
 
   const mode = opts.mode || opts.layoutMode || 'autoFit'; // 'autoFit' | 'grid' | 'cascade'
 
-  const gap = opts.gap !== undefined ? parseInt(opts.gap) : (opts.gapX !== undefined ? parseInt(opts.gapX) : 10);
-  const gapX = opts.gapX !== undefined ? parseInt(opts.gapX) : (isNaN(gap) ? 10 : gap);
-  const gapY = opts.gapY !== undefined ? parseInt(opts.gapY) : (isNaN(gap) ? 10 : gap);
-  const startX = opts.startX !== undefined ? parseInt(opts.startX) : gapX;
-  const startY = opts.startY !== undefined ? parseInt(opts.startY) : gapY;
-
   let posX = x + startX;
   let posY = y + startY;
   let winW = parseInt(opts.winW) || parseInt(opts.windowWidth) || 380;
@@ -177,12 +235,18 @@ function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null,
   }
 
   if (mode === 'autoFit') {
-    const total = Math.max(1, totalRunning);
-    const { cols, rows } = calculateOptimalGridCols(total, width, height, gapX, startX);
+    const totalInPage = Math.max(1, effectiveTotal);
+    let { cols, rows } = calculateOptimalGridCols(totalInPage, width, height, gapX, startX);
+    // Strict clamp: cols and rows must never exceed max screen capacity
+    cols = Math.min(cols, maxCols);
+    rows = Math.min(rows, maxRows);
 
-    const availAreaW = width - (startX * 2) - (cols - 1) * gapX;
+    // Page Layer offset (phân trang phân lớp khi số cửa sổ vượt sức chứa)
+    const pageOffset = (pageLayer % 5) * 24;
+
+    const availAreaW = width - (startX * 2) - pageOffset - (cols - 1) * gapX;
     const cellW = Math.max(MIN_WIN_WIDTH, Math.floor(availAreaW / cols));
-    const availAreaH = height - (startY * 2) - (rows - 1) * gapY;
+    const availAreaH = height - (startY * 2) - pageOffset - (rows - 1) * gapY;
     const cellH = Math.max(MIN_WIN_HEIGHT, Math.floor(availAreaH / rows));
 
     if (orientationLock === 'portrait') {
@@ -221,19 +285,31 @@ function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null,
     winW = Math.min(winW, width - startX);
     winH = Math.min(winH, height - startY);
 
-    const colIndex = index % cols;
-    const rowIndex = Math.floor(index / cols);
+    const colIndex = effectiveIndex % cols;
+    const rowIndex = Math.floor(effectiveIndex / cols);
 
-    const cellX = x + startX + (colIndex * (cellW + gapX));
-    const cellY = y + startY + (rowIndex * (cellH + gapY));
+    const cellX = x + startX + pageOffset + (colIndex * (cellW + gapX));
+    const cellY = y + startY + pageOffset + (rowIndex * (cellH + gapY));
 
     posX = cellX;
     posY = cellY;
 
-    if (posX + winW > x + width) posX = Math.max(x, x + width - winW);
-    if (posY + winH > y + height) posY = Math.max(y, y + height - winH);
+    const maxBoundX = x + width - ((pageLayer % 5) * 12);
+    const maxBoundY = y + height - ((pageLayer % 5) * 12);
+    if (posX + winW > maxBoundX) {
+      posX = Math.max(cellX, maxBoundX - winW);
+      if (posX + winW > maxBoundX) {
+        winW = Math.max(MIN_WIN_WIDTH, maxBoundX - posX);
+      }
+    }
+    if (posY + winH > maxBoundY) {
+      posY = Math.max(cellY, maxBoundY - winH);
+      if (posY + winH > maxBoundY) {
+        winH = Math.max(MIN_WIN_HEIGHT, maxBoundY - posY);
+      }
+    }
 
-    return { posX, posY, winW, winH, colsPerRow: cols, rows, mode: 'autoFit' };
+    return { posX, posY, winW, winH, colsPerRow: cols, rows, mode: 'autoFit', pageLayer, displayId: targetDisplay.id || 0 };
   }
 
   if (mode === 'cascade') {
@@ -262,12 +338,14 @@ function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null,
   }
 
   // mode === 'grid' (Manual column selection)
-  const cols = Math.max(1, parseInt(opts.cols) || 3);
-  const rows = Math.ceil(Math.max(1, totalRunning) / cols);
+  const cols = Math.min(maxCols, Math.max(1, parseInt(opts.cols) || 3));
+  const rows = Math.min(maxRows, Math.ceil(Math.max(1, effectiveTotal) / cols));
 
-  const availW = width - (startX * 2) - (cols - 1) * gapX;
+  const pageOffset = (pageLayer % 5) * 24;
+
+  const availW = width - (startX * 2) - pageOffset - (cols - 1) * gapX;
   const cellW = Math.max(MIN_WIN_WIDTH, Math.floor(availW / cols));
-  const availH = height - (startY * 2) - (rows - 1) * gapY;
+  const availH = height - (startY * 2) - pageOffset - (rows - 1) * gapY;
   const cellH = Math.max(MIN_WIN_HEIGHT, Math.floor(availH / rows));
 
   if (opts.autoAdaptRatio !== false) {
@@ -303,16 +381,31 @@ function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null,
   winW = Math.min(winW, width - startX);
   winH = Math.min(winH, height - startY);
 
-  const cIdx = index % cols;
-  const rIdx = Math.floor(index / cols);
+  const cIdx = effectiveIndex % cols;
+  const rIdx = Math.floor(effectiveIndex / cols);
 
-  posX = x + startX + (cIdx * (cellW + gapX));
-  posY = y + startY + (rIdx * (cellH + gapY));
+  const cellX = x + startX + pageOffset + (cIdx * (cellW + gapX));
+  const cellY = y + startY + pageOffset + (rIdx * (cellH + gapY));
 
-  if (posX + winW > x + width) posX = Math.max(x, x + width - winW);
-  if (posY + winH > y + height) posY = Math.max(y, y + height - winH);
+  posX = cellX;
+  posY = cellY;
 
-  return { posX, posY, winW, winH, colsPerRow: cols, rows, mode: 'grid' };
+  const maxBoundX = x + width - ((pageLayer % 5) * 12);
+  const maxBoundY = y + height - ((pageLayer % 5) * 12);
+  if (posX + winW > maxBoundX) {
+    posX = Math.max(cellX, maxBoundX - winW);
+    if (posX + winW > maxBoundX) {
+      winW = Math.max(MIN_WIN_WIDTH, maxBoundX - posX);
+    }
+  }
+  if (posY + winH > maxBoundY) {
+    posY = Math.max(cellY, maxBoundY - winH);
+    if (posY + winH > maxBoundY) {
+      winH = Math.max(MIN_WIN_HEIGHT, maxBoundY - posY);
+    }
+  }
+
+  return { posX, posY, winW, winH, colsPerRow: cols, rows, mode: 'grid', pageLayer };
 }
 
 /**
@@ -335,15 +428,17 @@ function computeEmulationState({
   if (orientationLock === 'auto') {
     const contentW = Math.max(100, Math.round(currentWinW - uiDeltaX));
     const contentH = Math.max(100, Math.round(currentWinH - uiDeltaY));
-    const screenOrientation = (contentW < contentH)
-      ? { type: 'portraitPrimary', angle: 0 }
-      : { type: 'landscapePrimary', angle: 90 };
+    const isLandscape = (contentW >= contentH);
+    const screenOrientation = isLandscape
+      ? { type: 'landscapePrimary', angle: 90, jsType: 'landscape-primary' }
+      : { type: 'portraitPrimary', angle: 0, jsType: 'portrait-primary' };
     return {
       viewportW: contentW,
       viewportH: contentH,
       targetWinW: currentWinW,
       targetWinH: currentWinH,
       screenOrientation,
+      isLandscape,
       needsResize: false
     };
   }
@@ -351,8 +446,8 @@ function computeEmulationState({
   const isLandscape = orientationLock === 'landscape';
   const targetRatio = isLandscape ? norm.landscapeRatio : norm.portraitRatio;
   const screenOrientation = isLandscape
-    ? { type: 'landscapePrimary', angle: 90 }
-    : { type: 'portraitPrimary', angle: 0 };
+    ? { type: 'landscapePrimary', angle: 90, jsType: 'landscape-primary' }
+    : { type: 'portraitPrimary', angle: 0, jsType: 'portrait-primary' };
 
   const deltaW = Math.abs(currentWinW - lastKnownWinW);
   const deltaH = Math.abs(currentWinH - lastKnownWinH);
@@ -384,6 +479,7 @@ function computeEmulationState({
     targetWinW,
     targetWinH,
     screenOrientation,
+    isLandscape,
     needsResize
   };
 }
@@ -402,6 +498,7 @@ module.exports = {
   MIN_WIN_WIDTH,
   MIN_WIN_HEIGHT,
   normalizeDeviceRatio,
+  getDisplayCapacity,
   calculateOptimalGridCols,
   calculateGridPosition,
   computeEmulationState,

@@ -22,10 +22,10 @@ if (fs.existsSync(manifestPath)) {
 }
 
 const nextPatchNum = (manifest.patchNumber || 6) + 1;
-const rawBaseRenderer = 'https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/renderer/';
-const rawBaseExt = 'https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/custom_extensions/';
-const rawBaseIcons = 'https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/profile_icons/';
-const rawBasePatches = 'https://raw.githubusercontent.com/hien151306-byte/N-A-Browser/main/patches/';
+const rawBaseRenderer = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/renderer/';
+const rawBaseExt = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/custom_extensions/';
+const rawBaseIcons = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/profile_icons/';
+const rawBasePatches = 'https://raw.githubusercontent.com/hien141t/N-A-Browser/main/patches/';
 
 fs.mkdirSync(patchesRendererDir, { recursive: true });
 fs.mkdirSync(patchesExtDir, { recursive: true });
@@ -108,6 +108,34 @@ coreScripts.forEach(f => {
   }
 });
 console.log('✅ Đã nạp mã nguồn chính (main.js, ps1 scripts) vào bản vá');
+
+// 2b. Copy src modules (layoutEngine.js, fingerprintGenerator.js, devices.json)
+const srcModules = ['layoutEngine.js', 'fingerprintGenerator.js', 'devices.json'];
+const patchesSrcDir = path.join(patchesDir, 'src');
+fs.mkdirSync(patchesSrcDir, { recursive: true });
+
+srcModules.forEach(f => {
+  const src = path.join(rootDir, 'src', f);
+  const destInSrc = path.join(patchesSrcDir, f);
+  const destInRoot = path.join(patchesDir, f);
+  if (fs.existsSync(src)) {
+    fs.copyFileSync(src, destInSrc);
+    fs.copyFileSync(src, destInRoot);
+    // Ghi vào src/ trên máy người dùng khi nâng cấp OTA
+    patchFilesList.push({
+      filename: f,
+      dest: 'src/' + f,
+      url: rawBasePatches + 'src/' + f
+    });
+    // Đồng thời dự phòng trong patches/
+    patchFilesList.push({
+      filename: f,
+      dest: 'patches/' + f,
+      url: rawBasePatches + f
+    });
+  }
+});
+console.log('✅ Đã nạp các module phụ thuộc mới (layoutEngine.js, fingerprintGenerator.js) vào bản vá');
 
 // 3. Copy Profile Icons & Overlay Badges
 const iconDir = path.join(rootDir, 'profile_icons');

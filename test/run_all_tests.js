@@ -7,6 +7,8 @@
  * 4. Clean Diagnostic Mode & Directory Isolation (clean_<id>)
  * 5. API & IPC Compatibility Audit
  * 6. Live Chromium / CDP Emulation (innerWidth, innerHeight, screen.orientation)
+ * 7. Multi-Window 5-25 Profiles Simulation (Capacity, Layered Offset, Windows OS limits)
+ * 8. Hot-Patch OTA Upgrade & Module Distribution (Patch #18, Manifest, Client Simulation)
  */
 
 const { runGridMathTests } = require('./test_grid_math');
@@ -16,6 +18,7 @@ const { runDiagnosticModeTests } = require('./test_diagnostic_mode');
 const { runApiCompatibilityTests } = require('./test_api_compatibility');
 const { runChromiumEmulationTests } = require('./test_chromium_emulation_live');
 const { runMultiProfilesSimulation } = require('./test_multi_profiles_sim');
+const { runOtaUpgradeTests } = require('./test_ota_upgrade');
 
 async function main() {
   console.log('############################################################');
@@ -48,9 +51,13 @@ async function main() {
   const liveRes = await runChromiumEmulationTests();
   results.push({ name: 'Live Chromium CDP Emulation', ...liveRes });
 
-  // 7. Multi-Profiles Simultaneous Simulation (5-10 profiles)
+  // 7. Multi-Profiles Simultaneous Simulation (5-25 profiles)
   const simRes = runMultiProfilesSimulation();
-  results.push({ name: 'Multi-Window 5-10 Profiles Sim', ...simRes });
+  results.push({ name: 'Multi-Window 5-25 Profiles Sim', ...simRes });
+
+  // 8. Hot-Patch OTA Upgrade & Module Distribution
+  const otaRes = runOtaUpgradeTests();
+  results.push({ name: 'OTA Patch #18 Distribution', ...otaRes });
 
   console.log('============================================================');
   console.log('                 BẢNG TỔNG KẾT KẾT QUẢ KIỂM THỬ             ');
@@ -75,7 +82,7 @@ async function main() {
   console.log('============================================================\n');
 
   if (passedAll === totalAll) {
-    console.log('🎉 TẤT CẢ 6 BỘ KIỂM THỬ ĐÃ PASS 100%!');
+    console.log('🎉 TẤT CẢ 8 BỘ KIỂM THỬ ĐÃ PASS 100%!');
   } else {
     console.log(`⚠️ CÓ ${totalAll - passedAll} TEST FAILED! Cần kiểm tra lại.`);
   }
