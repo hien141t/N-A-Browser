@@ -845,7 +845,7 @@ print(response.json())</pre>
       </div>
       <!-- Custom Window Size for Profile -->
       <div class="form-group">
-        <label>Kích Thước Cửa Sổ Trình Duyệt <span class="optional">(Chỉnh khung hình riêng cho Profile này)</span></label>
+        <label>Kích Thước Vùng Web Mong Muốn <span class="optional">(Chrome sẽ cộng thêm chiều cao thanh công cụ khi khóa hướng)</span></label>
         <div style="display:flex;gap:10px;align-items:center">
           <select id="fWinPreset" class="form-select" style="flex:1">
             <option value="default">🌐 Mặc định theo Cài đặt chung (App Settings)</option>
@@ -863,6 +863,14 @@ print(response.json())</pre>
           <span style="color:var(--txt3)">×</span>
           <input type="number" id="fWinHeight" placeholder="Height (px)" class="form-input" style="flex:1;text-align:center" value="675"/>
         </div>
+      </div>
+      <div class="form-group">
+        <label>Khóa hướng màn hình <span class="optional">(Giữ đúng tỷ lệ vùng web khi đổi kích thước)</span></label>
+        <select id="fOrientationLock" class="form-select">
+          <option value="auto">↔ Tự do (Responsive)</option>
+          <option value="portrait">📱 Khóa chiều dọc (Portrait)</option>
+          <option value="landscape">🖥 Khóa chiều ngang (Landscape)</option>
+        </select>
       </div>
       <!-- Extensions Selection -->
       <div class="form-group">
@@ -1008,6 +1016,13 @@ user:pass@113.187.249.232:20028" class="form-input mono" style="font-size:11px;l
             <span class="toggle-slider"></span>
           </label>
           <span class="small muted">Tự động sắp xếp các cấu hình đã chọn theo độ phân giải màn hình của bạn</span>
+        </div>
+      </div>
+      <div class="form-group-row">
+        <label class="fg-label">Tự xếp khi mở</label>
+        <div style="flex:1;display:flex;align-items:center;gap:10px">
+          <label class="toggle"><input type="checkbox" id="arrAutoOnLaunch"/><span class="toggle-slider"></span></label>
+          <span class="small muted">Tự cân lại tất cả cửa sổ khi mở thêm profile (ưu tiên bật Thích nghi)</span>
         </div>
       </div>
       <!-- Vị trí bắt đầu -->
