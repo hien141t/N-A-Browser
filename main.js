@@ -2262,6 +2262,9 @@ ipcMain.handle('browser:launch', async (event, profile) => {
 ipcMain.handle('browser:close', async (event, profileId) => {
   try {
     await gracefulCloseProfile(profileId);
+    if (getAppSettings().autoArrangeOnLaunch) {
+      arrangeRunningWindows().catch(e=>console.warn('[Auto tile after close]',e.message));
+    }
     return { ok: true };
   } catch (err) {
     console.error('[Close Browser Error]', err);
@@ -4033,6 +4036,9 @@ async function handleApiRequest(req, res) {
     const id = matchStop[1];
     stopLocalProxy(id); // Dừng local proxy server nếu có
     killProfileProcessTree(id);
+    if (getAppSettings().autoArrangeOnLaunch) {
+      arrangeRunningWindows().catch(e=>console.warn('[API Auto tile after stop]',e.message));
+    }
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
     return sendJSON(res, 200, { ok: true, message: `Profile ${id} đã dừng.` });
   }
