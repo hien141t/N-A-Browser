@@ -8,6 +8,61 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="style.css"/>
+  <style>
+    .ratio-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+      background: rgba(99,102,241,0.2);
+      border: 1px solid rgba(99,102,241,0.45);
+      color: #a5b4fc;
+      letter-spacing: 0.02em;
+      transition: all 0.2s ease;
+    }
+    .dim-preview-card {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 12px 14px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 10px;
+    }
+    .dim-title {
+      font-size: 11px;
+      color: var(--txt3);
+      margin-bottom: 3px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .dim-value {
+      font-size: 14px;
+      font-weight: 700;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .dim-value.vp { color: #06d6a0; }
+    .dim-value.win { color: #38bdf8; }
+    .seg-btn.active {
+      background: linear-gradient(135deg, #6366f1, #4f46e5) !important;
+      color: #fff !important;
+      box-shadow: 0 2px 10px rgba(99,102,241,0.4) !important;
+    }
+    .mode-desc-box {
+      font-size: 11px;
+      color: var(--txt2);
+      line-height: 1.5;
+      background: rgba(255,255,255,0.03);
+      border: 1px dashed rgba(255,255,255,0.1);
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-top: 4px;
+    }
+  </style>
 </head>
 <body>
 
@@ -843,25 +898,67 @@ print(response.json())</pre>
           <option value="angiang">🇻🇳 An Giang</option>
         </select>
       </div>
-      <!-- Custom Window Size for Profile -->
+      <!-- Hướng màn hình (Orientation Lock) -->
       <div class="form-group">
-        <label>Kích Thước Cửa Sổ Trình Duyệt <span class="optional">(Chỉnh khung hình riêng cho Profile này)</span></label>
-        <div style="display:flex;gap:10px;align-items:center">
+        <label>Hướng màn hình (Orientation Lock) <span class="optional">(Cố định tỷ lệ hiển thị khi mở hoặc resize)</span></label>
+        <select id="fOrientationLock" class="form-select">
+          <option value="auto">🔄 Tự do (Auto — Thay đổi tự do theo hướng kéo)</option>
+          <option value="portrait" selected>📱 Khóa dọc (Portrait — Chuẩn điện thoại)</option>
+          <option value="landscape">🖥️ Khóa ngang (Landscape — Xoay ngang màn hình)</option>
+        </select>
+      </div>
+      <!-- Kích thước khung hình & Viewport -->
+      <div class="form-group" style="background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 12px; padding: 14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <label style="margin:0; font-weight:700; color:#fff; font-size:13px; display:flex; align-items:center; gap:6px;">
+            📐 Kích Thước Khung Hình & Viewport
+          </label>
+          <span id="fRatioBadge" class="ratio-badge">
+            Tỷ lệ 9:20
+          </span>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
           <select id="fWinPreset" class="form-select" style="flex:1">
-            <option value="default">🌐 Mặc định theo Cài đặt chung (App Settings)</option>
+            <option value="device">📱 Theo thiết bị (Device Default)</option>
+            <option value="412x915">📱 Samsung Galaxy (412 × 915 px)</option>
+            <option value="393x852">🍎 iPhone 14/15 Pro (393 × 852 px)</option>
+            <option value="393x873">📱 Xiaomi Mi 11 (393 × 873 px)</option>
+            <option value="810x1080">📟 iPad (810 × 1080 px)</option>
+            <option value="440x956">🍎 iPhone 15/16 Pro Max (440 × 956 px)</option>
             <option value="380x675">📱 4.0 inch Compact (380 × 675 px)</option>
-            <option value="393x852">🍎 iPhone 15/16 Pro (393 × 852 px)</option>
-            <option value="412x915">📱 Galaxy S24 / Pixel (412 × 915 px)</option>
-            <option value="440x956">🍎 iPhone 16 Pro Max (440 × 956 px)</option>
-            <option value="820x1180">📟 iPad Air / Tablet (820 × 1180 px)</option>
             <option value="1024x1366">📟 iPad Pro 13" (1024 × 1366 px)</option>
             <option value="custom">⚙️ Tùy chỉnh (Custom Width × Height)</option>
+            <option value="default">🌐 Theo cài đặt chung (App Settings)</option>
           </select>
         </div>
-        <div class="win-custom-row" id="fWinCustomRow" style="display:none;margin-top:8px;gap:10px;align-items:center">
-          <input type="number" id="fWinWidth" placeholder="Width (px)" class="form-input" style="flex:1;text-align:center" value="380"/>
-          <span style="color:var(--txt3)">×</span>
-          <input type="number" id="fWinHeight" placeholder="Height (px)" class="form-input" style="flex:1;text-align:center" value="675"/>
+        <div class="win-custom-row" id="fWinCustomRow" style="display:none; margin-bottom:12px; gap:10px; align-items:center;">
+          <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+            <span style="font-size:11px; color:var(--txt3);">Chiều rộng (Width px):</span>
+            <input type="number" id="fWinWidth" placeholder="Width" class="form-input" style="text-align:center;" value="412"/>
+          </div>
+          <span style="color:var(--txt3); font-size:16px; margin-top:16px;">×</span>
+          <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+            <span style="font-size:11px; color:var(--txt3);">Chiều cao (Height px):</span>
+            <input type="number" id="fWinHeight" placeholder="Height" class="form-input" style="text-align:center;" value="915"/>
+          </div>
+        </div>
+        <div id="fDimensionDetails" class="dim-preview-card">
+          <div>
+            <div class="dim-title">
+              <span>🌐</span> <span>Vùng hiển thị web (Viewport):</span>
+            </div>
+            <div id="fViewportDisplay" class="dim-value vp">
+              412 × 915 px
+            </div>
+          </div>
+          <div>
+            <div class="dim-title">
+              <span>🪟</span> <span>Cửa sổ trình duyệt (Window):</span>
+            </div>
+            <div id="fWindowDisplay" class="dim-value win">
+              412 × 915 px
+            </div>
+          </div>
         </div>
       </div>
       <!-- Extensions Selection -->
@@ -978,82 +1075,129 @@ user:pass@113.187.249.232:20028" class="form-input mono" style="font-size:11px;l
 
 <!-- ══ ARRANGE WINDOWS LAYOUT MODAL (Tùy chỉnh cài đặt bố cục) ══ -->
 <div class="modal-overlay" id="arrangeModalOverlay">
-  <div class="modal-card" style="max-width: 560px">
+  <div class="modal-card" style="max-width: 580px">
     <div class="modal-header">
-      <h3 id="arrangeModalTitle">Tùy chỉnh cài đặt</h3>
+      <h3 id="arrangeModalTitle">📐 Sắp xếp cửa sổ (Arrange Windows)</h3>
       <button class="modal-close" id="arrangeModalClose">✕</button>
     </div>
     <div class="modal-body" style="display:flex;flex-direction:column;gap:16px">
-      <!-- Màn hình -->
+      <!-- Màn hình hiển thị -->
       <div class="form-group-row">
-        <label class="fg-label">Màn hình</label>
+        <label class="fg-label">Màn hình hiển thị</label>
         <select id="arrScreen" class="form-select" style="flex:1">
-          <option value="0">Màn hình chính</option>
+          <option value="0">Màn hình 1 (Chính)</option>
         </select>
       </div>
-      <!-- Cách trình bày -->
-      <div class="form-group-row">
-        <label class="fg-label">Cách trình bày</label>
-        <div class="segmented-toggle">
-          <button class="seg-btn active" id="arrBtnModeGrid" data-mode="grid">Bố cục lưới</button>
-          <button class="seg-btn" id="arrBtnModeCascade" data-mode="cascade">Chồng chéo</button>
+
+      <!-- Chế độ sắp xếp -->
+      <div class="form-group-row" style="align-items:flex-start;">
+        <label class="fg-label" style="margin-top:6px;">Chế độ sắp xếp</label>
+        <div style="flex:1; display:flex; flex-direction:column; gap:6px;">
+          <div class="segmented-toggle" style="width:100%; display:flex;">
+            <button type="button" class="seg-btn active" id="arrBtnModeAutoFit" data-mode="autoFit" style="flex:1;">⚡ Auto Fit</button>
+            <button type="button" class="seg-btn" id="arrBtnModeGrid" data-mode="grid" style="flex:1;">🔲 Grid thủ công</button>
+            <button type="button" class="seg-btn" id="arrBtnModeCascade" data-mode="cascade" style="flex:1;">📑 Cascade</button>
+          </div>
+          <div class="mode-desc-box" id="arrModeDesc">
+            ⚡ <b>Auto Fit:</b> Tự động tính toán số hàng và cột tối ưu dựa trên số profile đang chạy, vừa khít màn hình không chồng lấn.
+          </div>
         </div>
       </div>
-      <!-- Thích nghi -->
-      <div class="form-group-row">
-        <label class="fg-label">Thích nghi</label>
+
+      <!-- Thích nghi độ phân giải -->
+      <div class="form-group-row" id="rowAutoAdapt">
+        <label class="fg-label">Thích nghi màn hình</label>
         <div style="flex:1;display:flex;align-items:center;gap:10px">
           <label class="toggle">
-            <input type="checkbox" id="arrAutoAdapt"/>
+            <input type="checkbox" id="arrAutoAdapt" checked/>
             <span class="toggle-slider"></span>
           </label>
-          <span class="small muted">Tự động sắp xếp các cấu hình đã chọn theo độ phân giải màn hình của bạn</span>
+          <span class="small muted">Tự căn chỉnh kích thước & bố cục vừa vặn độ phân giải màn hình</span>
         </div>
       </div>
+
+      <!-- Số cột hiển thị (chỉ dùng cho Grid thủ công) -->
+      <div class="form-group-row" id="rowColsPerRow">
+        <label class="fg-label">Số cột hiển thị</label>
+        <div style="display:flex; gap:8px; align-items:center; flex:1;">
+          <div class="segmented-toggle" id="arrColsPills" style="margin-right:4px;">
+            <button type="button" class="seg-btn" data-cols="2">2 cột</button>
+            <button type="button" class="seg-btn active" data-cols="3">3 cột</button>
+            <button type="button" class="seg-btn" data-cols="4">4 cột</button>
+            <button type="button" class="seg-btn" data-cols="5">5 cột</button>
+          </div>
+          <input type="number" id="arrColsPerRow" min="1" max="10" value="3" class="form-input num-sm" style="width:65px !important;" title="Số cột thủ công"/>
+          <span class="small muted">cột/hàng</span>
+        </div>
+      </div>
+
+      <!-- Khoảng cách viền giữa các cửa sổ (Window Gap) -->
+      <div class="form-group-row">
+        <label class="fg-label">Khoảng cách viền (Gap)</label>
+        <div style="display:flex; gap:8px; align-items:center; flex:1;">
+          <select id="arrGapPreset" class="form-select" style="max-width:160px;">
+            <option value="0">0px (Khít viền)</option>
+            <option value="8">8px (Nhỏ gọn)</option>
+            <option value="10" selected>10px (Chuẩn)</option>
+            <option value="12">12px (Vừa vặn)</option>
+            <option value="16">16px (Rộng rãi)</option>
+            <option value="custom">Tùy chỉnh...</option>
+          </select>
+          <div class="inline-inputs" id="arrCustomGapInputs" style="gap:6px;">
+            <span class="input-tag">X:</span>
+            <input type="number" id="arrGapX" value="10" class="form-input num-sm" style="width:65px !important;"/>
+            <span class="input-tag">Y:</span>
+            <input type="number" id="arrGapY" value="10" class="form-input num-sm" style="width:65px !important;"/>
+            <span class="small muted">px</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Kích thước cửa sổ trình duyệt -->
+      <div class="form-group-row">
+        <label class="fg-label">Kích thước cửa sổ</label>
+        <div class="inline-inputs">
+          <span class="input-tag">Rộng:</span>
+          <input type="number" id="arrWinWidth" value="380" class="form-input num-sm" style="width:75px !important;"/>
+          <span class="input-tag">Cao:</span>
+          <input type="number" id="arrWinHeight" value="675" class="form-input num-sm" style="width:75px !important;"/>
+          <span class="small muted">px</span>
+        </div>
+      </div>
+
       <!-- Vị trí bắt đầu -->
       <div class="form-group-row">
-        <label class="fg-label">Vị trí bắt đầu</label>
+        <label class="fg-label">Tọa độ bắt đầu</label>
         <div class="inline-inputs">
-          <span class="input-tag">X</span>
-          <input type="number" id="arrStartX" value="10" class="form-input num-sm"/>
-          <span class="input-tag">Y</span>
-          <input type="number" id="arrStartY" value="10" class="form-input num-sm"/>
+          <span class="input-tag">X:</span>
+          <input type="number" id="arrStartX" value="10" class="form-input num-sm" style="width:75px !important;"/>
+          <span class="input-tag">Y:</span>
+          <input type="number" id="arrStartY" value="10" class="form-input num-sm" style="width:75px !important;"/>
+          <span class="small muted">px</span>
         </div>
       </div>
-      <!-- Kích thước hồ sơ -->
-      <div class="form-group-row">
-        <label class="fg-label">Kích thước hồ sơ</label>
-        <div class="inline-inputs">
-          <span class="input-tag">Chiều rộng</span>
-          <input type="number" id="arrWinWidth" value="380" class="form-input num-sm"/>
-          <span class="input-tag">Cao</span>
-          <input type="number" id="arrWinHeight" value="675" class="form-input num-sm"/>
+
+      <!-- Toggle: Tự động sắp xếp lại khi mở / đóng Profile -->
+      <div style="background:rgba(99,102,241,0.08); border:1px solid rgba(99,102,241,0.25); border-radius:10px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:14px; margin-top:2px;">
+        <div style="display:flex; flex-direction:column; gap:3px;">
+          <div style="font-size:12px; font-weight:700; color:#fff; display:flex; align-items:center; gap:6px;">
+            <span>🔄</span> Tự động sắp xếp lại cửa sổ khi mở thêm hoặc đóng Profile
+          </div>
+          <div style="font-size:11px; color:var(--txt3); line-height:1.4;">
+            Khi mở profile mới hoặc đóng một profile, tự động xếp lại toàn bộ cửa sổ để lấp đầy khoảng trống.
+          </div>
         </div>
-      </div>
-      <!-- Khoảng cách hồ sơ -->
-      <div class="form-group-row">
-        <label class="fg-label">Khoảng cách hồ sơ</label>
-        <div class="inline-inputs">
-          <span class="input-tag">Nằm ngang</span>
-          <input type="number" id="arrGapX" value="10" class="form-input num-sm"/>
-          <span class="input-tag">Thẳng đứng</span>
-          <input type="number" id="arrGapY" value="10" class="form-input num-sm"/>
-        </div>
-      </div>
-      <!-- Số hồ sơ trên mỗi dòng -->
-      <div class="form-group-row" id="rowColsPerRow">
-        <label class="fg-label">Số hồ sơ</label>
-        <div class="inline-inputs">
-          <input type="number" id="arrColsPerRow" value="3" class="form-input num-sm"/>
-          <span class="small muted">(các) hồ sơ trên mỗi dòng</span>
-        </div>
+        <label class="toggle" style="flex-shrink:0;">
+          <input type="checkbox" id="fAutoArrangeOnLaunch"/>
+          <span class="toggle-slider"></span>
+        </label>
       </div>
     </div>
     <div class="modal-footer" style="justify-content:space-between">
-      <button class="btn-secondary" id="arrBtnReset">Cài lại</button>
+      <button class="btn-secondary" id="arrBtnReset">Cài lại mặc định</button>
       <div style="display:flex;gap:10px">
         <button class="btn-secondary" id="arrBtnCancel">Hủy bỏ</button>
-        <button class="btn-primary" id="arrBtnApply">Bắt đầu bố cục</button>
+        <button class="btn-primary" id="arrBtnApply" style="font-weight:700;">⚡ Áp dụng bố cục</button>
       </div>
     </div>
   </div>

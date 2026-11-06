@@ -1,0 +1,2596 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>N/A DEV - BỘ ĐIỀU KHIỂN RỜI WM AI</title>
+  <style>
+    :root {
+      --bg-dark: #020409;
+      --card-bg: rgba(10, 15, 30, 0.65);
+      --card-inner: rgba(6, 10, 22, 0.75);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(56, 189, 248, 0.5);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #0284c7;
+      --primary-hover: #0369a1;
+      --cyan: #00f2fe;
+      --green: #10b981;
+      --yellow: #f59e0b;
+      --red: #ef4444;
+      --purple: #8b5cf6;
+      --glass-gloss: linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 100%);
+      --glass-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.8), 0 4px 12px -2px rgba(0, 0, 0, 0.5), inset 0 1px 0.5px rgba(255, 255, 255, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    button, input, select, textarea {
+      font-family: inherit;
+    }
+
+    body {
+      width: 100%;
+      height: 100vh;
+      overflow-x: hidden;
+      overflow-y: auto;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Helvetica, Arial, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+      line-height: 1.35;
+      background: radial-gradient(circle at 50% -10%, #0d1730 0%, #040712 50%, #010206 100%) fixed;
+      color: var(--text-main);
+      padding: 12px;
+      font-size: 12px;
+    }
+
+    /* Sleek iOS Liquid Glass Scrollbar */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      backdrop-filter: blur(10px);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(56, 189, 248, 0.4);
+    }
+
+    /* Top Sticky Header */
+    .top-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      margin-bottom: 10px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+    .brand-logo {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      box-shadow: 0 0 14px rgba(0, 242, 254, 0.45);
+      border: 1.5px solid rgba(0, 242, 254, 0.6);
+      background: rgba(14, 165, 233, 0.1);
+    }
+    .brand-title {
+      font-size: 14px;
+      font-weight: 700;
+      background: linear-gradient(90deg, #38bdf8 0%, #818cf8 50%, #34d399 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      line-height: 1.2;
+    }
+    .brand-cskh-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #38bdf8;
+      background: rgba(14, 165, 233, 0.12);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      padding: 1.5px 8px;
+      border-radius: 20px;
+      text-decoration: none;
+      cursor: pointer;
+      width: fit-content;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      letter-spacing: 0.2px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+    .brand-cskh-btn:hover {
+      background: linear-gradient(135deg, #0284c7, #0ea5e9);
+      color: #ffffff;
+      border-color: #38bdf8;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .license-pill {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 20px;
+      background: rgba(16, 185, 129, 0.14);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(16, 185, 129, 0.45);
+      color: #34d399;
+      cursor: pointer;
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      transition: all 0.2s ease;
+    }
+    .license-pill:hover {
+      background: rgba(16, 185, 129, 0.25);
+      box-shadow: 0 0 16px rgba(16, 185, 129, 0.35);
+      transform: scale(1.03);
+    }
+
+    /* Multi-Tab Unified Command Hub - Liquid Glass */
+    .multitab-hub {
+      background: rgba(10, 16, 32, 0.72);
+      backdrop-filter: blur(24px) saturate(190%);
+      -webkit-backdrop-filter: blur(24px) saturate(190%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 7px 11px;
+      margin-bottom: 9px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      z-index: 1000;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+    .tab-dropdown-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 190px;
+      max-width: calc(100% - 210px);
+      z-index: 1001;
+    }
+    .tab-dropdown-trigger {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      background: rgba(13, 20, 39, 0.65);
+      backdrop-filter: blur(15px);
+      -webkit-backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      padding: 5px 10px;
+      cursor: pointer;
+      color: #f1f5f9;
+      font-size: 11.5px;
+      font-weight: 700;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      text-align: left;
+      height: 34px;
+      box-sizing: border-box;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .tab-dropdown-trigger:hover {
+      border-color: rgba(56, 189, 248, 0.6);
+      background: rgba(20, 32, 60, 0.75);
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+    .tab-dropdown-trigger.open {
+      border-color: #00f2fe;
+      box-shadow: 0 0 18px rgba(0, 242, 254, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    }
+    .tab-trigger-main {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+      white-space: nowrap;
+      flex: 1;
+    }
+    .tab-trigger-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: #64748b;
+    }
+    .tab-trigger-dot.running {
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+    .tab-trigger-dot.stopped {
+      background: #ef4444;
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+    }
+    .tab-trigger-name {
+      font-size: 12px;
+      font-weight: 700;
+      color: #38bdf8;
+      flex-shrink: 0;
+    }
+    .tab-trigger-domain {
+      font-size: 10.5px;
+      color: #94a3b8;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 90px;
+    }
+    .tab-trigger-badge {
+      font-size: 10px;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      padding: 1px 6px;
+      border-radius: 12px;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+    .tab-trigger-profit {
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.08);
+      flex-shrink: 0;
+    }
+    .tab-trigger-profit.positive { color: #34d399; }
+    .tab-trigger-profit.negative { color: #f87171; }
+    .tab-trigger-profit.zero { color: #94a3b8; }
+    .tab-trigger-arrow {
+      font-size: 9px;
+      color: #94a3b8;
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+      margin-left: 2px;
+    }
+    .tab-dropdown-trigger.open .tab-trigger-arrow {
+      transform: rotate(180deg);
+      color: #38bdf8;
+    }
+
+    /* DROPDOWN POPUP MENU - Frosted Glass Window */
+    .tab-dropdown-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      width: 410px;
+      max-width: 92vw;
+      background: rgba(8, 13, 27, 0.98);
+      backdrop-filter: blur(35px) saturate(200%);
+      -webkit-backdrop-filter: blur(35px) saturate(200%);
+      border: 1.5px solid #0284c7;
+      border-radius: 16px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.98), 0 0 35px rgba(2, 132, 199, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+      z-index: 99999;
+      overflow: hidden;
+      animation: menuFadeDown 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes menuFadeDown {
+      from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .dropdown-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 9px 13px;
+      background: rgba(4, 7, 16, 0.65);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .dropdown-title {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .dropdown-count-badge {
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      color: #38bdf8;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 12px;
+    }
+    .btn-dropdown-add {
+      background: linear-gradient(135deg, #0284c7, #0ea5e9);
+      border: 1px solid rgba(56, 189, 248, 0.6);
+      color: #fff;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 8px;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(14, 165, 233, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      transition: all 0.18s;
+    }
+    .btn-dropdown-add:hover {
+      box-shadow: 0 0 14px rgba(14, 165, 233, 0.65);
+      transform: translateY(-1px);
+    }
+    .btn-dropdown-hidden {
+      background: rgba(148, 163, 184, 0.12);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(148, 163, 184, 0.3);
+      color: #94a3b8;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.18s;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .btn-dropdown-hidden:hover {
+      background: rgba(56, 189, 248, 0.2);
+      border-color: #38bdf8;
+      color: #38bdf8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+    }
+    .btn-dropdown-hidden.has-hidden {
+      background: rgba(245, 158, 11, 0.18);
+      border-color: rgba(245, 158, 11, 0.5);
+      color: #fbbf24;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
+    }
+    .btn-dropdown-back {
+      background: rgba(148, 163, 184, 0.15);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      color: #cbd5e1;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+    .btn-dropdown-back:hover {
+      background: rgba(56, 189, 248, 0.2);
+      color: #38bdf8;
+      border-color: #38bdf8;
+    }
+    .btn-dropdown-unhide-all {
+      background: rgba(2, 132, 199, 0.2);
+      border: 1px solid #0284c7;
+      color: #38bdf8;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.18s;
+    }
+    .btn-dropdown-unhide-all:hover {
+      background: #0284c7;
+      color: #fff;
+      box-shadow: 0 0 10px rgba(2, 132, 199, 0.4);
+    }
+    .pill-hide-btn {
+      font-size: 11px;
+      color: #94a3b8;
+      width: 22px;
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      cursor: pointer;
+      margin-left: 2px;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .pill-hide-btn:hover {
+      background: rgba(56, 189, 248, 0.2);
+      color: #38bdf8;
+      transform: scale(1.15);
+    }
+    .btn-restore-tab {
+      background: rgba(2, 132, 199, 0.2);
+      border: 1px solid #0284c7;
+      color: #38bdf8;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.18s;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      white-space: nowrap;
+    }
+    .btn-restore-tab:hover {
+      background: #0284c7;
+      color: #fff;
+      box-shadow: 0 0 10px rgba(14, 165, 233, 0.4);
+    }
+    .dropdown-tabs-list {
+      max-height: 250px;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .dropdown-tab-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 11px;
+      border-radius: 10px;
+      background: rgba(13, 20, 38, 0.65);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      cursor: pointer;
+      transition: all 0.18s ease;
+      gap: 8px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    .dropdown-tab-item:hover {
+      background: rgba(22, 34, 66, 0.75);
+      border-color: rgba(56, 189, 248, 0.45);
+      transform: translateY(-1px);
+    }
+    .dropdown-tab-item.active {
+      background: linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(2, 132, 199, 0.32));
+      border-color: #00f2fe;
+      box-shadow: 0 0 16px rgba(0, 242, 254, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    .dropdown-tab-left {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      overflow: hidden;
+      white-space: nowrap;
+      flex: 1;
+    }
+    .dropdown-tab-right {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    .dropdown-empty {
+      padding: 16px 12px;
+      text-align: center;
+      color: #64748b;
+      font-size: 11.5px;
+    }
+    .dropdown-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 13px;
+      background: rgba(4, 7, 16, 0.65);
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      font-size: 11px;
+      color: #94a3b8;
+      font-weight: 700;
+    }
+
+    .hub-actions {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-hub-run {
+      background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+      border: 1px solid rgba(52, 211, 153, 0.5);
+      color: #fff;
+      font-size: 10.5px;
+      font-weight: 700;
+      border-radius: 8px;
+      padding: 4px 9px;
+      cursor: pointer;
+      box-shadow: 0 2px 10px rgba(16, 185, 129, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+      transition: all 0.18s;
+    }
+    .btn-hub-run:hover {
+      box-shadow: 0 0 14px rgba(16, 185, 129, 0.6);
+      transform: translateY(-1px);
+    }
+    .btn-hub-stop {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.6);
+      color: #fca5a5;
+      font-size: 10.5px;
+      font-weight: 700;
+      border-radius: 8px;
+      padding: 4px 9px;
+      cursor: pointer;
+      transition: all 0.18s;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+    .btn-hub-stop:hover {
+      background: #dc2626;
+      color: #fff;
+      box-shadow: 0 0 14px rgba(239, 68, 68, 0.5);
+      transform: translateY(-1px);
+    }
+
+    .hub-headless-toggle {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 0 8px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: rgba(14, 23, 46, 0.7);
+      backdrop-filter: blur(10px);
+      transition: all 0.15s;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .hub-headless-toggle:hover {
+      border-color: #38bdf8;
+      color: #38bdf8;
+    }
+
+    /* Tabs Chips Scroll Strip */
+    .hub-tabs-scroll {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      white-space: nowrap;
+      padding: 6px 2px 8px 2px;
+      align-items: center;
+    }
+    .tab-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(10, 16, 32, 0.65);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      font-size: 12px;
+      font-weight: 700;
+      color: #cbd5e1;
+      flex-shrink: 0;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      height: 38px;
+      box-sizing: border-box;
+    }
+    .tab-pill:hover {
+      border-color: #38bdf8;
+      background: rgba(18, 30, 58, 0.75);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+    .tab-pill.active {
+      background: linear-gradient(135deg, rgba(0, 242, 254, 0.22), rgba(2, 132, 199, 0.35));
+      border-color: #00f2fe;
+      color: #fff;
+      box-shadow: 0 0 16px rgba(0, 242, 254, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    .tab-pill-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #64748b;
+      flex-shrink: 0;
+    }
+    .tab-pill-dot.running {
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+    .tab-pill-dot.stopped {
+      background: #ef4444;
+      box-shadow: 0 0 6px rgba(239, 68, 68, 0.5);
+    }
+    .pill-name {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #f8fafc;
+      white-space: nowrap;
+    }
+    .pill-domain {
+      font-size: 11px;
+      color: #94a3b8;
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pill-tables-badge {
+      font-size: 11px;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      padding: 1px 7px;
+      border-radius: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .tab-pill-profit {
+      font-size: 11.5px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .tab-pill-profit.positive { color: #34d399; }
+    .tab-pill-profit.negative { color: #f87171; }
+    .tab-pill-profit.zero { color: #94a3b8; }
+    .pill-rename-btn {
+      font-size: 11px;
+      opacity: 0.7;
+      cursor: pointer;
+      padding: 2px 5px;
+      border-radius: 6px;
+      transition: all 0.15s;
+      flex-shrink: 0;
+    }
+    .pill-rename-btn:hover {
+      opacity: 1;
+      background: rgba(255, 255, 255, 0.15);
+      transform: scale(1.15);
+    }
+
+    /* Modal Backdrop & Dialog - iOS Liquid Glass */
+    .modal-backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(2, 4, 10, 0.85);
+      backdrop-filter: blur(25px) saturate(180%);
+      -webkit-backdrop-filter: blur(25px) saturate(180%);
+      z-index: 99999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+    .modal-dialog {
+      background: rgba(8, 14, 28, 0.85);
+      backdrop-filter: blur(35px) saturate(200%);
+      -webkit-backdrop-filter: blur(35px) saturate(200%);
+      border: 1.5px solid rgba(56, 189, 248, 0.4);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 480px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.95), 0 0 40px rgba(56, 189, 248, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      overflow: hidden;
+      animation: modalFadeIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes modalFadeIn {
+      from { opacity: 0; transform: scale(0.94) translateY(10px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 13px 18px;
+      background: rgba(4, 8, 18, 0.7);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .modal-header h3 {
+      font-size: 14px;
+      font-weight: 700;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0;
+      letter-spacing: 0.3px;
+    }
+    .modal-close-btn {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 17px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 8px;
+      transition: all 0.15s;
+    }
+    .modal-close-btn:hover {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.2);
+    }
+    .modal-body {
+      padding: 18px;
+    }
+    .tab-candidate-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(11, 18, 36, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 10px;
+      padding: 9px 13px;
+      gap: 10px;
+      transition: all 0.18s;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    .tab-candidate-item:hover {
+      border-color: #38bdf8;
+      background: rgba(20, 32, 60, 0.75);
+      transform: translateY(-1px);
+    }
+    .tab-candidate-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #f1f5f9;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 290px;
+    }
+    .btn-connect-tab {
+      background: rgba(56, 189, 248, 0.18);
+      border: 1px solid #38bdf8;
+      color: #38bdf8;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 11px;
+      border-radius: 8px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.18s;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+    .btn-connect-tab:hover {
+      background: linear-gradient(135deg, #0284c7, #0ea5e9);
+      color: #fff;
+      box-shadow: 0 0 12px rgba(14, 165, 233, 0.5);
+    }
+
+    /* Headless Mini Toggle */
+    .switch-toggle {
+      width: 28px;
+      height: 15px;
+      background: rgba(255, 255, 255, 0.18);
+      border-radius: 10px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .switch-toggle::after {
+      content: '';
+      position: absolute;
+      top: 1.5px;
+      left: 2px;
+      width: 12px;
+      height: 12px;
+      background: #fff;
+      border-radius: 50%;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+      transition: left 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .switch-toggle.active {
+      background: #10b981;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+    }
+    .switch-toggle.active::after {
+      left: 14px;
+    }
+
+    /* Master Action Container - Liquid Glass */
+    .master-controls {
+      background: var(--card-bg);
+      backdrop-filter: blur(24px) saturate(190%);
+      -webkit-backdrop-filter: blur(24px) saturate(190%);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 9px;
+      margin-bottom: 9px;
+      box-shadow: var(--glass-shadow);
+      position: relative;
+      z-index: 1;
+    }
+    .master-btn-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 7px;
+      align-items: stretch;
+    }
+    .btn-master-run {
+      flex: 1.5;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: none;
+      font-size: 11.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      white-space: nowrap;
+    }
+    .btn-master-run.start {
+      background: linear-gradient(180deg, #10b981 0%, #059669 100%);
+      color: #fff;
+      box-shadow: 0 4px 18px rgba(16, 185, 129, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+    .btn-master-run.stop {
+      background: linear-gradient(180deg, #ef4444 0%, #dc2626 100%);
+      color: #fff;
+      box-shadow: 0 4px 18px rgba(239, 68, 68, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+    .btn-master-run:hover {
+      filter: brightness(1.12);
+      transform: translateY(-1px);
+    }
+    .btn-scan-all {
+      flex: 1;
+      background: rgba(14, 23, 46, 0.7);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      transition: all 0.2s;
+    }
+    .btn-scan-all:hover {
+      background: linear-gradient(135deg, #0284c7, #0ea5e9);
+      color: #fff;
+      border-color: #38bdf8;
+      box-shadow: 0 0 14px rgba(14, 165, 233, 0.45);
+      transform: translateY(-1px);
+    }
+
+    /* Casino Chips Selector - Liquid Glass Pebbles */
+    .chip-selector-box {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chip-title-mini {
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #64748b;
+      white-space: nowrap;
+    }
+    .chip-row {
+      display: flex;
+      gap: 5px;
+      flex: 1;
+    }
+    .chip-item {
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+      flex: 1;
+      height: 27px;
+      border-radius: 20px;
+      background: rgba(8, 13, 26, 0.65);
+      backdrop-filter: blur(10px);
+      border: 1px dashed rgba(255, 255, 255, 0.15);
+      color: #94a3b8;
+      font-size: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    }
+    .chip-item:hover {
+      border-color: #38bdf8;
+      color: #fff;
+      background: rgba(18, 28, 54, 0.7);
+    }
+    .chip-item.active {
+      border-style: solid;
+      border-color: #00f2fe;
+      background: linear-gradient(180deg, rgba(0, 242, 254, 0.3) 0%, rgba(2, 132, 199, 0.4) 100%);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(0, 242, 254, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+      transform: scale(1.05);
+    }
+    .chip-item.disabled {
+      opacity: 0.45 !important;
+      cursor: not-allowed !important;
+      pointer-events: none !important;
+      filter: grayscale(40%);
+      transform: none !important;
+      border-color: rgba(255, 255, 255, 0.05) !important;
+    }
+    .chip-val-display {
+      font-size: 11px;
+      font-weight: 700;
+      color: #38bdf8;
+      white-space: nowrap;
+      min-width: 24px;
+      text-align: right;
+    }
+
+    /* Collapsible Settings Accordion - Liquid Glass Card */
+    .settings-accordion {
+      background: var(--card-inner);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      margin-bottom: 9px;
+      overflow: visible;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      box-shadow: var(--glass-shadow);
+      position: relative;
+      z-index: 950;
+    }
+    .settings-accordion:hover {
+      border-color: rgba(56, 189, 248, 0.35);
+    }
+    .settings-accordion:not(.collapsed) {
+      z-index: 9990;
+      border-color: #38bdf8;
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+    }
+    .settings-acc-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 10px;
+      cursor: pointer;
+      background: rgba(6, 10, 22, 0.7);
+      user-select: none;
+      gap: 6px;
+      border-radius: 12px;
+    }
+    .settings-acc-header:hover {
+      background: rgba(14, 22, 44, 0.7);
+    }
+    .settings-acc-left {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+    .settings-acc-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #38bdf8;
+      white-space: nowrap;
+      flex-shrink: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.38);
+      border-radius: 7px;
+      padding: 3px 8px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .settings-acc-title:hover {
+      background: rgba(56, 189, 248, 0.24);
+      border-color: #38bdf8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+      transform: translateY(-1px);
+    }
+    .settings-mini-tags {
+      display: flex;
+      gap: 3px;
+      align-items: center;
+      overflow: hidden;
+      min-width: 0;
+      flex-shrink: 1;
+    }
+    .sm-tag {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 6px;
+      background: rgba(17, 30, 56, 0.7);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #94a3b8;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .settings-acc-right {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-shrink: 0;
+    }
+    .acc-chevron {
+      font-size: 11px;
+      color: #38bdf8;
+      transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      font-weight: 700;
+    }
+    .settings-accordion.collapsed .acc-chevron {
+      transform: rotate(0deg);
+    }
+    .settings-accordion:not(.collapsed) .acc-chevron {
+      transform: rotate(180deg);
+    }
+    .settings-acc-body {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: rgba(10, 16, 32, 0.88);
+      backdrop-filter: blur(35px) saturate(200%);
+      -webkit-backdrop-filter: blur(35px) saturate(200%);
+      border: 1.5px solid rgba(56, 189, 248, 0.45);
+      border-top: 2px solid rgba(56, 189, 248, 0.75);
+      border-radius: 16px;
+      box-shadow: 0 28px 65px -10px rgba(0, 0, 0, 0.95), 0 0 35px rgba(56, 189, 248, 0.25), inset 0 1.5px 1px rgba(255, 255, 255, 0.25);
+      z-index: 9999;
+      padding: 12px 14px;
+      animation: tabDropIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .settings-accordion.collapsed .settings-acc-body {
+      display: none;
+    }
+    .settings-popup-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      padding-bottom: 7px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .settings-popup-title {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .settings-popup-close-btn {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #94a3b8;
+      border-radius: 6px;
+      width: 22px;
+      height: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 11px;
+      transition: all 0.18s;
+    }
+    .settings-popup-close-btn:hover {
+      background: rgba(239, 68, 68, 0.2);
+      border-color: #ef4444;
+      color: #ef4444;
+      transform: scale(1.08);
+    }
+
+    .btn-clear-data {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.6);
+      color: #fca5a5;
+      border-radius: 8px;
+      padding: 2px 7px;
+      font-size: 9.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: all 0.2s;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+    .btn-clear-data:hover {
+      background: #dc2626;
+      color: #fff;
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+    }
+    .btn-clear-data:disabled {
+      opacity: 0.35 !important;
+      cursor: not-allowed !important;
+      pointer-events: none !important;
+      border-color: #451a1a !important;
+      color: #7f1d1d !important;
+    }
+    .settings-lock-notice {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px dashed rgba(239, 68, 68, 0.45);
+      border-radius: 8px;
+      color: #fca5a5;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 5px 8px;
+      margin-bottom: 8px;
+      text-align: center;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+    .settings-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px 9px;
+    }
+    .s-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .s-group label {
+      font-size: 9.5px;
+      color: #e2e8f0;
+      font-weight: 700;
+    }
+    .s-input {
+      background: rgba(4, 7, 16, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 8px;
+      color: #f1f5f9;
+      padding: 3px 8px;
+      font-size: 10.5px;
+      outline: none;
+      height: 27px;
+      box-sizing: border-box;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+      transition: all 0.18s;
+    }
+    .s-input:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.35), inset 0 2px 4px rgba(0, 0, 0, 0.5);
+    }
+    .s-input:disabled {
+      opacity: 1 !important;
+      cursor: not-allowed !important;
+      background: rgba(13, 20, 39, 0.85) !important;
+      border-color: rgba(56, 189, 248, 0.35) !important;
+      color: #ffffff !important;
+      -webkit-text-fill-color: #ffffff !important;
+      font-weight: 700 !important;
+      pointer-events: none !important;
+    }
+    .status-box {
+      background: rgba(4, 7, 16, 0.75);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 8px;
+      padding: 3px 8px;
+      font-size: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      height: 27px;
+      box-sizing: border-box;
+      box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+    }
+
+    /* KPI Summary Cards - iOS Liquid Dark */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 9px;
+    }
+    .kpi-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(18px) saturate(180%);
+      -webkit-backdrop-filter: blur(18px) saturate(180%);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 6px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      box-shadow: var(--glass-shadow);
+    }
+    .kpi-title {
+      font-size: 8.5px;
+      color: #64748b;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .kpi-val {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #e2e8f0;
+    }
+    .kpi-val.positive { color: var(--green); }
+    .kpi-val.negative { color: var(--red); }
+    .kpi-val.zero { color: var(--yellow); }
+
+    /* Tab Navigation - Liquid Glass Segmented Control */
+    .nav-tabs {
+      display: flex;
+      margin-bottom: 9px;
+      gap: 4px;
+      background: rgba(6, 10, 22, 0.7);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      padding: 3px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+    }
+    .nav-tab-btn {
+      flex: 1;
+      padding: 7px 4px;
+      background: transparent;
+      border: none;
+      border-radius: 9px;
+      color: #8da2bb;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .nav-tab-btn:hover {
+      color: #f1f5f9;
+      background: rgba(255, 255, 255, 0.05);
+    }
+    .nav-tab-btn.active {
+      color: #00f2fe;
+      background: rgba(0, 242, 254, 0.12);
+      backdrop-filter: blur(10px);
+      font-weight: 700;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+
+    /* Main Tab Content Views */
+    .view-content {
+      display: none;
+    }
+    .view-content.active {
+      display: block;
+    }
+
+    /* Tab 1: Live Tables List */
+    #tables-container {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 440px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+
+    .table-card {
+      background: var(--card-bg);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 9px 12px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: var(--glass-shadow);
+    }
+    .table-card:hover {
+      border-color: rgba(56, 189, 248, 0.45);
+      transform: translateY(-1px);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.8), 0 0 20px rgba(0, 242, 254, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    }
+
+    .t-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .t-name-wrap {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .t-name {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #f1f5f9;
+    }
+    .t-shoe {
+      font-size: 9.5px;
+      color: #64748b;
+      background: rgba(6, 10, 20, 0.7);
+      padding: 1px 5px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .t-timer {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 8px;
+      letter-spacing: 0.3px;
+      backdrop-filter: blur(8px);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+    .t-timer.green {
+      background: rgba(16, 185, 129, 0.16);
+      border: 1px solid var(--green);
+      color: #34d399;
+      box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+    }
+    .t-timer.yellow {
+      background: rgba(245, 158, 11, 0.16);
+      border: 1px solid var(--yellow);
+      color: #fbbf24;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.25);
+    }
+    .t-timer.red {
+      background: rgba(239, 68, 68, 0.16);
+      border: 1px solid var(--red);
+      color: #f87171;
+      box-shadow: 0 0 10px rgba(239, 68, 68, 0.25);
+    }
+    .t-timer.closed {
+      background: rgba(100, 116, 139, 0.1);
+      border: 1px solid #334155;
+      color: #64748b;
+    }
+
+    /* ZhuPan Bead Road - Liquid Glass Spheres */
+    .road-wrap {
+      background: rgba(3, 5, 12, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 10px;
+      padding: 5px 8px;
+      margin-bottom: 7px;
+      overflow-x: auto;
+      white-space: nowrap;
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      min-height: 28px;
+      box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6);
+    }
+    .bead-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      font-size: 9.5px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .bead-dot.B {
+      background: radial-gradient(circle at 35% 35%, #ff4b4b, #b91c1c);
+      box-shadow: 0 2px 6px rgba(220, 38, 38, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+    }
+    .bead-dot.P {
+      background: radial-gradient(circle at 35% 35%, #3b82f6, #1d4ed8);
+      box-shadow: 0 2px 6px rgba(37, 99, 235, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+    }
+    .bead-dot.T {
+      background: radial-gradient(circle at 35% 35%, #10b981, #047857);
+      box-shadow: 0 2px 6px rgba(16, 185, 129, 0.6), inset 0 1px 1px rgba(255, 255, 255, 0.4);
+    }
+
+    /* AI Signal Banner */
+    .ai-signal-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(14, 165, 233, 0.12);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-radius: 8px;
+      padding: 4px 8px;
+      font-size: 10.5px;
+      margin-bottom: 7px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+    .ai-signal-badge {
+      font-weight: 700;
+      color: #38bdf8;
+    }
+
+    /* Manual Bet Actions - Liquid Glass Buttons */
+    .bet-actions {
+      display: flex;
+      gap: 6px;
+    }
+    .btn-manual-bet {
+      flex: 1;
+      padding: 6px 4px;
+      border-radius: 9px;
+      border: none;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .btn-manual-bet.bet-p {
+      background: linear-gradient(180deg, rgba(37, 99, 235, 0.35) 0%, rgba(30, 58, 138, 0.6) 100%);
+      border: 1px solid rgba(59, 130, 246, 0.55);
+      color: #93c5fd;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    .btn-manual-bet.bet-p:hover {
+      background: linear-gradient(180deg, #2563eb, #1d4ed8);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(37, 99, 235, 0.6);
+      transform: translateY(-1px);
+    }
+    .btn-manual-bet.bet-t {
+      background: linear-gradient(180deg, rgba(16, 185, 129, 0.3) 0%, rgba(6, 78, 59, 0.55) 100%);
+      border: 1px solid rgba(16, 185, 129, 0.5);
+      color: #6ee7b7;
+      flex: 0.8;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    .btn-manual-bet.bet-t:hover {
+      background: linear-gradient(180deg, #10b981, #059669);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(16, 185, 129, 0.6);
+      transform: translateY(-1px);
+    }
+    .btn-manual-bet.bet-b {
+      background: linear-gradient(180deg, rgba(220, 38, 38, 0.35) 0%, rgba(127, 29, 29, 0.6) 100%);
+      border: 1px solid rgba(239, 68, 68, 0.55);
+      color: #fca5a5;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }
+    .btn-manual-bet.bet-b:hover {
+      background: linear-gradient(180deg, #dc2626, #b91c1c);
+      color: #fff;
+      box-shadow: 0 0 14px rgba(220, 38, 38, 0.6);
+      transform: translateY(-1px);
+    }
+    .btn-manual-bet.active-bet-click {
+      filter: brightness(1.7) !important;
+      box-shadow: 0 0 18px #00f2fe !important;
+      transform: scale(0.95) !important;
+    }
+
+    /* Bet History View - Liquid Glass */
+    .history-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(9, 14, 28, 0.7);
+      backdrop-filter: blur(15px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 7px 11px;
+      margin-bottom: 7px;
+      box-shadow: var(--glass-shadow);
+    }
+    .history-toolbar-info {
+      font-size: 11px;
+      color: #94a3b8;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-clear-hist-action {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.6);
+      color: #fca5a5;
+      border-radius: 8px;
+      padding: 4px 11px;
+      font-size: 10.5px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.2s;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
+    .btn-clear-hist-action:hover {
+      background: #dc2626;
+      color: #ffffff;
+      box-shadow: 0 0 12px rgba(239, 68, 68, 0.5);
+      transform: translateY(-1px);
+    }
+    .btn-clear-hist-action:active {
+      transform: scale(0.96);
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      max-height: 400px;
+      overflow-y: auto;
+      padding-right: 2px;
+    }
+    .history-item {
+      background: rgba(10, 16, 32, 0.65);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 9px;
+      padding: 6px 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      transition: all 0.18s ease;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+    .history-item:hover {
+      background: rgba(18, 30, 58, 0.75);
+      border-color: rgba(56, 189, 248, 0.45);
+      transform: translateY(-1px);
+    }
+    .hist-row-main {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+    }
+    .hist-main-left {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      overflow: hidden;
+    }
+    .hist-table {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #f8fafc;
+      white-space: nowrap;
+    }
+    .hist-badge {
+      font-size: 9.5px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+    .hist-badge.banker {
+      background: rgba(220, 38, 38, 0.2);
+      border: 1px solid #ef4444;
+      color: #fca5a5;
+    }
+    .hist-badge.player {
+      background: rgba(37, 99, 235, 0.2);
+      border: 1px solid #3b82f6;
+      color: #93c5fd;
+    }
+    .hist-badge.tie {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid #10b981;
+      color: #6ee7b7;
+    }
+    .hist-amount {
+      font-size: 10.5px;
+      font-weight: 700;
+      color: #e2e8f0;
+      background: rgba(5, 8, 18, 0.8);
+      padding: 1px 6px;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      flex-shrink: 0;
+      display: inline-block;
+      white-space: nowrap;
+    }
+    .hist-main-right {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .hist-profit {
+      font-size: 11.5px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .hist-profit.win { color: #10b981; }
+    .hist-profit.loss { color: #ef4444; }
+    .hist-profit.tie { color: #f59e0b; }
+    .hist-profit.pending { color: #38bdf8; }
+    .hist-result-tag {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 6px;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+    }
+    .hist-result-tag.win {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1px solid rgba(16, 185, 129, 0.45);
+      color: #34d399;
+    }
+    .hist-result-tag.loss {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      color: #f87171;
+    }
+    .hist-result-tag.tie {
+      background: rgba(245, 158, 11, 0.2);
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      color: #fbbf24;
+    }
+    .hist-result-tag.pending {
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.45);
+      color: #38bdf8;
+    }
+    .hist-row-sub {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 9.5px;
+      color: #64748b;
+      gap: 6px;
+      overflow: hidden;
+    }
+    .hist-pattern-short {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #94a3b8;
+      max-width: 320px;
+    }
+
+    /* Tab 2: AI Signals view */
+    .signals-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 440px;
+      overflow-y: auto;
+    }
+    .signal-item {
+      background: var(--card-bg);
+      backdrop-filter: blur(18px) saturate(180%);
+      -webkit-backdrop-filter: blur(18px) saturate(180%);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 9px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      box-shadow: var(--glass-shadow);
+    }
+
+    /* Tab 3: Terminal Logs - Liquid Glass Deep Terminal */
+    .terminal-box {
+      background: rgba(3, 5, 12, 0.88);
+      backdrop-filter: blur(25px);
+      -webkit-backdrop-filter: blur(25px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 11px;
+      height: 440px;
+      overflow-y: auto;
+      font-family: 'SF Mono', 'Consolas', 'Courier New', monospace;
+      font-size: 11px;
+      line-height: 1.5;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.7);
+    }
+    .log-line {
+      margin-bottom: 4px;
+      word-break: break-all;
+    }
+    .log-line.info { color: #94a3b8; }
+    .log-line.success { color: #34d399; font-weight: 600; }
+    .log-line.warning { color: #fbbf24; }
+    .log-line.error { color: #f87171; font-weight: 600; }
+
+    .empty-state {
+      text-align: center;
+      padding: 30px 10px;
+      color: #94a3b8;
+      font-size: 11.5px;
+    }
+    .empty-state-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: #38bdf8;
+      margin-bottom: 8px;
+    }
+    .empty-state-desc {
+      font-size: 11.5px;
+      color: #cbd5e1;
+      line-height: 1.6;
+      margin-bottom: 14px;
+    }
+
+    /* THEME TOGGLE BUTTON */
+    .theme-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10.5px;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #f1f5f9;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    }
+    .theme-toggle-btn:hover {
+      background: rgba(255, 255, 255, 0.22);
+      border-color: #38bdf8;
+      color: #38bdf8;
+      transform: translateY(-1px);
+    }
+
+    /* ========================================================================= */
+    /* LIQUID GLASS iOS LIGHT THEME (GIAO DIỆN SÁNG VỪA, DỊU MẮT, TI TÂN ÊM ÁI)   */
+    /* ========================================================================= */
+    body.light-theme {
+      --bg-dark: #d5dfea;
+      --card-bg: linear-gradient(135deg, rgba(255, 255, 255, 0.78) 0%, rgba(236, 244, 253, 0.6) 100%);
+      --card-inner: linear-gradient(135deg, rgba(255, 255, 255, 0.82) 0%, rgba(232, 241, 252, 0.68) 100%);
+      --border-color: rgba(255, 255, 255, 0.88);
+      --border-hover: #0284c7;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --glass-shadow: 0 14px 34px -8px rgba(15, 23, 42, 0.16), 0 4px 10px -2px rgba(15, 23, 42, 0.08), inset 0 1.5px 1px 0 #ffffff;
+      background: 
+        radial-gradient(circle at 15% 10%, rgba(186, 230, 253, 0.65) 0%, transparent 40%),
+        radial-gradient(circle at 85% 25%, rgba(199, 210, 254, 0.55) 0%, transparent 45%),
+        radial-gradient(circle at 50% 85%, rgba(224, 231, 255, 0.45) 0%, transparent 55%),
+        #d1dceb fixed;
+      color: #0f172a;
+    }
+    body.light-theme ::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.35);
+    }
+    body.light-theme ::-webkit-scrollbar-thumb:hover {
+      background: rgba(2, 132, 199, 0.6);
+    }
+    body.light-theme .theme-toggle-btn {
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      border-top: 1px solid #ffffff;
+      color: #0f172a;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06), inset 0 1px 0 #ffffff;
+    }
+    body.light-theme .theme-toggle-btn:hover {
+      background: rgba(2, 132, 199, 0.15);
+      border-color: #0284c7;
+      color: #0284c7;
+    }
+    body.light-theme .top-header {
+      border-bottom-color: rgba(148, 163, 184, 0.35);
+    }
+    body.light-theme .brand-title {
+      background: linear-gradient(90deg, #0284c7 0%, #6366f1 50%, #059669 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    body.light-theme .brand-cskh-btn {
+      background: rgba(2, 132, 199, 0.12);
+      border-color: rgba(2, 132, 199, 0.45);
+      color: #0284c7;
+      box-shadow: 0 2px 6px rgba(2, 132, 199, 0.12), inset 0 1px 0 #ffffff;
+    }
+    body.light-theme .license-pill {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: rgba(16, 185, 129, 0.45);
+      color: #047857;
+      box-shadow: 0 2px 6px rgba(16, 185, 129, 0.12), inset 0 1px 0 #ffffff;
+    }
+    body.light-theme .multitab-hub {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.78) 0%, rgba(235, 243, 252, 0.6) 100%);
+      backdrop-filter: blur(28px) saturate(190%);
+      -webkit-backdrop-filter: blur(28px) saturate(190%);
+      border: 1px solid rgba(255, 255, 255, 0.92);
+      border-top: 1.5px solid #ffffff;
+      box-shadow: 0 14px 32px -8px rgba(15, 23, 42, 0.15), 0 4px 10px -2px rgba(15, 23, 42, 0.08), inset 0 1.5px 1px #ffffff;
+    }
+    body.light-theme .tab-dropdown-trigger {
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      border-top: 1px solid #ffffff;
+      color: #0f172a;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05), inset 0 1px 0 #ffffff;
+    }
+    body.light-theme .tab-dropdown-trigger:hover {
+      background: #ffffff;
+      border-color: #0284c7;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.22), inset 0 1px 0 #ffffff;
+    }
+    body.light-theme .tab-trigger-name {
+      color: #0284c7;
+    }
+    body.light-theme .tab-trigger-badge {
+      background: rgba(2, 132, 199, 0.12);
+      border-color: rgba(2, 132, 199, 0.35);
+      color: #0284c7;
+    }
+    body.light-theme .tab-trigger-profit {
+      background: rgba(15, 23, 42, 0.06);
+    }
+    body.light-theme .tab-dropdown-menu {
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.88) 0%, rgba(236, 245, 254, 0.78) 100%);
+      backdrop-filter: blur(35px) saturate(200%);
+      -webkit-backdrop-filter: blur(35px) saturate(200%);
+      border: 1.5px solid rgba(255, 255, 255, 0.95);
+      border-top: 2px solid #ffffff;
+      box-shadow: 0 24px 60px -10px rgba(15, 23, 42, 0.28), 0 0 30px rgba(2, 132, 199, 0.2), inset 0 1.5px 1px #ffffff;
+    }
+    body.light-theme .dropdown-header,
+    body.light-theme .dropdown-footer {
+      background: rgba(232, 239, 247, 0.85);
+      backdrop-filter: blur(12px);
+      border-color: rgba(148, 163, 184, 0.35);
+    }
+    body.light-theme .dropdown-tab-item {
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(10px);
+      border-color: rgba(148, 163, 184, 0.4);
+      border-top: 1px solid #ffffff;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05), inset 0 1px 0 rgba(255, 255, 255, 0.95);
+    }
+    body.light-theme .dropdown-tab-item:hover {
+      background: #ffffff;
+      border-color: #0284c7;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.18), inset 0 1px 0 #ffffff;
+    }
+    body.light-theme .dropdown-tab-item.active {
+      background: linear-gradient(135deg, rgba(2, 132, 199, 0.16), rgba(14, 165, 233, 0.24));
+      border-color: #0284c7;
+    }
+    body.light-theme .pill-name {
+      color: #0f172a;
+    }
+    body.light-theme .btn-dropdown-hidden {
+      background: rgba(255, 255, 255, 0.72);
+      border-color: rgba(148, 163, 184, 0.45);
+      color: #334155;
+    }
+    body.light-theme .btn-dropdown-back {
+      background: rgba(255, 255, 255, 0.72);
+      border-color: rgba(148, 163, 184, 0.45);
+      color: #0f172a;
+    }
+    body.light-theme .hub-headless-toggle {
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(10px);
+      border-color: rgba(148, 163, 184, 0.45);
+      border-top: 1px solid #ffffff;
+      color: #334155;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.05), inset 0 1px 0 #ffffff;
+    }
+    body.light-theme .master-controls {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(235, 244, 253, 0.62) 100%);
+      backdrop-filter: blur(28px) saturate(190%);
+      -webkit-backdrop-filter: blur(28px) saturate(190%);
+      border: 1px solid rgba(255, 255, 255, 0.92);
+      border-top: 1.5px solid #ffffff;
+      box-shadow: 0 16px 36px -8px rgba(15, 23, 42, 0.16), 0 5px 12px -2px rgba(15, 23, 42, 0.08), inset 0 1.5px 1px #ffffff;
+    }
+    body.light-theme .btn-scan-all {
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(2, 132, 199, 0.45);
+      border-top: 1.5px solid #ffffff;
+      color: #0284c7;
+      box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.08), inset 0 1px 0 #ffffff;
+    }
+    body.light-theme .btn-scan-all:hover {
+      background: linear-gradient(135deg, #0284c7, #0ea5e9);
+      color: #fff;
+    }
+    body.light-theme .chip-title-mini {
+      color: #0f172a;
+      font-weight: 700;
+    }
+    body.light-theme .chip-item {
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.45);
+      border-top: 1px solid rgba(255, 255, 255, 0.95);
+      color: #0f172a;
+      font-weight: 700;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06), inset 0 1px 0 #ffffff;
+    }
+    body.light-theme .chip-item:hover {
+      border-color: #0284c7;
+      color: #0284c7;
+      background: #ffffff;
+      box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2), inset 0 1px 0 #ffffff;
+      transform: translateY(-1px);
+    }
+    body.light-theme .chip-item.active {
+      border-style: solid;
+      border-color: #0284c7;
+      background: linear-gradient(180deg, rgba(2, 132, 199, 0.18), rgba(14, 165, 233, 0.28));
+      color: #0369a1;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.3), inset 0 1px 0 #ffffff;
+    }
+    body.light-theme .chip-item.disabled {
+      color: #0f172a !important;
+      background: rgba(226, 232, 240, 0.85) !important;
+      border-color: #cbd5e1 !important;
+      opacity: 0.85 !important;
+    }
+    body.light-theme .settings-accordion {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.78) 0%, rgba(235, 243, 252, 0.6) 100%);
+      backdrop-filter: blur(24px) saturate(180%);
+      -webkit-backdrop-filter: blur(24px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.92);
+      border-top: 1.5px solid #ffffff;
+      box-shadow: 0 12px 28px -6px rgba(15, 23, 42, 0.12), 0 3px 8px -2px rgba(15, 23, 42, 0.06), inset 0 1.5px 1px #ffffff;
+    }
+    body.light-theme .settings-accordion:not(.collapsed) {
+      border-color: #0284c7;
+      box-shadow: 0 16px 36px -6px rgba(15, 23, 42, 0.18), 0 0 20px rgba(2, 132, 199, 0.25), inset 0 1.5px 1px #ffffff;
+    }
+    body.light-theme .settings-acc-header {
+      background: rgba(255, 255, 255, 0.45);
+      backdrop-filter: blur(10px);
+    }
+    body.light-theme .settings-acc-title {
+      color: #0284c7;
+      background: rgba(2, 132, 199, 0.12);
+      border: 1px solid rgba(2, 132, 199, 0.4);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    }
+    body.light-theme .settings-acc-title:hover {
+      background: rgba(2, 132, 199, 0.22);
+      border-color: #0284c7;
+      box-shadow: 0 0 10px rgba(2, 132, 199, 0.25);
+    }
+    body.light-theme .settings-acc-body {
+      background: linear-gradient(145deg, rgba(255, 255, 255, 0.82) 0%, rgba(236, 245, 254, 0.68) 100%);
+      backdrop-filter: blur(35px) saturate(210%);
+      -webkit-backdrop-filter: blur(35px) saturate(210%);
+      border: 1.5px solid rgba(255, 255, 255, 0.95);
+      border-top: 2px solid #ffffff;
+      border-radius: 16px;
+      box-shadow: 
+        0 30px 70px -12px rgba(15, 23, 42, 0.32),
+        0 12px 24px -4px rgba(15, 23, 42, 0.16),
+        0 0 35px rgba(2, 132, 199, 0.22),
+        inset 0 2px 1px #ffffff,
+        inset 0 -1px 2px rgba(2, 132, 199, 0.08);
+    }
+    body.light-theme .settings-popup-header {
+      border-bottom-color: rgba(148, 163, 184, 0.35);
+    }
+    body.light-theme .settings-popup-title {
+      color: #0284c7;
+    }
+    body.light-theme .settings-popup-close-btn {
+      background: rgba(15, 23, 42, 0.05);
+      border-color: rgba(148, 163, 184, 0.4);
+      color: #475569;
+    }
+    body.light-theme .settings-popup-close-btn:hover {
+      background: rgba(239, 68, 68, 0.15);
+      border-color: #ef4444;
+      color: #dc2626;
+    }
+    body.light-theme .settings-lock-notice {
+      background: rgba(254, 242, 242, 0.95);
+      border: 1px dashed #ef4444;
+      color: #b91c1c;
+      font-weight: 700;
+    }
+    body.light-theme .s-group label {
+      color: #0f172a;
+      font-weight: 700;
+    }
+    body.light-theme .sm-tag {
+      background: rgba(255, 255, 255, 0.85);
+      border-color: rgba(148, 163, 184, 0.35);
+      color: #0f172a;
+      font-weight: 700;
+    }
+    body.light-theme .s-input {
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.55);
+      border-top: 1px solid rgba(148, 163, 184, 0.7);
+      color: #0f172a;
+      font-weight: 600;
+      box-shadow: inset 0 1.5px 3px rgba(15, 23, 42, 0.08), 0 1px 0 #ffffff;
+    }
+    body.light-theme .s-input:focus {
+      background: #ffffff;
+      border-color: #0284c7;
+      box-shadow: 0 0 12px rgba(2, 132, 199, 0.28), inset 0 1.5px 2px rgba(15, 23, 42, 0.05);
+    }
+    body.light-theme .s-input:disabled {
+      background: rgba(235, 242, 250, 0.85) !important;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      border: 1px solid rgba(148, 163, 184, 0.5) !important;
+      color: #0f172a !important;
+      -webkit-text-fill-color: #0f172a !important;
+      opacity: 1 !important;
+      font-weight: 700 !important;
+      cursor: not-allowed;
+      box-shadow: inset 0 1.5px 3px rgba(15, 23, 42, 0.06), 0 1px 0 #ffffff !important;
+    }
+    body.light-theme .s-input option {
+      background: #ffffff;
+      color: #0f172a;
+    }
+    body.light-theme .status-box {
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(148, 163, 184, 0.55);
+      border-top: 1px solid rgba(148, 163, 184, 0.7);
+      color: #0f172a;
+      font-weight: 700;
+      box-shadow: inset 0 1.5px 3px rgba(15, 23, 42, 0.06), 0 1px 0 #ffffff;
+    }
+    body.light-theme .kpi-card {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(236, 244, 252, 0.6) 100%);
+      backdrop-filter: blur(20px) saturate(180%);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.92);
+      border-top: 1.5px solid #ffffff;
+      box-shadow: 0 10px 24px -6px rgba(15, 23, 42, 0.12), 0 3px 8px -2px rgba(15, 23, 42, 0.05), inset 0 1.5px 1px #ffffff;
+    }
+    body.light-theme .kpi-title {
+      color: #0f172a;
+      font-weight: 700;
+    }
+    body.light-theme .kpi-val {
+      color: #0f172a;
+      font-weight: 700;
+    }
+    body.light-theme .nav-tabs {
+      background: rgba(230, 238, 246, 0.85);
+      border-color: rgba(148, 163, 184, 0.4);
+    }
+    body.light-theme .nav-tab-btn {
+      color: #475569;
+    }
+    body.light-theme .nav-tab-btn:hover {
+      color: #0f172a;
+      background: rgba(0, 0, 0, 0.05);
+    }
+    body.light-theme .nav-tab-btn.active {
+      background: #ffffff;
+      color: #0284c7;
+      box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+    }
+    body.light-theme .table-card {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.82) 0%, rgba(238, 245, 253, 0.62) 100%);
+      backdrop-filter: blur(22px) saturate(180%);
+      -webkit-backdrop-filter: blur(22px) saturate(180%);
+      border: 1px solid rgba(255, 255, 255, 0.92);
+      border-top: 1.5px solid #ffffff;
+      box-shadow: 0 12px 28px -6px rgba(15, 23, 42, 0.12), 0 3px 8px -2px rgba(15, 23, 42, 0.06), inset 0 1.5px 1px #ffffff;
+    }
+    body.light-theme .table-card:hover {
+      border-color: rgba(2, 132, 199, 0.6);
+      box-shadow: 0 18px 38px -6px rgba(15, 23, 42, 0.18), 0 0 18px rgba(2, 132, 199, 0.2), inset 0 1.5px 1px #ffffff;
+      transform: translateY(-1px);
+    }
+    body.light-theme .t-name {
+      color: #0f172a;
+    }
+    body.light-theme .t-shoe {
+      background: rgba(228, 236, 245, 0.85);
+      border-color: #cbd5e1;
+      color: #475569;
+    }
+    body.light-theme .road-wrap {
+      background: rgba(232, 239, 247, 0.85);
+      border-color: #cbd5e1;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
+    }
+    body.light-theme .ai-signal-banner {
+      background: rgba(2, 132, 199, 0.1);
+      border-color: rgba(2, 132, 199, 0.3);
+    }
+    body.light-theme .ai-signal-badge {
+      color: #0284c7;
+    }
+    body.light-theme .history-toolbar {
+      background: rgba(240, 245, 251, 0.9);
+      border-color: rgba(148, 163, 184, 0.4);
+    }
+    body.light-theme .history-toolbar-info {
+      color: #0f172a;
+      font-weight: 700;
+    }
+    body.light-theme .history-toolbar-info b {
+      color: #0284c7;
+    }
+    body.light-theme .btn-clear-hist-action {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid #dc2626;
+      color: #b91c1c;
+      font-weight: 700;
+    }
+    body.light-theme .btn-clear-hist-action:hover {
+      background: #dc2626;
+      color: #ffffff;
+    }
+    body.light-theme .history-item {
+      background: rgba(240, 245, 251, 0.88);
+      border-color: rgba(148, 163, 184, 0.45);
+    }
+    body.light-theme .history-item:hover {
+      background: #ffffff;
+      border-color: #0284c7;
+    }
+    body.light-theme .hist-table {
+      color: #0f172a;
+      font-weight: 700;
+    }
+    body.light-theme .hist-badge.banker {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid #ef4444;
+      color: #991b1b;
+      font-weight: 700;
+    }
+    body.light-theme .hist-badge.player {
+      background: rgba(2, 132, 199, 0.15);
+      border: 1px solid #0284c7;
+      color: #0369a1;
+      font-weight: 700;
+    }
+    body.light-theme .hist-badge.tie {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid #10b981;
+      color: #065f46;
+      font-weight: 700;
+    }
+    body.light-theme .hist-amount {
+      background: rgba(228, 236, 245, 0.95);
+      border-color: #cbd5e1;
+      color: #0f172a;
+      font-weight: 700;
+    }
+    body.light-theme .hist-result-tag.win {
+      background: rgba(16, 185, 129, 0.2);
+      border: 1.5px solid #059669;
+      color: #065f46;
+      font-weight: 700;
+    }
+    body.light-theme .hist-result-tag.loss {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1.5px solid #dc2626;
+      color: #991b1b;
+      font-weight: 700;
+    }
+    body.light-theme .hist-result-tag.tie {
+      background: rgba(245, 158, 11, 0.22);
+      border: 1.5px solid #d97706;
+      color: #92400e;
+      font-weight: 700;
+    }
+    body.light-theme .hist-result-tag.pending {
+      background: rgba(2, 132, 199, 0.16);
+      border: 1.5px solid #0284c7;
+      color: #0369a1;
+      font-weight: 700;
+    }
+    body.light-theme .hist-profit.win {
+      color: #047857;
+      font-weight: 700;
+    }
+    body.light-theme .hist-profit.loss {
+      color: #b91c1c;
+      font-weight: 700;
+    }
+    body.light-theme .hist-profit.tie {
+      color: #b45309;
+      font-weight: 700;
+    }
+    body.light-theme .hist-row-sub {
+      color: #475569;
+      font-weight: 600;
+    }
+    body.light-theme .hist-pattern-short {
+      color: #0f172a;
+      font-weight: 600;
+    }
+    body.light-theme .empty-state {
+      color: #0f172a !important;
+    }
+    body.light-theme .empty-state-title {
+      color: #0284c7 !important;
+      font-weight: 700;
+    }
+    body.light-theme .empty-state-desc {
+      color: #0f172a !important;
+      font-weight: 600;
+    }
+    body.light-theme .empty-state-desc b {
+      color: #0284c7 !important;
+      font-weight: 700;
+    }
+    body.light-theme .signal-item {
+      background: rgba(240, 245, 251, 0.88);
+      border-color: rgba(148, 163, 184, 0.45);
+    }
+    body.light-theme .modal-dialog {
+      background: rgba(244, 248, 252, 0.98);
+      border-color: #0284c7;
+      box-shadow: 0 20px 50px rgba(15, 23, 42, 0.2);
+    }
+    body.light-theme .modal-header {
+      background: rgba(232, 239, 247, 0.95);
+      border-bottom-color: #cbd5e1;
+    }
+    body.light-theme .modal-header h3 {
+      color: #0284c7;
+    }
+    body.light-theme .tab-candidate-item {
+      background: rgba(255, 255, 255, 0.8);
+      border-color: #cbd5e1;
+    }
+    body.light-theme .tab-candidate-title {
+      color: #0f172a;
+    }
+  </style>
+</head>
+<body>
+  <!-- TOP STICKY HEADER -->
+  <div class="top-header">
+    <div class="brand">
+      <img src="icons/icon48.png" class="brand-logo" alt="N/A DEV">
+      <div style="display:flex; flex-direction:column; gap:2px;">
+        <div class="brand-title">N/A DEV - WM AI</div>
+        <a href="https://t.me/niadev01" target="_blank" class="brand-cskh-btn" id="link-cskh" title="Bấm để mở Telegram nhắn tin hỗ trợ @niadev01">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle; margin-right:2px;"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-.99-.65-.35-1.01.22-1.59.15-.15 2.71-2.48 2.76-2.69a.2.2 0 00-.05-.18c-.06-.05-.14-.03-.21-.02-.09.02-1.49.95-4.22 2.79-.4.27-.76.41-1.08.4-.36-.01-1.04-.2-1.55-.37-.63-.2-1.12-.31-1.08-.66.02-.18.27-.36.75-.55 2.92-1.27 4.86-2.11 5.83-2.52 2.77-1.16 3.35-1.36 3.73-1.36.08 0 .27.02.39.12.1.08.13.19.14.27-.01.06.01.24 0 .38z"/></svg>
+          LH CSKH: @niadev01
+        </a>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="theme-toggle-btn" id="theme-toggle-btn" type="button" title="Chuyển đổi chế độ Giao diện Sáng ☀️ / Tối 🌙">
+        <span id="theme-icon">☀️</span>
+        <span id="theme-text">Sáng</span>
+      </button>
+      <span class="license-pill" id="license-badge" title="Trạng thái bản quyền máy">Đang kiểm tra...</span>
+    </div>
+  </div>
+
+  <!-- MULTI-TAB MASTER HUB (THIẾT KẾ GỌN GÀNG 1 DÒNG DUY NHẤT: SELECT POPUP + ACTIONS) -->
+  <div class="multitab-hub">
+    <!-- Nút Select Dropdown mở Popup List Tab -->
+    <div class="tab-dropdown-wrap" id="tab-dropdown-wrap">
+      <button class="tab-dropdown-trigger" id="tab-dropdown-trigger" type="button" title="Bấm để mở danh sách Tab, chuyển tab, thêm/xóa tab">
+        <div class="tab-trigger-main">
+          <span class="tab-trigger-dot stopped" id="tab-trigger-dot"></span>
+          <span class="tab-trigger-name" id="tab-trigger-name">Tab 1</span>
+          <span class="tab-trigger-domain" id="tab-trigger-domain">Đang kết nối...</span>
+          <span class="tab-trigger-badge" id="tab-trigger-badge">Đang quét bàn...</span>
+          <span class="tab-trigger-profit zero" id="tab-trigger-profit">0k</span>
+        </div>
+        <span class="tab-trigger-arrow">▼</span>
+      </button>
+
+      <!-- POPUP LIST TAB (Đóng / Mở khi bấm trigger) -->
+      <div class="tab-dropdown-menu" id="tab-dropdown-menu" style="display:none;">
+        <div class="dropdown-header">
+          <div class="dropdown-title" id="dropdown-title-wrap">
+            <span id="dropdown-title-text">DANH SÁCH TAB SẢNH</span>
+            <span class="dropdown-count-badge" id="dropdown-tab-count">0 tab</span>
+          </div>
+          <div class="dropdown-header-actions" id="dropdown-header-actions" style="display:flex; gap:6px; align-items:center;">
+            <button class="btn-dropdown-hidden" id="dropdown-hidden-tabs-btn" type="button" title="Xem danh sách các tab đã ẩn">👁️ Đã Ẩn <span id="hidden-tabs-count-badge" style="display:none; background:rgba(255,255,255,0.22); border-radius:10px; padding:0 5px; font-size:9.5px; margin-left:2px;">0</span></button>
+            <button class="btn-dropdown-add" id="dropdown-add-tab-btn" type="button">➕ Thêm Tab</button>
+          </div>
+        </div>
+
+        <!-- Danh sách các tab đang hoạt động -->
+        <div class="dropdown-tabs-list" id="dropdown-tabs-list">
+          <div class="dropdown-empty">⏳ Đang kết nối các tab WM Casino...</div>
+        </div>
+
+        <!-- Danh sách các tab ĐÃ ẨN (hiển thị khi bấm nút Đã Ẩn) -->
+        <div class="dropdown-tabs-list" id="dropdown-hidden-tabs-list" style="display:none;">
+          <div class="dropdown-empty">Chưa có trang nào bị ẩn...</div>
+        </div>
+
+        <div class="dropdown-footer">
+          <span>Tổng lãi/lỗ dàn:</span>
+          <span class="hub-profit zero" id="multitab-total-profit">0k</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cụm nút thao tác nhanh gọn gàng bên phải -->
+    <div class="hub-actions">
+      <button id="btn-run-all-tabs" class="btn-hub-run" title="Bắt đầu cược Auto trên TẤT CẢ các tab sảnh game">▶️ Chạy Dàn</button>
+      <button id="btn-stop-all-tabs" class="btn-hub-stop" title="Dừng khẩn cấp cược Auto trên TẤT CẢ các tab">⏹️ Dừng Dàn</button>
+    </div>
+
+    <!-- Thẻ ẩn giữ tương thích JS -->
+    <span id="multitab-count-badge" style="display:none;"></span>
+    <div id="multitab-strip" style="display:none;"></div>
+    <select id="tab-selector" style="display:none;"></select>
+  </div>
+
+  <!-- MASTER CONTROLS & COMPACT CHIPS -->
+  <div class="master-controls">
+    <div class="master-btn-row">
+      <button class="btn-master-run start" id="btn-master-toggle">
+        ▶️ Auto Cược
+      </button>
+      <button class="btn-scan-all" id="btn-master-scan" title="Làm mới toàn bộ 36 bàn trên tab game">
+        🔄 Quét 36 Bàn
+      </button>
+      <div class="hub-headless-toggle" id="headless-switch-btn" title="Ẩn bảng điều khiển trên web game để giảm CPU">
+        <span>⚡ Ẩn:</span>
+        <div class="switch-toggle" id="headless-toggle"></div>
+      </div>
+    </div>
+
+    <!-- CASINO CHIPS SELECTOR - COMPACT -->
+    <div class="chip-selector-box">
+      <span class="chip-title-mini">CHIP:</span>
+      <div class="chip-row">
+        <div class="chip-item active" data-chip="10">10k</div>
+        <div class="chip-item" data-chip="20">20k</div>
+        <div class="chip-item" data-chip="50">50k</div>
+        <div class="chip-item" data-chip="100">100k</div>
+        <div class="chip-item" data-chip="500">500k</div>
+        <div class="chip-item" data-chip="1000">1M</div>
+      </div>
+      <span class="chip-val-display" id="current-chip-display" style="display:none;">10k</span>
+    </div>
+  </div>
+
+  <!-- CẤU HÌNH TIỀN CƯỢC & HẠN MỨC (ACCORDION GẬP MỞ SIÊU GỌN GÀNG) -->
+  <div class="settings-accordion collapsed" id="settings-accordion">
+    <div class="settings-acc-header" id="settings-header-btn">
+      <div class="settings-acc-left">
+        <span class="settings-acc-title">⚙️ Cấu hình</span>
+        <div class="settings-mini-tags" style="display:none;">
+          <span class="sm-tag" id="sm-tag-mode">🟢 REAL</span>
+          <span class="sm-tag" id="sm-tag-ai">⚡ FLASH</span>
+          <span class="sm-tag" id="sm-tag-limit">Max: ∞</span>
+        </div>
+      </div>
+      <div class="settings-acc-right">
+        <button id="btn-clear-data" class="btn-clear-data" title="Xóa toàn bộ lịch sử cược, số ván thắng/thua và đặt lại lợi nhuận về 0">
+          🗑️ Xóa DL
+        </button>
+        <span class="acc-chevron" id="settings-chevron">▾</span>
+      </div>
+    </div>
+
+    <div class="settings-acc-body" id="settings-body">
+      <div class="settings-popup-header">
+        <span class="settings-popup-title">⚙️ CẤU HÌNH CƯỢC & CHIẾN LƯỢC AI</span>
+        <button type="button" id="btn-close-settings-popup" class="settings-popup-close-btn" title="Đóng cửa sổ">✕</button>
+      </div>
+      <div class="settings-lock-notice" id="settings-lock-notice">
+        🔒 Đang cược Auto — Bấm "TẠM DỪNG CƯỢC AUTO" để sửa cài đặt
+      </div>
+      <!-- Dropdown ngầm đồng bộ JS cũ -->
+      <select id="opt-chip-select" style="display:none;">
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="50">50</option>
+        <option value="100">100</option>
+        <option value="500">500</option>
+        <option value="1000">1000</option>
+      </select>
+
+      <div class="settings-grid">
+        <div class="s-group">
+          <label>Chế độ cược:</label>
+          <select id="opt-trading-mode" class="s-input">
+            <option value="REAL">🟢 CƯỢC THẬT (REAL)</option>
+            <option value="PAPER">🔵 GIẢ LẬP (PAPER)</option>
+          </select>
+        </div>
+        <div class="s-group">
+          <label>Độ nhạy AI:</label>
+          <select id="opt-ai-filter" class="s-input">
+            <option value="FLASH">⚡ FLASH (Cực Nhạy)</option>
+            <option value="LOW" selected>🛡️ TIÊU CHUẨN</option>
+            <option value="HIGH">🔒 CHẮC CHẮN</option>
+          </select>
+        </div>
+
+        <div class="s-group">
+          <label>Hạn mức tổng cược (Dừng bot):</label>
+          <input type="number" id="opt-max-bet" class="s-input" value="0" min="0" step="100" placeholder="0 = K.giới hạn">
+        </div>
+        <div class="s-group">
+          <label>Tiến độ hạn mức cược:</label>
+          <div class="status-box" id="limit-progress-wrap">
+            <span id="limit-progress-text" style="color:#94a3b8; font-weight:700;">0 (K.giới hạn)</span>
+            <span id="limit-percent" style="color:#38bdf8; font-weight: 700;">∞</span>
+          </div>
+        </div>
+
+        <div class="s-group">
+          <label>Cược tối đa cùng lúc:</label>
+          <input type="number" id="opt-max-concurrent" class="s-input" value="5" min="0" max="30">
+        </div>
+        <div class="s-group">
+          <label>Đang cược đồng thời:</label>
+          <div class="status-box" id="concurrent-status-wrap">
+            <span id="concurrent-status-text" style="color:#38bdf8; font-weight:700;">0 / 5 lệnh</span>
+            <span id="concurrent-badge" style="color:#10b981; font-weight: 700;">SẴN SÀNG</span>
+          </div>
+        </div>
+
+        <div class="s-group" style="grid-column: span 2;">
+          <label>Số bàn tối đa theo dõi:</label>
+          <input type="number" id="opt-max-tables" class="s-input" value="50" min="1" max="50">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI SUMMARY -->
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <span class="kpi-title">Tổng Cược</span>
+      <span class="kpi-val" id="kpi-total-bets">0 ván</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-title">Thắng / Thua</span>
+      <span class="kpi-val" id="kpi-win-rate">0W - 0L</span>
+    </div>
+    <div class="kpi-card" id="kpi-card-progress" title="Tiến độ cược theo hạn mức">
+      <span class="kpi-title" id="kpi-progress-title">Tiến Độ</span>
+      <span class="kpi-val zero" id="kpi-progress" style="font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">0k / ∞</span>
+      <span class="kpi-val zero" id="kpi-profit" style="display:none;">0</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-title">Bàn Quét Được</span>
+      <span class="kpi-val" id="kpi-tables-count">0 bàn</span>
+    </div>
+  </div>
+
+  <!-- NAVIGATION TABS -->
+  <div class="nav-tabs">
+    <button class="nav-tab-btn active" data-view="view-tables" title="36 Bàn trực tiếp">🎲 Bàn (<span id="tab-table-count">0</span>)</button>
+    <button class="nav-tab-btn" data-view="view-history" title="Lịch sử đặt cược">📊 Lịch Sử (<span id="tab-history-count">0</span>)</button>
+    <button class="nav-tab-btn" data-view="view-signals" title="Tín hiệu dự đoán AI">🤖 Tín Hiệu</button>
+    <button class="nav-tab-btn" data-view="view-logs" title="Nhật ký hoạt động" style="display:none;">📜 Log</button>
+  </div>
+
+  <!-- TAB 1: LIVE 36 TABLES -->
+  <div class="view-content active" id="view-tables">
+    <div id="tables-container">
+      <div class="empty-state">
+        📡 Đang kết nối tới tab game WM Casino...<br>
+        Vui lòng đảm bảo bạn đã mở sảnh game WM Casino!
+      </div>
+    </div>
+  </div>
+
+  
+  <!-- TAB 2: BET HISTORY -->
+  <div class="view-content" id="view-history">
+    <div class="history-toolbar">
+      <div class="history-toolbar-info">
+        <span>📊 Ghi nhận: <b id="hist-total-badge" style="color:#38bdf8; font-weight: 700;">0</b> ván cược</span>
+      </div>
+      <button id="btn-clear-history-tab" class="btn-clear-hist-action" title="Xóa toàn bộ lịch sử cược và đặt lại bảng số liệu về 0">
+        🗑️ Xóa Dữ Liệu
+      </button>
+    </div>
+    <div class="history-list" id="history-container">
+      <div class="empty-state">
+        📊 Chưa có lịch sử đặt cược nào được ghi nhận.<br>
+        Bấm <b>"BẮT ĐẦU CƯỢC AUTO"</b> hoặc đặt cược tay trên từng bàn để ghi nhận lịch sử!
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: AI SIGNALS -->
+  <div class="view-content" id="view-signals">
+    <div class="signals-list" id="signals-container">
+      <div class="empty-state">
+        🤖 Đang phân tích thuật toán Baccarat...<br>
+        Tín hiệu dự đoán từng bàn sẽ hiển thị tại đây khi phát hiện cầu đẹp!
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: TERMINAL LOGS -->
+  <div class="view-content" id="view-logs" style="display:none;">
+    <div class="terminal-box" id="terminal-logs">
+      <div class="log-line info">[Khởi động] Bảng điều khiển rời WM AI v2.5 đã sẵn sàng...</div>
+    </div>
+  </div>
+
+  <script src="panel.js"></script>
+
+  <!-- MODAL THÊM TAB THỦ CÔNG -->
+  <div id="modal-add-tab" class="modal-backdrop" style="display:none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>➕ THÊM TAB SẢNH GAME WM CASINO</h3>
+        <button class="modal-close-btn" id="btn-close-add-tab-modal">✕</button>
+      </div>
+      <div class="modal-body">
+        <label style="font-weight:700; color:#e2e8f0; display:block; margin-bottom:6px; font-size:12px;">Đường link (URL) sảnh game:</label>
+        <input type="text" id="input-add-tab-url" class="s-input" style="width:100%; padding:9px 12px; font-size:12px; margin-bottom:12px; box-sizing:border-box; border-radius:6px; background:#080d19; border:1px solid #1e293b; color:#f8fafc;" placeholder="https://www.rr3300.com/m/home...">
+        
+        <div style="display:flex; gap:8px; margin-bottom:14px;">
+          <button id="btn-confirm-open-tab" class="btn-hub-add" style="flex:1; justify-content:center; padding:9px 14px; font-size:12px;">🚀 Mở Tab Trình Duyệt Mới</button>
+          <button id="btn-paste-current-url" class="btn-hub-run" style="padding:9px 14px; font-size:12px;" title="Lấy link từ tab game đang chạy">📋 Link Tab Hiện Tại</button>
+        </div>
+
+        <div id="other-chrome-tabs-section" style="border-top:1px solid #1e293b; padding-top:10px; margin-top:10px;">
+          <div style="font-size:11px; font-weight: 700; color:#94a3b8; margin-bottom:8px;">HOẶC KẾT NỐI NHANH TỪ CÁC TAB CHROME ĐANG MỞ:</div>
+          <div id="other-chrome-tabs-list" style="max-height:160px; overflow-y:auto; display:flex; flex-direction:column; gap:6px;">
+            <div style="color:#64748b; font-size:11px; padding:6px;">Đang quét danh sách tab...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

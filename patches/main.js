@@ -241,7 +241,32 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
       console.warn('[CDP] Lỗi khi nạp cookies từ Cloud:', errCookies.message);
     }
 
-    const dev   = device || {};
+    let dev = device;
+    if ((!dev || Object.keys(dev).length === 0) && profile) {
+      if (profile.device) {
+        dev = profile.device;
+      } else if (profile.deviceId) {
+        const devices = loadDevicesFromDisk();
+        const deviceList = Array.isArray(devices) ? devices : (devices.devices || []);
+        dev = deviceList.find(d => d.id === profile.deviceId);
+      }
+    }
+    dev = dev || {};
+
+    const devW = dev?.viewport?.width || dev?.screen_width || 412;
+    const devH = dev?.viewport?.height || dev?.screen_height || 915;
+    const baseRatio = devW / devH;
+    const landscapeRatio = devH / devW;
+    const isMobile = dev.is_mobile !== false;
+
+    let orientationLock = profile?.orientationLock;
+    if (!orientationLock) {
+      orientationLock = isMobile ? 'portrait' : 'auto';
+    }
+    if (orientationLock !== 'portrait' && orientationLock !== 'landscape') {
+      orientationLock = 'auto';
+    }
+
     const dpr   = dev.device_scale_factor || 3.0;
     const ua    = dev.user_agent || '';
     const tz    = dev.timezone || (profile && profile.timezone) || 'Asia/Ho_Chi_Minh';
@@ -265,7 +290,6 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
     // CDP không cần handle 407 nữa.
 
     // ── 1. SET KÍCH THƯỚC CỬA SỔ VẬT LÝ ngay lúc Chrome vừa mở ──
-    // (Chỉ set 1 lần khi mở, user vẫn resize được sau đó)
     let windowId = null;
     try {
       const winInfo = await client.send('Browser.getWindowForTarget');
@@ -275,88 +299,176 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
           windowId,
           bounds: { left: undefined, top: undefined, width: winW, height: winH, windowState: 'normal' }
         });
-        console.log(`[CDP] 📐 Window size set: ${winW}x${winH}`);
+        console.log(`[CDP] 📐 Initial window size set: ${winW}x${winH}`);
       }
     } catch(e) {
       console.warn('[CDP] setWindowBounds failed:', e.message);
     }
 
-    // ── 2. Viewport bám theo vùng nội dung thực của cửa sổ (chế độ Responsive — giống Chrome DevTools Device Toolbar) ──
-    // KHÔNG ghim viewport vào kích thước device: cửa sổ vật lý luôn nhỏ hơn độ phân giải điện thoại
-    // nên ghim cứng sẽ tạo khoảng trắng thừa bên phải/dưới và cô lập trang web.
-    // mobile:true + DPR device + UA mobile ⇒ trang tự render giao diện điện thoại,
-    // còn width/height JS thấy = đúng phần hiển thị thật của cửa sổ.
-
-    // Đo phần diện tích bị chiếm bởi thanh UI của Chrome (tab bar + address bar)
-    // = chênh lệch giữa kích thước cửa sổ ngoài và CSS viewport NGAY TRƯỚC KHI áp emulation
-    let uiDeltaX = 0, uiDeltaY = 120; // fallback: tab + address bar mặc định ~120px
+    // ── 2. Đo Chrome UI chrome (khung viền + tab bar + address bar) ──
+    let uiDeltaX = 16, uiDeltaY = 110; // Fallback an toàn trên Windows (~16px viền, ~110px tab bar + omnibox)
     try {
       if (windowId) {
         const { bounds } = await client.send('Browser.getWindowBounds', { windowId });
         const metrics = await client.send('Page.getLayoutMetrics');
         const vp = metrics.cssVisualViewport || metrics.visualViewport;
-        if (bounds && vp && vp.clientWidth > 0) {
-          uiDeltaX = Math.max(0, Math.round(bounds.width  - vp.clientWidth));
-          uiDeltaY = Math.max(40, Math.round(bounds.height - vp.clientHeight));
+        if (bounds && vp && vp.clientWidth > 0 && vp.clientHeight > 0) {
+          const mX = bounds.width - vp.clientWidth;
+          const mY = bounds.height - vp.clientHeight;
+          if (mX >= 0 && mX <= 60) uiDeltaX = mX;
+          if (mY >= 30 && mY <= 220) uiDeltaY = mY;
         }
-        console.log(`[CDP] 📏 Chrome UI chrome measured: ${uiDeltaX}x${uiDeltaY}px`);
+        console.log(`[CDP] 📏 Chrome UI measured: ${uiDeltaX}x${uiDeltaY}px`);
       }
     } catch(e) {}
 
-    const getContentSize = async () => {
+    // ── 3. Đồng bộ Viewport & Khung hình theo tỷ lệ chuẩn device / orientationLock ──
+    let lastKnownWinW = winW;
+    let lastKnownWinH = winH;
+    let isProgrammaticResize = false;
+    let currentMetricsState = null;
+
+    const computeEmulationState = (currentWinW, currentWinH) => {
+      if (orientationLock === 'auto') {
+        const contentW = Math.max(100, Math.round(currentWinW - uiDeltaX));
+        const contentH = Math.max(100, Math.round(currentWinH - uiDeltaY));
+        const screenOrientation = (contentW < contentH)
+          ? { type: 'portraitPrimary', angle: 0 }
+          : { type: 'landscapePrimary', angle: 90 };
+        return {
+          viewportW: contentW,
+          viewportH: contentH,
+          targetWinW: currentWinW,
+          targetWinH: currentWinH,
+          screenOrientation,
+          needsResize: false
+        };
+      }
+
+      // Khóa hướng: 'portrait' hoặc 'landscape'
+      const isLandscape = orientationLock === 'landscape';
+      const targetRatio = isLandscape ? landscapeRatio : baseRatio;
+      const screenOrientation = isLandscape
+        ? { type: 'landscapePrimary', angle: 90 }
+        : { type: 'portraitPrimary', angle: 0 };
+
+      // Nhận diện người dùng kéo chiều rộng hay chiều cao
+      const deltaW = Math.abs(currentWinW - lastKnownWinW);
+      const deltaH = Math.abs(currentWinH - lastKnownWinH);
+
+      let targetVpW, targetVpH;
+      let targetWinW, targetWinH;
+
+      if (deltaW > deltaH && deltaW > 2) {
+        // Người dùng ưu tiên thay đổi chiều rộng
+        const availW = Math.max(100, currentWinW - uiDeltaX);
+        targetVpW = availW;
+        targetVpH = Math.max(100, Math.round(availW / targetRatio));
+        targetWinW = currentWinW;
+        targetWinH = targetVpH + uiDeltaY;
+      } else {
+        // Người dùng ưu tiên thay đổi chiều cao (hoặc lúc mở lần đầu)
+        const availH = Math.max(100, currentWinH - uiDeltaY);
+        targetVpH = availH;
+        targetVpW = Math.max(100, Math.round(availH * targetRatio));
+        targetWinW = targetVpW + uiDeltaX;
+        targetWinH = currentWinH;
+      }
+
+      const diffW = Math.abs(currentWinW - targetWinW);
+      const diffH = Math.abs(currentWinH - targetWinH);
+      // Chống vòng lặp resize: chỉ kích hoạt setWindowBounds khi lệch > 4px
+      const needsResize = (diffW > 4 || diffH > 4);
+
+      return {
+        viewportW: targetVpW,
+        viewportH: targetVpH,
+        targetWinW,
+        targetWinH,
+        screenOrientation,
+        needsResize
+      };
+    };
+
+    const applyMetricsOverride = async (vpW, vpH, orientation) => {
       try {
-        if (windowId) {
-          const { bounds } = await client.send('Browser.getWindowBounds', { windowId });
-          if (bounds && bounds.width) {
-            return {
-              w: Math.max(Math.round(bounds.width  - uiDeltaX), 1),
-              h: Math.max(Math.round(bounds.height - uiDeltaY), 1),
-            };
+        await client.send('Emulation.setDeviceMetricsOverride', {
+          width:             vpW,
+          height:            vpH,
+          deviceScaleFactor: dpr,
+          mobile:            isMobile,
+          screenOrientation: orientation,
+          screenWidth:       vpW,
+          screenHeight:      vpH,
+          positionX:         0,
+          positionY:         0,
+        });
+        currentMetricsState = { viewportW: vpW, viewportH: vpH, screenOrientation: orientation };
+        console.log(`[CDP] 📱 Synced Emulation: ${vpW}x${vpH} (${orientation.type}) DPR=${dpr}`);
+      } catch(e) {
+        console.warn('[CDP] setDeviceMetricsOverride warning:', e.message);
+      }
+    };
+
+    const syncViewportAndBounds = async () => {
+      if (isProgrammaticResize) return;
+      try {
+        if (!windowId) return;
+        const { bounds } = await client.send('Browser.getWindowBounds', { windowId });
+        if (!bounds || bounds.windowState === 'minimized') return;
+
+        const state = computeEmulationState(bounds.width, bounds.height);
+        lastKnownWinW = bounds.width;
+        lastKnownWinH = bounds.height;
+
+        if (state.needsResize) {
+          isProgrammaticResize = true;
+          lastKnownWinW = state.targetWinW;
+          lastKnownWinH = state.targetWinH;
+          try {
+            await client.send('Browser.setWindowBounds', {
+              windowId,
+              bounds: {
+                width: state.targetWinW,
+                height: state.targetWinH
+              }
+            });
+            console.log(`[CDP] 📐 Ratio-locked window resize: ${state.targetWinW}x${state.targetWinH}`);
+          } catch(e){}
+          finally {
+            setTimeout(() => { isProgrammaticResize = false; }, 200);
           }
         }
+
+        await applyMetricsOverride(state.viewportW, state.viewportH, state.screenOrientation);
       } catch(e) {}
-      return { w: winW, h: winH };
     };
 
-    const setDeviceMetrics = async (w, h) => {
-      await client.send('Emulation.setDeviceMetricsOverride', {
-        width:             w,
-        height:            h,
-        deviceScaleFactor: dpr,
-        mobile:            true,
-        screenWidth:       w,   // screen.* = đúng màn hình đang hiển thị
-        screenHeight:      h,
-        positionX:         0,
-        positionY:         0,
-      });
-    };
+    // Áp dụng ngay lúc khởi động
+    await syncViewportAndBounds();
 
-    const initBounds = await getContentSize();
-    await setDeviceMetrics(initBounds.w, initBounds.h);
-
-    // ── Theo dõi resize: cập nhật viewport ngay khi người dùng kéo thay đổi kích thước cửa sổ ──
+    // ── Theo dõi resize: debounce 150-200ms chống giật lag và vòng lặp ──
     let resizeTimer = null;
-    let lastAppliedW = initBounds.w, lastAppliedH = initBounds.h;
-    const syncViewportIfChanged = async () => {
-      try {
-        const b = await getContentSize();
-        if (b.w !== lastAppliedW || b.h !== lastAppliedH) {
-          lastAppliedW = b.w; lastAppliedH = b.h;
-          await setDeviceMetrics(b.w, b.h);
-          console.log(`[CDP] 🔄 Viewport resized → ${b.w}x${b.h}`);
-        }
-      } catch(e) {}
-    };
-    client.on('Browser.windowBoundsChanged', () => {
+    const debouncedResize = () => {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(syncViewportIfChanged, 120); // debounce — tránh spam CDP khi đang kéo resize liên tục
+      resizeTimer = setTimeout(syncViewportAndBounds, 180);
+    };
+
+    client.on('Browser.windowBoundsChanged', debouncedResize);
+    const resizePoller = setInterval(syncViewportAndBounds, 1500);
+
+    page.on('close', () => {
+      clearInterval(resizePoller);
+      clearTimeout(resizeTimer);
     });
-    // Dự phòng: một số build Chromium không phát sự kiện windowBoundsChanged cho page session
-    const resizePoller = setInterval(syncViewportIfChanged, 1000);
-    page.on('close', () => clearInterval(resizePoller));
+
     browser.on('disconnected', () => {
       clearInterval(resizePoller);
       clearTimeout(resizeTimer);
+      if (profile && profile.id) {
+        launchedBrowsers.delete(profile.id);
+        triggerAutoArrangeIfNeeded();
+      }
     });
 
     // ── 3. User-Agent & Client Hints (Chuẩn Hóa High Entropy) ──
@@ -375,7 +487,7 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
     const cFull = ensureFullVersion(chromeFull, `${chromeMajor}.0.0.0`);
     const oFull = ensureFullVersion(operaFull, `${operaMajor}.0.0.0`);
 
-    const isMobile = dev.is_mobile !== false;
+    // isMobile đã được định nghĩa ở trên theo dev.is_mobile !== false
     const isApple = (dev.brand && dev.brand.toLowerCase() === 'apple') || dev.platform === 'iPhone' || dev.platform === 'iPad';
     const platformName = isApple ? (dev.platform || (dev.model && dev.model.includes('iPad') ? 'iPad' : 'iPhone')) : (isMobile ? 'Android' : (ua.includes('Windows') ? 'Windows' : 'Android'));
 
@@ -486,6 +598,15 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
             await newClient.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: touch }).catch(() => {});
             if (isMobile) {
               await newClient.send('Emulation.setEmitTouchEventsForMouse', { enabled: true, configuration: 'mobile' }).catch(() => {});
+            }
+            if (currentMetricsState) {
+              await newClient.send('Emulation.setDeviceMetricsOverride', {
+                width:             currentMetricsState.viewportW,
+                height:            currentMetricsState.viewportH,
+                deviceScaleFactor: dpr,
+                mobile:            isMobile,
+                screenOrientation: currentMetricsState.screenOrientation,
+              }).catch(() => {});
             }
             await newClient.send('Emulation.setTimezoneOverride', { timezoneId: tz }).catch(() => {});
             await newClient.send('Emulation.setLocaleOverride', { locale: lang }).catch(() => {});
@@ -1558,7 +1679,7 @@ ipcMain.handle('extensions:importPath', async (event, selectedPath) => {
 // Load app settings
 function getAppSettings() {
   const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
-  const defaultSettings = { windowWidth: 380, windowHeight: 675, preset: '380x675' };
+  const defaultSettings = { windowWidth: 380, windowHeight: 675, preset: '380x675', mode: 'autoFit', gap: 10, autoArrangeOnLaunch: false };
   if (!fs.existsSync(settingsPath)) return defaultSettings;
   try {
     const loaded = { ...defaultSettings, ...JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) };
@@ -1764,64 +1885,225 @@ ipcMain.handle('displays:get', async () => {
   }
 });
 
-// Calculate window position with Grid or Cascade layout options
-function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null, customOpts = null) {
+// Calculate window position with Auto Fit Grid, Grid or Cascade layout options
+function calculateGridPosition(index, totalRunning = 1, profileCustomWin = null, customOpts = null, profile = null) {
   try {
     const { screen } = require('electron');
-    const displays = screen.getAllDisplays();
+    const displays = screen ? screen.getAllDisplays() : [];
     const settings = getAppSettings();
     const opts = { ...settings, ...(customOpts || {}) };
 
     const displayIdx = parseInt(opts.displayIndex) || 0;
-    const targetDisplay = displays[displayIdx] || screen.getPrimaryDisplay();
-    const { x, y, width, height } = targetDisplay.workArea;
+    const targetDisplay = (displays && displays[displayIdx]) || (screen ? screen.getPrimaryDisplay() : null) || {
+      bounds: { width: 1920, height: 1080 },
+      workArea: { x: 0, y: 0, width: 1920, height: 1080 }
+    };
+    const { x, y, width, height } = targetDisplay.workArea || targetDisplay.bounds;
 
-    const mode = opts.mode || 'grid'; // 'grid' | 'cascade'
-    const autoAdapt = opts.autoAdapt !== false;
-    // Chú ý: dùng || thay vì ?? — parseInt('') trả NaN, mà NaN ?? 10 vẫn là NaN!
-    const startX = parseInt(opts.startX) || 10;
-    const startY = parseInt(opts.startY) || 10;
-    const gapX = parseInt(opts.gapX) || 10;
-    const gapY = parseInt(opts.gapY) || 10;
+    const actualProfile = profile || (profileCustomWin && (profileCustomWin.id || profileCustomWin.device || profileCustomWin.deviceId) ? profileCustomWin : null);
+    const customWin = (profileCustomWin && profileCustomWin.width && profileCustomWin.height) ? profileCustomWin : (actualProfile ? actualProfile.customWindow : null);
 
-    let winW = parseInt(opts.winW) || parseInt(opts.windowWidth) || 380;
-    let winH = parseInt(opts.winH) || parseInt(opts.windowHeight) || 675;
-
-    if (profileCustomWin && profileCustomWin.width && profileCustomWin.height) {
-      winW = parseInt(profileCustomWin.width) || winW;
-      winH = parseInt(profileCustomWin.height) || winH;
+    // Resolve device
+    let dev = null;
+    if (actualProfile) {
+      if (actualProfile.device) {
+        dev = actualProfile.device;
+      } else if (actualProfile.deviceId) {
+        const devices = loadDevicesFromDisk();
+        const list = Array.isArray(devices) ? devices : (devices.devices || []);
+        dev = list.find(d => d.id === actualProfile.deviceId);
+      }
     }
-    // Clamp kích thước — chỉ giới hạn trên (không vượt màn hình), tôn trọng giá trị người dùng nhập
-    // Windows/OS sẽ tự enforce minimum vật lý (~112px) nếu giá trị quá nhỏ
-    winW = Math.min(Math.max(winW, 1), width - 50);
-    winH = Math.min(Math.max(winH, 1), height - 40);
+    dev = dev || {};
 
-    let colsPerRow = parseInt(opts.colsPerRow) || 3;
-    if (autoAdapt) {
-      colsPerRow = Math.max(1, Math.floor((width - startX) / (winW + gapX)));
+    const devW = dev?.viewport?.width || dev?.screen_width || 412;
+    const devH = dev?.viewport?.height || dev?.screen_height || 915;
+    const baseRatio = devW / devH;
+    const isMobile = dev.is_mobile !== false;
+
+    let orientationLock = actualProfile?.orientationLock;
+    if (!orientationLock) {
+      orientationLock = isMobile ? 'portrait' : 'auto';
     }
+    if (orientationLock !== 'portrait' && orientationLock !== 'landscape') {
+      orientationLock = 'auto';
+    }
+
+    const mode = opts.mode || opts.layoutMode || 'autoFit'; // 'autoFit' | 'grid' | 'cascade'
+
+    // Gaps and margins (defaults to 10px)
+    const gap = opts.gap !== undefined ? parseInt(opts.gap) : (opts.gapX !== undefined ? parseInt(opts.gapX) : 10);
+    const gapX = opts.gapX !== undefined ? parseInt(opts.gapX) : (isNaN(gap) ? 10 : gap);
+    const gapY = opts.gapY !== undefined ? parseInt(opts.gapY) : (isNaN(gap) ? 10 : gap);
+    const startX = opts.startX !== undefined ? parseInt(opts.startX) : gapX;
+    const startY = opts.startY !== undefined ? parseInt(opts.startY) : gapY;
+
+    // Chrome UI chrome padding constants (tab bar + address bar + window border)
+    const UI_DELTA_X = 16;
+    const UI_DELTA_Y = 110;
 
     let posX = x + startX;
     let posY = y + startY;
+    let winW = parseInt(opts.winW) || parseInt(opts.windowWidth) || 380;
+    let winH = parseInt(opts.winH) || parseInt(opts.windowHeight) || 675;
 
-    if (mode === 'cascade') {
-      posX = x + startX + (index * gapX);
-      posY = y + startY + (index * gapY);
-    } else {
-      const colIndex = index % colsPerRow;
-      const rowIndex = Math.floor(index / colsPerRow);
-      posX = x + startX + (colIndex * (winW + gapX));
-      posY = y + startY + (rowIndex * (winH + gapY));
+    if (customWin && customWin.width && customWin.height) {
+      winW = parseInt(customWin.width) || winW;
+      winH = parseInt(customWin.height) || winH;
     }
 
-    return { posX, posY, winW, winH, colsPerRow, mode };
+    if (mode === 'autoFit') {
+      const total = Math.max(1, totalRunning);
+      let cols = 1;
+      let rows = 1;
+
+      if (total <= 1) {
+        cols = 1; rows = 1;
+      } else if (total === 2) {
+        cols = 2; rows = 1;
+      } else if (total === 3) {
+        cols = (width >= 1200) ? 3 : 2;
+        rows = Math.ceil(total / cols);
+      } else if (total === 4) {
+        cols = 2; rows = 2;
+      } else if (total <= 6) {
+        cols = 3; rows = 2;
+      } else if (total <= 8) {
+        cols = 4; rows = 2;
+      } else if (total <= 10) {
+        cols = 5; rows = 2;
+      } else if (total <= 12) {
+        cols = 4; rows = 3;
+      } else if (total <= 15) {
+        cols = 5; rows = 3;
+      } else if (total <= 16) {
+        cols = 4; rows = 4;
+      } else if (total <= 20) {
+        cols = 5; rows = 4;
+      } else {
+        cols = Math.min(8, Math.max(2, Math.ceil(Math.sqrt(total * (width / height)))));
+        rows = Math.ceil(total / cols);
+      }
+
+      const availAreaW = width - (startX * 2) - (cols - 1) * gapX;
+      const cellW = Math.max(120, Math.floor(availAreaW / cols));
+      const availAreaH = height - (startY * 2) - (rows - 1) * gapY;
+      const cellH = Math.max(150, Math.floor(availAreaH / rows));
+
+      if (orientationLock === 'portrait') {
+        const targetRatio = baseRatio;
+        const maxContentH = Math.max(80, cellH - UI_DELTA_Y);
+        let contentW = Math.round(maxContentH * targetRatio);
+        let candWinW = contentW + UI_DELTA_X;
+        let candWinH = cellH;
+
+        if (candWinW > cellW) {
+          candWinW = cellW;
+          const constrainedContentW = Math.max(50, cellW - UI_DELTA_X);
+          candWinH = Math.min(cellH, Math.round(constrainedContentW / targetRatio) + UI_DELTA_Y);
+        }
+        winW = candWinW;
+        winH = candWinH;
+      } else if (orientationLock === 'landscape') {
+        const targetRatio = devH / devW;
+        const maxContentW = Math.max(80, cellW - UI_DELTA_X);
+        let contentH = Math.round(maxContentW / targetRatio);
+        let candWinH = contentH + UI_DELTA_Y;
+        let candWinW = cellW;
+
+        if (candWinH > cellH) {
+          candWinH = cellH;
+          const constrainedContentH = Math.max(50, cellH - UI_DELTA_Y);
+          candWinW = Math.min(cellW, Math.round(constrainedContentH * targetRatio) + UI_DELTA_X);
+        }
+        winW = candWinW;
+        winH = candWinH;
+      } else {
+        // 'auto' mode: fills the cell completely
+        winW = cellW;
+        winH = cellH;
+      }
+
+      // Clamp so never overflows display workArea
+      winW = Math.min(winW, width - startX);
+      winH = Math.min(winH, height - startY);
+
+      const colIndex = index % cols;
+      const rowIndex = Math.floor(index / cols);
+
+      const cellX = x + startX + (colIndex * (cellW + gapX));
+      const cellY = y + startY + (rowIndex * (cellH + gapY));
+
+      // Left align inside cell
+      posX = cellX;
+      posY = cellY;
+
+      // Ensure window does not overflow screen boundaries
+      if (posX + winW > x + width) posX = Math.max(x, x + width - winW);
+      if (posY + winH > y + height) posY = Math.max(y, y + height - winH);
+
+      return { posX, posY, winW, winH, colsPerRow: cols, rows, mode: 'autoFit' };
+    }
+
+    if (mode === 'cascade') {
+      if (orientationLock === 'portrait') {
+        const availH = Math.max(100, winH - UI_DELTA_Y);
+        winW = Math.round(availH * baseRatio) + UI_DELTA_X;
+      } else if (orientationLock === 'landscape') {
+        const availH = Math.max(100, winH - UI_DELTA_Y);
+        winW = Math.round(availH * (devH / devW)) + UI_DELTA_X;
+      }
+      winW = Math.min(Math.max(winW, 120), width - 40);
+      winH = Math.min(Math.max(winH, 150), height - 40);
+
+      const cascadeStep = Math.max(25, gapX || 30);
+      const maxCols = Math.max(1, Math.floor((width - winW - startX) / cascadeStep));
+      const maxRows = Math.max(1, Math.floor((height - winH - startY) / cascadeStep));
+      const cycle = Math.min(maxCols, maxRows) || 8;
+      const stepIndex = index % cycle;
+
+      posX = x + startX + (stepIndex * cascadeStep);
+      posY = y + startY + (stepIndex * cascadeStep);
+
+      if (posX + winW > x + width) posX = Math.max(x, x + width - winW);
+      if (posY + winH > y + height) posY = Math.max(y, y + height - winH);
+
+      return { posX, posY, winW, winH, colsPerRow: 1, mode: 'cascade' };
+    }
+
+    // Default 'grid' mode:
+    if (orientationLock === 'portrait') {
+      const availH = Math.max(100, winH - UI_DELTA_Y);
+      winW = Math.round(availH * baseRatio) + UI_DELTA_X;
+    } else if (orientationLock === 'landscape') {
+      const availH = Math.max(100, winH - UI_DELTA_Y);
+      winW = Math.round(availH * (devH / devW)) + UI_DELTA_X;
+    }
+    winW = Math.min(Math.max(winW, 120), width - 40);
+    winH = Math.min(Math.max(winH, 150), height - 40);
+
+    let colsPerRow = parseInt(opts.colsPerRow) || 3;
+    if (opts.autoAdapt !== false) {
+      colsPerRow = Math.max(1, Math.floor((width - startX) / (winW + gapX)));
+    }
+
+    const colIndex = index % colsPerRow;
+    const rowIndex = Math.floor(index / colsPerRow);
+    posX = x + startX + (colIndex * (winW + gapX));
+    posY = y + startY + (rowIndex * (winH + gapY));
+
+    if (posX + winW > x + width) posX = Math.max(x, x + width - winW);
+    if (posY + winH > y + height) posY = Math.max(y, y + height - winH);
+
+    return { posX, posY, winW, winH, colsPerRow, mode: 'grid' };
   } catch(e) {
-    return { posX: 10 + (index * 20), posY: 10 + (index * 20), winW: 380, winH: 675, colsPerRow: 3, mode: 'grid' };
+    console.error('[calculateGridPosition error]', e);
+    return { posX: 10 + (index * 20), posY: 10 + (index * 20), winW: 380, winH: 675, colsPerRow: 3, mode: 'autoFit' };
   }
 }
 
 // Rearrange all currently running browser windows into clean layout
-ipcMain.handle('browser:arrangeWindows', async (event, customOpts = {}) => {
+async function arrangeRunningWindows(customOpts = {}) {
   const runningList = [];
   for (const [id, info] of launchedBrowsers) {
     try {
@@ -1842,9 +2124,18 @@ ipcMain.handle('browser:arrangeWindows', async (event, customOpts = {}) => {
     const newSettings = { ...currentSettings, ...customOpts };
     if (customOpts.winW) newSettings.windowWidth = customOpts.winW;
     if (customOpts.winH) newSettings.windowHeight = customOpts.winH;
-    // Ghi vào APP_DATA_DIR — đúng nơi getAppSettings() đọc (tránh lệch userData dir)
     const settingsPath = path.join(APP_DATA_DIR, 'settings.json');
-    fs.writeFileSync(settingsPath, JSON.stringify(newSettings, null, 2));
+    try {
+      fs.writeFileSync(settingsPath, JSON.stringify(newSettings, null, 2));
+    } catch(e){}
+  }
+
+  const profilePath = path.join(APP_DATA_DIR, 'profiles.json');
+  let allProfiles = [];
+  if (fs.existsSync(profilePath)) {
+    try {
+      allProfiles = JSON.parse(fs.readFileSync(profilePath, 'utf-8'));
+    } catch(e){}
   }
 
   const N = runningList.length;
@@ -1852,7 +2143,8 @@ ipcMain.handle('browser:arrangeWindows', async (event, customOpts = {}) => {
 
   for (let idx = 0; idx < runningList.length; idx++) {
     const pInfo = runningList[idx];
-    const pos = calculateGridPosition(idx, N, null, customOpts);
+    const profile = allProfiles.find(p => p.id === pInfo.id) || null;
+    const pos = calculateGridPosition(idx, N, profile ? profile.customWindow : null, customOpts, profile);
 
     const profileDir = path.join(APP_DATA_DIR, 'profiles', pInfo.id);
     setChromiumWindowPreferences(profileDir, pos.posX, pos.posY, pos.winW, pos.winH);
@@ -1888,7 +2180,31 @@ ipcMain.handle('browser:arrangeWindows', async (event, customOpts = {}) => {
     }
   }
 
-  return { ok: true, count: N, mode: customOpts.mode || 'grid' };
+  const currentSettings = getAppSettings();
+  return { ok: true, count: N, mode: customOpts.mode || currentSettings.mode || 'autoFit' };
+}
+
+let autoArrangeTimer = null;
+function triggerAutoArrangeIfNeeded() {
+  try {
+    const settings = getAppSettings();
+    if (settings && settings.autoArrangeOnLaunch === true) {
+      clearTimeout(autoArrangeTimer);
+      autoArrangeTimer = setTimeout(() => {
+        arrangeRunningWindows().catch(err => {
+          console.warn('[AutoArrange Error]', err.message);
+        });
+      }, 300);
+    }
+  } catch(e) {}
+}
+
+ipcMain.handle('windows:arrange', async (event, opts = {}) => {
+  return await arrangeRunningWindows(opts);
+});
+
+ipcMain.handle('browser:arrangeWindows', async (event, customOpts = {}) => {
+  return await arrangeRunningWindows(customOpts);
 });
 
 // ── Helper xác định đường dẫn trình duyệt Chromium / Chrome / CloakHQ ──
@@ -2036,7 +2352,7 @@ ipcMain.handle('browser:launch', async (event, profile) => {
 
     // Auto-calculate position on screen grid so windows don't overlap
     const runningCount = launchedBrowsers.size;
-    const gridPos = calculateGridPosition(runningCount, runningCount + 1, profile.customWindow);
+    const gridPos = calculateGridPosition(runningCount, runningCount + 1, profile.customWindow, null, profile);
 
     // ── Kích thước cửa sổ VẬT LÝ = gridPos (nhỏ gọn, có thể resize tự do) ──
     // ── Viewport JS báo cho web    = device.viewport (cố định qua CDP)     ──
@@ -2178,10 +2494,16 @@ ipcMain.handle('browser:launch', async (event, profile) => {
         console.error('[Browser Spawn Error]', err);
         resolve({ ok: false, error: err.message });
       });
+      proc.on('exit', () => {
+        launchedBrowsers.delete(profile.id);
+        triggerAutoArrangeIfNeeded();
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
+      });
       setTimeout(() => {
         proc.unref();
         launchedBrowsers.set(profile.id, { pid: proc.pid, startTime: Date.now(), debugPort });
         resolve({ ok: true, pid: proc.pid, debugPort });
+        triggerAutoArrangeIfNeeded();
 
         // ── CDP: apply emulation → navigate URL thật ──
         const targetUrl = profile.startUrl || 'https://bot.sannysoft.com';
@@ -2455,6 +2777,7 @@ async function gracefulCloseProfile(profileId) {
       if (!isAlive(info.pid)) {
         console.log(`[Close] ✅ Chrome tự thoát sau ${(i+1)*250}ms`);
         launchedBrowsers.delete(profileId);
+        triggerAutoArrangeIfNeeded();
         return;
       }
     }
@@ -2477,6 +2800,7 @@ function killProfileProcessTree(profileId) {
       }
     } catch(e){}
     launchedBrowsers.delete(profileId);
+    triggerAutoArrangeIfNeeded();
   }
 
   // Dọn dẹp triệt để tất cả các tiến trình trình duyệt ngầm bị kẹt theo profileId
@@ -3609,7 +3933,7 @@ async function handleApiRequest(req, res) {
     let body;
     try { body = await readBody(req); } catch(e) { return sendJSON(res, 400, { ok: false, error: e.message }); }
 
-    const { name, deviceId, proxy, cityKey, startUrl, notes, customWindow, selectedExtensions, diagnosticMode, antiDebugger } = body;
+    const { name, deviceId, proxy, cityKey, startUrl, notes, customWindow, selectedExtensions, diagnosticMode, antiDebugger, orientationLock, autoArrangeOnLaunch } = body;
 
     // Validation
     if (!name || typeof name !== 'string' || !name.trim()) {
@@ -3663,6 +3987,8 @@ async function handleApiRequest(req, res) {
 
     const isDiag = !!diagnosticMode;
     const isAntiDbg = isDiag ? false : !!antiDebugger;
+    const validOrientations = ['auto', 'portrait', 'landscape'];
+    const resolvedOrientation = validOrientations.includes(orientationLock) ? orientationLock : 'auto';
 
     // Tạo profile
     const newProfile = {
@@ -3677,6 +4003,8 @@ async function handleApiRequest(req, res) {
       language: 'vi-VN',
       selectedExtensions: Array.isArray(selectedExtensions) ? selectedExtensions : [],
       customWindow: customWindow || null,
+      orientationLock: resolvedOrientation,
+      autoArrangeOnLaunch: autoArrangeOnLaunch === true,
       diagnosticMode: isDiag,
       antiDebugger: isAntiDbg,
       startUrl: (startUrl || '').trim(),
@@ -3710,6 +4038,10 @@ async function handleApiRequest(req, res) {
     const existing = profiles[idx];
     const isDiag = body.diagnosticMode !== undefined ? !!body.diagnosticMode : !!existing.diagnosticMode;
     const isAntiDbg = isDiag ? false : (body.antiDebugger !== undefined ? !!body.antiDebugger : !!existing.antiDebugger);
+    const validOrientations = ['auto', 'portrait', 'landscape'];
+    const resolvedOrientation = body.orientationLock !== undefined && validOrientations.includes(body.orientationLock)
+      ? body.orientationLock
+      : (existing.orientationLock || 'auto');
 
     profiles[idx] = {
       ...existing,
@@ -3720,6 +4052,8 @@ async function handleApiRequest(req, res) {
       notes: body.notes !== undefined ? body.notes.trim() : existing.notes,
       customWindow: body.customWindow !== undefined ? body.customWindow : existing.customWindow,
       selectedExtensions: Array.isArray(body.selectedExtensions) ? body.selectedExtensions : existing.selectedExtensions,
+      orientationLock: resolvedOrientation,
+      autoArrangeOnLaunch: body.autoArrangeOnLaunch !== undefined ? !!body.autoArrangeOnLaunch : !!existing.autoArrangeOnLaunch,
       diagnosticMode: isDiag,
       antiDebugger: isAntiDbg,
       updatedAt: Date.now(),
@@ -3828,7 +4162,7 @@ async function handleApiRequest(req, res) {
 
       // Tính vị trí cửa sổ
       const runningCount = launchedBrowsers.size;
-      const gridPos = calculateGridPosition(runningCount, runningCount + 1, profile.customWindow);
+      const gridPos = calculateGridPosition(runningCount, runningCount + 1, profile.customWindow, null, profile);
       setChromiumWindowPreferences(profileDir, gridPos.posX, gridPos.posY, gridPos.winW, gridPos.winH);
 
       const debugPort = getRandomDebugPort();
@@ -3939,9 +4273,15 @@ async function handleApiRequest(req, res) {
           sendJSON(res, 500, { ok: false, error: err.message });
           resolve();
         });
+        proc.on('exit', () => {
+          launchedBrowsers.delete(id);
+          triggerAutoArrangeIfNeeded();
+          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
+        });
         setTimeout(() => {
           proc.unref();
           launchedBrowsers.set(id, { pid: proc.pid, startTime: Date.now(), debugPort });
+          triggerAutoArrangeIfNeeded();
           // CDP: setup proxy auth → apply emulation → navigate URL thật
           applyCDPDeviceEmulation(debugPort, device, profile.proxy, gridPos.winW, gridPos.winH, startUrl, profile, injectScript).catch(e => {});
           // Notify renderer UI
@@ -3956,6 +4296,14 @@ async function handleApiRequest(req, res) {
       console.error('[API Launch Exception]', err);
       return sendJSON(res, 500, { ok: false, error: err.message });
     }
+  }
+
+  // ── POST /api/windows/arrange ── sắp xếp lại tất cả cửa sổ
+  if (method === 'POST' && pathname === '/api/windows/arrange') {
+    let body = {};
+    try { body = JSON.parse(await readBody(req)); } catch(e){}
+    const result = await arrangeRunningWindows(body);
+    return sendJSON(res, 200, result);
   }
 
   // ── POST /api/profiles/:id/stop ── dừng browser

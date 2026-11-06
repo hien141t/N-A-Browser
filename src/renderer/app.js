@@ -47,6 +47,11 @@ const API = window.electronAPI || {
   selectExtensionFolder: async () => ({ ok: false, error: 'No Electron API' }),
   selectExtensionFile:   async () => ({ ok: false, error: 'No Electron API' }),
   importExtensionPath:   async (filePath) => ({ ok: false, error: 'No Electron API' }),
+  // Settings & Window Arrangement Fallbacks
+  loadSettings:          async () => JSON.parse(localStorage.getItem('settings') || '{}'),
+  saveSettings:          async (s) => { localStorage.setItem('settings', JSON.stringify(s)); return { ok: true }; },
+  getDisplays:           async () => [{ id: 0, name: 'Màn hình chính (1920x1080)' }],
+  arrangeWindows:        async (opts) => ({ ok: false, error: 'No Electron API' }),
 };
 
 // Đảm bảo API luôn có các hàm extension an toàn ngay cả khi preload chưa định nghĩa các method mở rộng
@@ -301,6 +306,10 @@ function createProfileCard(profile, device, running) {
     ? `<span class="badge-diagnostic" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(6,214,160,0.18);border:1px solid rgba(6,214,160,0.45);color:#06d6a0;margin-left:6px;" title="Chế độ Diagnostic: Chromium nguyên bản sạch, không can thiệp fingerprint">CLEAN / DIAGNOSTIC</span>`
     : '';
 
+  const orientTag = profile.orientationLock === 'landscape'
+    ? '<span class="fp-tag" style="color:#38bdf8;border-color:rgba(56,189,248,0.35);" title="Khóa màn hình ngang">🖥️ Ngang</span>'
+    : (profile.orientationLock === 'portrait' ? '<span class="fp-tag" style="color:#a78bfa;border-color:rgba(167,139,250,0.35);" title="Khóa màn hình dọc">📱 Dọc</span>' : '');
+
   card.innerHTML = `
     <div class="card-top">
       <div class="card-device-icon">${device?.icon || '📱'}</div>
@@ -320,6 +329,7 @@ function createProfileCard(profile, device, running) {
       <span class="fp-tag">${device?.os_version || 'Android'}</span>
       <span class="fp-tag">${device?.opera_version ? `Opera ${device.opera_version.split('.')[0]}` : `Chrome ${device?.chrome_version?.split('.')[0] || '?'}`}</span>
       ${cookieTag}
+      ${orientTag}
     </div>
     <div class="card-proxy">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
@@ -370,9 +380,13 @@ function createProfileListRow(profile, device, running) {
     ? `<span class="badge-diagnostic" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:700;background:rgba(6,214,160,0.18);border:1px solid rgba(6,214,160,0.45);color:#06d6a0;margin-left:6px;" title="Chế độ Diagnostic: Chromium nguyên bản sạch, không can thiệp fingerprint">CLEAN / DIAGNOSTIC</span>`
     : '';
 
+  const orientBadge = profile.orientationLock === 'landscape'
+    ? '<span title="Khóa màn hình ngang" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;border:1px solid rgba(56,189,248,0.35);background:rgba(56,189,248,0.12);color:#38bdf8;margin-left:6px">🖥️ Ngang</span>'
+    : (profile.orientationLock === 'portrait' ? '<span title="Khóa màn hình dọc" style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;border:1px solid rgba(167,139,250,0.35);background:rgba(167,139,250,0.12);color:#a78bfa;margin-left:6px">📱 Dọc</span>' : '');
+
   row.innerHTML = `
     <div class="row-icon">${device?.icon || '📱'}</div>
-    <div class="row-name" title="${profile.name}">${profile.name} ${diagnosticBadge} ${cookieBadge}</div>
+    <div class="row-name" title="${profile.name}">${profile.name} ${diagnosticBadge} ${orientBadge} ${cookieBadge}</div>
     <div class="row-device">${device?.name || '—'}</div>
     <div class="row-ua mono">${device?.model || '—'} · ${device?.opera_version ? `Opera ${device.opera_version.split('.')[0]}` : `Chrome ${device?.chrome_version?.split('.')[0] || '?'}`}</div>
     <div class="row-status">
@@ -704,6 +718,203 @@ async function deleteProfileData(profileId) {
   }
 }
 
+// ── Aspect Ratio & Dimension Calculation Helpers ──
+function getAspectRatioInfo(w, h) {
+  if (!w || !h || w <= 0 || h <= 0) {
+    return { label: 'Tỷ lệ --', name: '--', isPortrait: true, val: 1 };
+  }
+  const isPortrait = Number(w) <= Number(h);
+  const major = Math.max(Number(w), Number(h));
+  const minor = Math.min(Number(w), Number(h));
+  const val = major / minor;
+
+  let name = '';
+  if (Math.abs(val - 19.5 / 9) < 0.04) {
+    name = isPortrait ? '9:19.5' : '19.5:9';
+  } else if (Math.abs(val - 20 / 9) < 0.04) {
+    name = isPortrait ? '9:20' : '20:9';
+  } else if (Math.abs(val - 20.5 / 9) < 0.04) {
+    name = isPortrait ? '9:20.5' : '20.5:9';
+  } else if (Math.abs(val - 19 / 9) < 0.04) {
+    name = isPortrait ? '9:19' : '19:9';
+  } else if (Math.abs(val - 18.5 / 9) < 0.04) {
+    name = isPortrait ? '9:18.5' : '18.5:9';
+  } else if (Math.abs(val - 2.0) < 0.04) {
+    name = isPortrait ? '9:18 (1:2)' : '18:9 (2:1)';
+  } else if (Math.abs(val - 16 / 9) < 0.04) {
+    name = isPortrait ? '9:16' : '16:9';
+  } else if (Math.abs(val - 16 / 10) < 0.04) {
+    name = isPortrait ? '10:16' : '16:10';
+  } else if (Math.abs(val - 4 / 3) < 0.04) {
+    name = isPortrait ? '3:4' : '4:3';
+  } else if (Math.abs(val - 1.0) < 0.03) {
+    name = '1:1';
+  } else {
+    const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+    const g = gcd(Math.round(w), Math.round(h));
+    const rw = Math.round(w / g);
+    const rh = Math.round(h / g);
+    if (rw <= 30 && rh <= 30) {
+      name = `${rw}:${rh}`;
+    } else {
+      name = isPortrait ? `1:${(h / w).toFixed(2)}` : `${(w / h).toFixed(2)}:1`;
+    }
+  }
+
+  return {
+    label: `Tỷ lệ ${name}`,
+    name,
+    isPortrait,
+    val,
+  };
+}
+
+function updateDimensionDisplay() {
+  const orientEl = document.getElementById('fOrientationLock');
+  const orient = orientEl?.value || 'portrait';
+  const presetEl = document.getElementById('fWinPreset');
+  const preset = presetEl?.value || 'device';
+
+  const curDev = devices.find(d => d.id === selectedDeviceId);
+  let devW = curDev?.viewport?.width || curDev?.screen_width || 412;
+  let devH = curDev?.viewport?.height || curDev?.screen_height || 915;
+
+  let winW = devW;
+  let winH = devH;
+
+  const customRow = document.getElementById('fWinCustomRow');
+  const wInput = document.getElementById('fWinWidth');
+  const hInput = document.getElementById('fWinHeight');
+
+  if (preset === 'custom') {
+    if (customRow) customRow.style.display = 'flex';
+    winW = parseInt(wInput?.value) || devW;
+    winH = parseInt(hInput?.value) || devH;
+  } else {
+    if (customRow) customRow.style.display = 'none';
+    if (preset === 'device') {
+      winW = devW;
+      winH = devH;
+    } else if (preset === 'default') {
+      winW = 380;
+      winH = 675;
+    } else {
+      const parts = preset.split('x').map(Number);
+      if (parts.length === 2 && parts[0] && parts[1]) {
+        winW = parts[0];
+        winH = parts[1];
+      }
+    }
+  }
+
+  // Adjust for orientation lock
+  if (orient === 'landscape') {
+    if (winW < winH) {
+      const tmp = winW; winW = winH; winH = tmp;
+    }
+    if (devW < devH) {
+      const tmp = devW; devW = devH; devH = tmp;
+    }
+  } else if (orient === 'portrait') {
+    if (winW > winH) {
+      const tmp = winW; winW = winH; winH = tmp;
+    }
+    if (devW > devH) {
+      const tmp = devW; devW = devH; devH = tmp;
+    }
+  }
+
+  // Reflect adjusted values back to inputs
+  if (preset !== 'custom') {
+    if (wInput) wInput.value = winW;
+    if (hInput) hInput.value = winH;
+  }
+
+  // Viewport calculation
+  // Viewport represents CSS layout viewport of device / web content
+  const vpW = (preset === 'device') ? devW : winW;
+  const vpH = (preset === 'device') ? devH : winH;
+
+  const ratioInfo = getAspectRatioInfo(vpW, vpH);
+
+  // Update badge
+  const badgeEl = document.getElementById('fRatioBadge');
+  if (badgeEl) {
+    badgeEl.textContent = ratioInfo.label;
+    if (orient === 'landscape') {
+      badgeEl.style.background = 'rgba(6,214,160,0.18)';
+      badgeEl.style.borderColor = 'rgba(6,214,160,0.45)';
+      badgeEl.style.color = '#06d6a0';
+    } else {
+      badgeEl.style.background = 'rgba(99,102,241,0.2)';
+      badgeEl.style.borderColor = 'rgba(99,102,241,0.45)';
+      badgeEl.style.color = '#a5b4fc';
+    }
+  }
+
+  // Update Viewport & Window text displays
+  const vpEl = document.getElementById('fViewportDisplay');
+  if (vpEl) vpEl.textContent = `${vpW} × ${vpH} px`;
+
+  const winEl = document.getElementById('fWindowDisplay');
+  if (winEl) winEl.textContent = `${winW} × ${winH} px`;
+}
+
+function handleOrientationLockChange() {
+  const orient = document.getElementById('fOrientationLock')?.value || 'auto';
+  const wInput = document.getElementById('fWinWidth');
+  const hInput = document.getElementById('fWinHeight');
+  if (wInput && hInput) {
+    let w = parseInt(wInput.value) || 412;
+    let h = parseInt(hInput.value) || 915;
+    if (orient === 'landscape' && w < h) {
+      wInput.value = h;
+      hInput.value = w;
+    } else if (orient === 'portrait' && w > h) {
+      wInput.value = h;
+      hInput.value = w;
+    }
+  }
+  updateDimensionDisplay();
+}
+
+function handleWindowPresetChange() {
+  const preset = document.getElementById('fWinPreset')?.value || 'device';
+  const customRow = document.getElementById('fWinCustomRow');
+  const wInput = document.getElementById('fWinWidth');
+  const hInput = document.getElementById('fWinHeight');
+  const orient = document.getElementById('fOrientationLock')?.value || 'portrait';
+
+  if (preset === 'custom') {
+    if (customRow) customRow.style.display = 'flex';
+  } else {
+    if (customRow) customRow.style.display = 'none';
+    let w = 412, h = 915;
+    if (preset === 'device') {
+      const curDev = devices.find(d => d.id === selectedDeviceId);
+      w = curDev?.viewport?.width || curDev?.screen_width || 412;
+      h = curDev?.viewport?.height || curDev?.screen_height || 915;
+    } else if (preset === 'default') {
+      w = 380;
+      h = 675;
+    } else {
+      const parts = preset.split('x').map(Number);
+      if (parts.length === 2 && parts[0] && parts[1]) {
+        w = parts[0];
+        h = parts[1];
+      }
+    }
+    if (orient === 'landscape' && w < h) {
+      const tmp = w; w = h; h = tmp;
+    } else if (orient === 'portrait' && w > h) {
+      const tmp = w; w = h; h = tmp;
+    }
+    if (wInput) wInput.value = w;
+    if (hInput) hInput.value = h;
+  }
+  updateDimensionDisplay();
+}
+
 // ── Modal ──
 function setupModal() {
   document.getElementById('modalClose').addEventListener('click', closeModal);
@@ -739,6 +950,24 @@ function setupModal() {
       }
     });
   }
+
+  // Orientation Lock change
+  document.getElementById('fOrientationLock')?.addEventListener('change', () => {
+    handleOrientationLockChange();
+  });
+
+  // Window Preset change
+  document.getElementById('fWinPreset')?.addEventListener('change', () => {
+    handleWindowPresetChange();
+  });
+
+  // Custom Dimensions inputs
+  document.getElementById('fWinWidth')?.addEventListener('input', () => {
+    updateDimensionDisplay();
+  });
+  document.getElementById('fWinHeight')?.addEventListener('input', () => {
+    updateDimensionDisplay();
+  });
 
   buildDevicePicker();
 }
@@ -785,6 +1014,9 @@ function buildDevicePicker() {
       selectedDeviceId = d.id;
       picker.querySelectorAll('.device-pick-item').forEach(el => el.classList.remove('selected'));
       item.classList.add('selected');
+      if (document.getElementById('fWinPreset')?.value === 'device') {
+        updateDimensionDisplay();
+      }
     });
     picker.appendChild(item);
   });
@@ -833,13 +1065,21 @@ function openNewProfileModal() {
     antiDbgEl.disabled = false;
   }
 
-  // Reset Custom Window Size
+  // Reset Orientation Lock (mặc định 'portrait' cho mobile, 'auto' cho desktop)
+  const curDev = devices.find(d => d.id === selectedDeviceId);
+  const defaultOrient = (curDev && curDev.is_mobile === false) ? 'auto' : 'portrait';
+  const orientEl = document.getElementById('fOrientationLock');
+  if (orientEl) orientEl.value = defaultOrient;
+
+  // Reset Window Preset & Dimensions (mặc định theo thiết bị)
   const winPresetEl = document.getElementById('fWinPreset');
-  if (winPresetEl) winPresetEl.value = 'default';
+  if (winPresetEl) winPresetEl.value = 'device';
   const customRow = document.getElementById('fWinCustomRow');
   if (customRow) customRow.style.display = 'none';
-  document.getElementById('fWinWidth').value = '380';
-  document.getElementById('fWinHeight').value = '675';
+  const devW = curDev?.viewport?.width || curDev?.screen_width || 412;
+  const devH = curDev?.viewport?.height || curDev?.screen_height || 915;
+  document.getElementById('fWinWidth').value = devW;
+  document.getElementById('fWinHeight').value = devH;
 
   buildDevicePicker();
   buildProfileExtPicker(null); // Pre-select ALL extensions by default
@@ -847,6 +1087,7 @@ function openNewProfileModal() {
   document.querySelectorAll('.device-pick-item').forEach(el => {
     el.classList.toggle('selected', el.dataset.id === selectedDeviceId);
   });
+  updateDimensionDisplay();
   document.getElementById('modalOverlay').classList.add('open');
 }
 
@@ -880,25 +1121,34 @@ function openEditProfileModal(profileId) {
     }
   }
 
+  // Load Orientation Lock (fallback 'portrait' cho mobile hoặc 'auto')
+  const curDev = devices.find(d => d.id === p.deviceId);
+  const defaultOrient = (curDev && curDev.is_mobile === false) ? 'auto' : 'portrait';
+  const orientEl = document.getElementById('fOrientationLock');
+  if (orientEl) {
+    orientEl.value = p.orientationLock || defaultOrient;
+  }
+
   // Load Custom Window Size for Profile
+  const winPresetEl = document.getElementById('fWinPreset');
+  const customRow = document.getElementById('fWinCustomRow');
   if (p.customWindow && p.customWindow.preset) {
-    const winPresetEl = document.getElementById('fWinPreset');
     if (winPresetEl) winPresetEl.value = p.customWindow.preset;
-    document.getElementById('fWinWidth').value = p.customWindow.width || 380;
-    document.getElementById('fWinHeight').value = p.customWindow.height || 675;
-    const customRow = document.getElementById('fWinCustomRow');
+    document.getElementById('fWinWidth').value = p.customWindow.width || 412;
+    document.getElementById('fWinHeight').value = p.customWindow.height || 915;
     if (customRow) customRow.style.display = (p.customWindow.preset === 'custom') ? 'flex' : 'none';
   } else {
-    const winPresetEl = document.getElementById('fWinPreset');
-    if (winPresetEl) winPresetEl.value = 'default';
-    const customRow = document.getElementById('fWinCustomRow');
+    if (winPresetEl) winPresetEl.value = 'device';
     if (customRow) customRow.style.display = 'none';
-    document.getElementById('fWinWidth').value = '380';
-    document.getElementById('fWinHeight').value = '675';
+    const devW = curDev?.viewport?.width || curDev?.screen_width || 412;
+    const devH = curDev?.viewport?.height || curDev?.screen_height || 915;
+    document.getElementById('fWinWidth').value = devW;
+    document.getElementById('fWinHeight').value = devH;
   }
 
   buildDevicePicker();
   buildProfileExtPicker(p.selectedExtensions || []);
+  updateDimensionDisplay();
   document.getElementById('modalOverlay').classList.add('open');
 }
 
@@ -952,14 +1202,21 @@ async function saveProfile() {
       selectedExtensions.push(cb.dataset.id);
     });
 
+    // Orientation Lock
+    const orientationLock = document.getElementById('fOrientationLock')?.value || 'auto';
+
     // Custom Window Size
-    const winPreset = document.getElementById('fWinPreset')?.value || 'default';
+    const winPreset = document.getElementById('fWinPreset')?.value || 'device';
     let customWindow = null;
     if (winPreset !== 'default') {
-      let w = 380, h = 675;
+      let w = 412, h = 915;
       if (winPreset === 'custom') {
-        w = parseInt(document.getElementById('fWinWidth').value) || 380;
-        h = parseInt(document.getElementById('fWinHeight').value) || 675;
+        w = parseInt(document.getElementById('fWinWidth').value) || 412;
+        h = parseInt(document.getElementById('fWinHeight').value) || 915;
+      } else if (winPreset === 'device') {
+        const curDev = devices.find(d => d.id === selectedDeviceId);
+        w = parseInt(document.getElementById('fWinWidth')?.value) || curDev?.viewport?.width || curDev?.screen_width || 412;
+        h = parseInt(document.getElementById('fWinHeight')?.value) || curDev?.viewport?.height || curDev?.screen_height || 915;
       } else {
         const [pw, ph] = winPreset.split('x').map(Number);
         if (pw && ph) { w = pw; h = ph; }
@@ -973,7 +1230,10 @@ async function saveProfile() {
       antiDebugger = false; // Tắt cưỡng chế antiDebugger khi chẩn đoán sạch
     }
 
+    const existing = editingId ? profiles.find(p => p.id === editingId) : null;
+
     const profileData = {
+      ...(existing || {}),
       id: editingId || crypto.randomUUID(),
       name,
       deviceId: selectedDeviceId,
@@ -985,12 +1245,14 @@ async function saveProfile() {
       language: 'vi-VN',
       selectedExtensions,
       customWindow,
+      orientationLock,
       diagnosticMode,
       antiDebugger,
       startUrl: document.getElementById('fStartUrl').value.trim(),
       notes: document.getElementById('fNotes').value.trim(),
-      webData: editingId ? (profiles.find(p => p.id === editingId)?.webData || null) : null,
-      createdAt: editingId ? (profiles.find(p => p.id === editingId)?.createdAt || Date.now()) : Date.now(),
+      webData: existing?.webData || null,
+      createdAt: existing?.createdAt || Date.now(),
+      updatedAt: Date.now(),
     };
 
     if (editingId) {
@@ -1054,7 +1316,67 @@ function openBatchModal() {
 }
 
 // ── Arrange Windows Layout Modal (Tùy chỉnh cài đặt bố cục) ──
-let currentArrangeMode = 'grid';
+let currentArrangeMode = 'autoFit';
+
+function setActiveArrangeMode(mode) {
+  currentArrangeMode = mode || 'autoFit';
+  document.getElementById('arrBtnModeAutoFit')?.classList.toggle('active', currentArrangeMode === 'autoFit');
+  document.getElementById('arrBtnModeGrid')?.classList.toggle('active', currentArrangeMode === 'grid');
+  document.getElementById('arrBtnModeCascade')?.classList.toggle('active', currentArrangeMode === 'cascade');
+  updateArrangeFormState();
+}
+
+function updateArrangeFormState() {
+  const mode = currentArrangeMode;
+  const descEl = document.getElementById('arrModeDesc');
+  const colsRow = document.getElementById('rowColsPerRow');
+  const autoAdaptRow = document.getElementById('rowAutoAdapt');
+
+  if (descEl) {
+    if (mode === 'autoFit') {
+      descEl.innerHTML = '⚡ <b>Auto Fit:</b> Tự động tính toán số hàng và số cột tối ưu dựa trên tổng số profile đang chạy, vừa khít màn hình không chồng lấn.';
+    } else if (mode === 'grid') {
+      descEl.innerHTML = '🔲 <b>Grid thủ công:</b> Sắp xếp theo số cột cố định và khoảng cách viền do bạn chọn.';
+    } else if (mode === 'cascade') {
+      descEl.innerHTML = '📑 <b>Cascade:</b> Xếp so le bậc thang với bước nhảy tọa độ X và Y.';
+    }
+  }
+
+  if (colsRow) {
+    if (mode === 'grid') {
+      colsRow.style.opacity = '1';
+      const input = document.getElementById('arrColsPerRow');
+      if (input) input.disabled = false;
+    } else {
+      colsRow.style.opacity = '0.35';
+      const input = document.getElementById('arrColsPerRow');
+      if (input) input.disabled = true;
+    }
+  }
+
+  if (autoAdaptRow) {
+    autoAdaptRow.style.display = (mode === 'cascade') ? 'none' : 'flex';
+  }
+}
+
+function updateColsPills(val) {
+  const pills = document.querySelectorAll('#arrColsPills .seg-btn');
+  pills.forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.cols === String(val));
+  });
+}
+
+function syncGapPresetFromInputs() {
+  const gx = document.getElementById('arrGapX')?.value;
+  const gy = document.getElementById('arrGapY')?.value;
+  const presetSel = document.getElementById('arrGapPreset');
+  if (!presetSel) return;
+  if (gx === gy && ['0', '8', '10', '12', '16'].includes(gx)) {
+    presetSel.value = gx;
+  } else {
+    presetSel.value = 'custom';
+  }
+}
 
 function setupArrangeModal() {
   const btnArrange = document.getElementById('btnArrangeWindows');
@@ -1066,30 +1388,46 @@ function setupArrangeModal() {
     if (e.target === document.getElementById('arrangeModalOverlay')) closeArrangeModal();
   });
 
-  // Mode toggles (Bố cục lưới vs Chồng chéo)
-  const btnGrid = document.getElementById('arrBtnModeGrid');
-  const btnCascade = document.getElementById('arrBtnModeCascade');
-  btnGrid?.addEventListener('click', () => {
-    currentArrangeMode = 'grid';
-    btnGrid.classList.add('active');
-    btnCascade.classList.remove('active');
-    updateArrangeFormState();
+  // Mode buttons (⚡ Auto Fit, 🔲 Grid thủ công, 📑 Cascade)
+  document.getElementById('arrBtnModeAutoFit')?.addEventListener('click', () => setActiveArrangeMode('autoFit'));
+  document.getElementById('arrBtnModeGrid')?.addEventListener('click', () => setActiveArrangeMode('grid'));
+  document.getElementById('arrBtnModeCascade')?.addEventListener('click', () => setActiveArrangeMode('cascade'));
+
+  // Column pills & input
+  const pills = document.querySelectorAll('#arrColsPills .seg-btn');
+  pills.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cols = btn.dataset.cols;
+      const input = document.getElementById('arrColsPerRow');
+      if (input) input.value = cols;
+      updateColsPills(cols);
+    });
   });
-  btnCascade?.addEventListener('click', () => {
-    currentArrangeMode = 'cascade';
-    btnCascade.classList.add('active');
-    btnGrid.classList.remove('active');
-    updateArrangeFormState();
+
+  document.getElementById('arrColsPerRow')?.addEventListener('input', (e) => {
+    updateColsPills(e.target.value);
   });
+
+  // Gap preset dropdown
+  document.getElementById('arrGapPreset')?.addEventListener('change', (e) => {
+    const val = e.target.value;
+    const gx = document.getElementById('arrGapX');
+    const gy = document.getElementById('arrGapY');
+    if (val !== 'custom') {
+      if (gx) gx.value = val;
+      if (gy) gy.value = val;
+    }
+  });
+
+  document.getElementById('arrGapX')?.addEventListener('input', syncGapPresetFromInputs);
+  document.getElementById('arrGapY')?.addEventListener('input', syncGapPresetFromInputs);
 
   // Auto Adapt toggle
   document.getElementById('arrAutoAdapt')?.addEventListener('change', updateArrangeFormState);
 
   // Reset button
   document.getElementById('arrBtnReset')?.addEventListener('click', () => {
-    currentArrangeMode = 'grid';
-    btnGrid?.classList.add('active');
-    btnCascade?.classList.remove('active');
+    setActiveArrangeMode('autoFit');
     const autoEl = document.getElementById('arrAutoAdapt'); if (autoEl) autoEl.checked = true;
     const sx = document.getElementById('arrStartX'); if (sx) sx.value = '10';
     const sy = document.getElementById('arrStartY'); if (sy) sy.value = '10';
@@ -1098,6 +1436,9 @@ function setupArrangeModal() {
     const gx = document.getElementById('arrGapX'); if (gx) gx.value = '10';
     const gy = document.getElementById('arrGapY'); if (gy) gy.value = '10';
     const cols = document.getElementById('arrColsPerRow'); if (cols) cols.value = '3';
+    updateColsPills('3');
+    const gapPreset = document.getElementById('arrGapPreset'); if (gapPreset) gapPreset.value = '10';
+    const autoArrange = document.getElementById('fAutoArrangeOnLaunch'); if (autoArrange) autoArrange.checked = false;
     updateArrangeFormState();
     toast('🔄 Đã cài lại thông số bố cục mặc định!', 'info');
   });
@@ -1106,51 +1447,64 @@ function setupArrangeModal() {
   document.getElementById('arrBtnApply')?.addEventListener('click', applyArrangeLayout);
 }
 
-function updateArrangeFormState() {
-  const isAuto = document.getElementById('arrAutoAdapt')?.checked;
-  const colsInput = document.getElementById('arrColsPerRow');
-  if (colsInput && colsInput.parentElement) {
-    const disabled = (currentArrangeMode === 'cascade' || isAuto);
-    colsInput.disabled = disabled;
-    colsInput.parentElement.style.opacity = disabled ? '0.4' : '1';
-  }
-}
-
 async function openArrangeModal() {
   // Load available displays
   if (API.getDisplays) {
-    const displays = await API.getDisplays();
-    const sel = document.getElementById('arrScreen');
-    if (sel) {
-      sel.innerHTML = '';
-      displays.forEach(d => {
-        const opt = document.createElement('option');
-        opt.value = d.id;
-        opt.textContent = d.name;
-        sel.appendChild(opt);
-      });
+    try {
+      const displays = await API.getDisplays();
+      const sel = document.getElementById('arrScreen');
+      if (sel && Array.isArray(displays) && displays.length > 0) {
+        sel.innerHTML = '';
+        displays.forEach((d, idx) => {
+          const opt = document.createElement('option');
+          opt.value = String(d.id !== undefined ? d.id : idx);
+          opt.textContent = d.name || `Màn hình ${idx + 1}`;
+          sel.appendChild(opt);
+        });
+      }
+    } catch(e) {
+      console.warn('[Displays Load Error]', e);
     }
   }
 
   // Load saved settings if any
   if (API.loadSettings) {
-    const s = await API.loadSettings();
-    if (s.mode) {
-      currentArrangeMode = s.mode;
-      document.getElementById('arrBtnModeGrid')?.classList.toggle('active', s.mode === 'grid');
-      document.getElementById('arrBtnModeCascade')?.classList.toggle('active', s.mode === 'cascade');
+    try {
+      const s = await API.loadSettings();
+      if (s) {
+        if (s.mode) {
+          setActiveArrangeMode(s.mode);
+        } else {
+          setActiveArrangeMode('autoFit');
+        }
+
+        if (s.displayIndex !== undefined) {
+          const sel = document.getElementById('arrScreen');
+          if (sel) sel.value = String(s.displayIndex);
+        }
+        if (s.autoArrangeOnLaunch !== undefined) {
+          const autoArrEl = document.getElementById('fAutoArrangeOnLaunch');
+          if (autoArrEl) autoArrEl.checked = !!s.autoArrangeOnLaunch;
+        }
+        if (s.autoAdapt !== undefined) {
+          const el = document.getElementById('arrAutoAdapt');
+          if (el) el.checked = !!s.autoAdapt;
+        }
+        if (s.startX !== undefined) document.getElementById('arrStartX').value = s.startX;
+        if (s.startY !== undefined) document.getElementById('arrStartY').value = s.startY;
+        if (s.winW || s.windowWidth) document.getElementById('arrWinWidth').value = s.winW || s.windowWidth;
+        if (s.winH || s.windowHeight) document.getElementById('arrWinHeight').value = s.winH || s.windowHeight;
+        if (s.gapX !== undefined) document.getElementById('arrGapX').value = s.gapX;
+        if (s.gapY !== undefined) document.getElementById('arrGapY').value = s.gapY;
+        if (s.colsPerRow !== undefined) {
+          document.getElementById('arrColsPerRow').value = s.colsPerRow;
+          updateColsPills(s.colsPerRow);
+        }
+        syncGapPresetFromInputs();
+      }
+    } catch(e) {
+      console.warn('[Arrange Settings Load Error]', e);
     }
-    if (s.autoAdapt !== undefined) {
-      const el = document.getElementById('arrAutoAdapt');
-      if (el) el.checked = !!s.autoAdapt;
-    }
-    if (s.startX !== undefined) document.getElementById('arrStartX').value = s.startX;
-    if (s.startY !== undefined) document.getElementById('arrStartY').value = s.startY;
-    if (s.winW || s.windowWidth) document.getElementById('arrWinWidth').value = s.winW || s.windowWidth;
-    if (s.winH || s.windowHeight) document.getElementById('arrWinHeight').value = s.winH || s.windowHeight;
-    if (s.gapX !== undefined) document.getElementById('arrGapX').value = s.gapX;
-    if (s.gapY !== undefined) document.getElementById('arrGapY').value = s.gapY;
-    if (s.colsPerRow !== undefined) document.getElementById('arrColsPerRow').value = s.colsPerRow;
   }
 
   updateArrangeFormState();
@@ -1172,26 +1526,70 @@ function closeArrangeModal() {
 
 async function applyArrangeLayout() {
   const displayIndex = parseInt(document.getElementById('arrScreen')?.value) || 0;
-  const mode = currentArrangeMode;
-  const autoAdapt = document.getElementById('arrAutoAdapt')?.checked !== false;
+  const mode = currentArrangeMode; // 'autoFit' | 'grid' | 'cascade'
+  const autoAdapt = mode === 'autoFit' || document.getElementById('arrAutoAdapt')?.checked !== false;
   const startX = parseInt(document.getElementById('arrStartX')?.value) || 10;
   const startY = parseInt(document.getElementById('arrStartY')?.value) || 10;
   const winW = parseInt(document.getElementById('arrWinWidth')?.value) || 380;
   const winH = parseInt(document.getElementById('arrWinHeight')?.value) || 675;
   const gapX = parseInt(document.getElementById('arrGapX')?.value) || 10;
   const gapY = parseInt(document.getElementById('arrGapY')?.value) || 10;
+  const gap = gapX;
   const colsPerRow = parseInt(document.getElementById('arrColsPerRow')?.value) || 3;
+  const autoArrangeOnLaunch = !!document.getElementById('fAutoArrangeOnLaunch')?.checked;
 
-  const opts = { displayIndex, mode, autoAdapt, startX, startY, winW, winH, gapX, gapY, colsPerRow };
+  const opts = {
+    displayIndex,
+    mode,
+    autoAdapt,
+    startX,
+    startY,
+    winW,
+    winH,
+    windowWidth: winW,
+    windowHeight: winH,
+    gap,
+    gapX,
+    gapY,
+    colsPerRow,
+    autoArrangeOnLaunch,
+  };
 
   closeArrangeModal();
 
-  const res = await API.arrangeWindows(opts);
-  if (res && res.ok) {
-    const label = mode === 'cascade' ? 'Chồng chéo' : 'Lưới';
-    toast(`📐 Đã áp dụng bố cục ${label} cho ${res.count} cửa sổ trình duyệt!`, 'success');
-  } else {
-    toast(`⚠️ ${res?.error || 'Không có trình duyệt nào đang chạy!'}`, 'info');
+  // Save settings asynchronously
+  if (API.saveSettings) {
+    try {
+      await API.saveSettings({
+        autoArrangeOnLaunch,
+        displayIndex,
+        mode,
+        autoAdapt,
+        startX,
+        startY,
+        winW,
+        winH,
+        windowWidth: winW,
+        windowHeight: winH,
+        gap,
+        gapX,
+        gapY,
+        colsPerRow,
+      });
+    } catch(err) {
+      console.warn('[Arrange Settings Save Warning]', err);
+    }
+  }
+
+  const arrangeFunc = API.arrangeWindows || window.electronAPI?.arrangeWindows;
+  if (arrangeFunc) {
+    const res = await arrangeFunc(opts);
+    if (res && res.ok) {
+      const label = mode === 'autoFit' ? '⚡ Auto Fit' : (mode === 'cascade' ? '📑 Cascade' : '🔲 Lưới');
+      toast(`📐 Đã áp dụng bố cục ${label} cho ${res.count} cửa sổ trình duyệt!`, 'success');
+    } else {
+      toast(`⚠️ ${res?.error || 'Không có trình duyệt nào đang chạy!'}`, 'info');
+    }
   }
 }
 
