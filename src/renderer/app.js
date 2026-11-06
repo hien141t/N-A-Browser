@@ -40,7 +40,31 @@ const API = window.electronAPI || {
   trashDelete:  async () => ({ ok: false, error: 'No Electron' }),
   trashClear:   async () => ({ ok: false, error: 'No Electron' }),
   proxyCheck:   async () => ({ ok: false, error: 'No Electron' }),
+  // Extensions Safe Fallback
+  loadExtensions:        async () => JSON.parse(localStorage.getItem('extensions') || '[]'),
+  saveExtensions:        async (exts) => { localStorage.setItem('extensions', JSON.stringify(exts)); return true; },
+  selectExtension:       async () => ({ ok: false, error: 'No Electron API' }),
+  selectExtensionFolder: async () => ({ ok: false, error: 'No Electron API' }),
+  selectExtensionFile:   async () => ({ ok: false, error: 'No Electron API' }),
+  importExtensionPath:   async (filePath) => ({ ok: false, error: 'No Electron API' }),
 };
+
+// Đảm bảo API luôn có các hàm extension an toàn ngay cả khi preload chưa định nghĩa các method mở rộng
+if (window.electronAPI) {
+  if (typeof API.selectExtensionFolder !== 'function') {
+    API.selectExtensionFolder = () => (typeof API.selectExtension === 'function' ? API.selectExtension() : Promise.resolve({ ok: false, error: 'No Electron API' }));
+  }
+  if (typeof API.selectExtensionFile !== 'function') {
+    API.selectExtensionFile = () => (typeof API.selectExtension === 'function' ? API.selectExtension() : Promise.resolve({ ok: false, error: 'No Electron API' }));
+  }
+  if (typeof API.importExtensionPath !== 'function') {
+    API.importExtensionPath = (filePath) => Promise.resolve({ ok: false, error: 'Tính năng import extension qua đường dẫn chưa được preload hỗ trợ.' });
+  }
+}
+
+// Ngăn chặn hành vi kéo thả file mặc định của trình duyệt ra ngoài khu vực dropzone
+window.addEventListener('dragover', (e) => e.preventDefault(), false);
+window.addEventListener('drop', (e) => e.preventDefault(), false);
 
 // ── State ──
 let devices = [];
@@ -111,7 +135,9 @@ function setupNav() {
 // ── Load Data ──
 async function loadDevices() {
   const data = await API.loadDevices();
-  devices = data.devices;
+  devices = data.devices || (Array.isArray(data) ? data : []);
+  const elStatDev = document.getElementById('statDevices');
+  if (elStatDev) elStatDev.textContent = devices.length;
 }
 
 async function loadProfiles() {
@@ -963,21 +989,7 @@ function openBatchModal() {
   });
 
   // Build extension picker in batch modal (Checked ALL by default)
-  const extContainer = document.getElementById('bExtSelectList');
-  if (!extensions.length) {
-    extContainer.innerHTML = '<div class="small muted">Chưa có extension nào trong thư viện. Thêm ở mục Extensions bên menu.</div>';
-  } else {
-    extContainer.innerHTML = '';
-    extensions.forEach(ext => {
-      const row = document.createElement('label');
-      row.className = 'ext-item-row';
-      row.innerHTML = `
-        <input type="checkbox" class="bext-select-item" data-id="${ext.id}" checked/>
-        <span>🧩 ${ext.name}</span>
-      `;
-      extContainer.appendChild(row);
-    });
-  }
+  buildBatchExtPicker(null);
 
   const overlay = document.getElementById('batchModalOverlay');
   if (overlay) {
@@ -1278,37 +1290,167 @@ async function saveBatchProfiles() {
   }
 }
 
+// ── Extension Helper & Formatting ──
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getExtensionShortPath(p) {
+  if (!p) return '';
+  const parts = p.split(/[\\/]/).filter(Boolean);
+  return parts.slice(-2).join('/') || p;
+}
+
 // ── Extension Picker in Profile Modal ──
 function buildProfileExtPicker(selectedIds = null) {
   const container = document.getElementById('fExtSelectList');
+  if (!container) return;
+
   if (!extensions.length) {
     container.innerHTML = '<div class="small muted">Chưa có extension nào trong thư viện. Thêm ở mục Extensions bên menu.</div>';
     return;
   }
 
-  // Mặc định tự động tích chọn TẤT CẢ Extension nếu chưa có cấu hình riêng
+  // Mặc định tự động tích chọn TẤT CẢ Extension nếu chưa có cấu hình riêng (selectedIds === null)
   const activeIds = (selectedIds === null) ? extensions.map(e => e.id) : selectedIds;
 
-  container.innerHTML = '';
+  let html = `
+    <div class="ext-picker-toolbar">
+      <span class="ext-picker-toolbar-title">${extensions.length} extension có sẵn</span>
+      <div class="ext-picker-toolbar-actions">
+        <a id="btnSelectAllProfileExt">Chọn tất cả</a>
+        <a id="btnDeselectAllProfileExt">Bỏ chọn</a>
+      </div>
+    </div>
+  `;
+
   extensions.forEach(ext => {
     const isChecked = activeIds.includes(ext.id);
-    const row = document.createElement('label');
-    row.className = 'ext-item-row';
-    row.innerHTML = `
-      <input type="checkbox" class="ext-select-item" data-id="${ext.id}" ${isChecked ? 'checked' : ''}/>
-      <span>🧩 ${ext.name}</span>
+    const shortPath = getExtensionShortPath(ext.path);
+    html += `
+      <label class="ext-item-row">
+        <input type="checkbox" class="ext-select-item" data-id="${escapeHtml(ext.id)}" ${isChecked ? 'checked' : ''}/>
+        <span style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex:1; min-width:0;">
+          <span style="font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">🧩 ${escapeHtml(ext.name)}</span>
+          ${shortPath ? `<span class="ext-badge-path" title="${escapeHtml(ext.path)}">📁 ${escapeHtml(shortPath)}</span>` : ''}
+        </span>
+      </label>
     `;
-    container.appendChild(row);
   });
+
+  container.innerHTML = html;
+
+  container.querySelector('#btnSelectAllProfileExt')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    container.querySelectorAll('.ext-select-item').forEach(cb => { cb.checked = true; });
+  });
+
+  container.querySelector('#btnDeselectAllProfileExt')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    container.querySelectorAll('.ext-select-item').forEach(cb => { cb.checked = false; });
+  });
+}
+
+// ── Extension Picker in Batch Modal ──
+function buildBatchExtPicker(selectedIds = null) {
+  const container = document.getElementById('bExtSelectList');
+  if (!container) return;
+
+  if (!extensions.length) {
+    container.innerHTML = '<div class="small muted">Chưa có extension nào trong thư viện. Thêm ở mục Extensions bên menu.</div>';
+    return;
+  }
+
+  const activeIds = (selectedIds === null) ? extensions.map(e => e.id) : selectedIds;
+
+  let html = `
+    <div class="ext-picker-toolbar">
+      <span class="ext-picker-toolbar-title">${extensions.length} extension có sẵn</span>
+      <div class="ext-picker-toolbar-actions">
+        <a id="btnSelectAllBatchExt">Chọn tất cả</a>
+        <a id="btnDeselectAllBatchExt">Bỏ chọn</a>
+      </div>
+    </div>
+  `;
+
+  extensions.forEach(ext => {
+    const isChecked = activeIds.includes(ext.id);
+    const shortPath = getExtensionShortPath(ext.path);
+    html += `
+      <label class="ext-item-row">
+        <input type="checkbox" class="bext-select-item" data-id="${escapeHtml(ext.id)}" ${isChecked ? 'checked' : ''}/>
+        <span style="display:flex; align-items:center; justify-content:space-between; gap:8px; flex:1; min-width:0;">
+          <span style="font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">🧩 ${escapeHtml(ext.name)}</span>
+          ${shortPath ? `<span class="ext-badge-path" title="${escapeHtml(ext.path)}">📁 ${escapeHtml(shortPath)}</span>` : ''}
+        </span>
+      </label>
+    `;
+  });
+
+  container.innerHTML = html;
+
+  container.querySelector('#btnSelectAllBatchExt')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    container.querySelectorAll('.bext-select-item').forEach(cb => { cb.checked = true; });
+  });
+
+  container.querySelector('#btnDeselectAllBatchExt')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    container.querySelectorAll('.bext-select-item').forEach(cb => { cb.checked = false; });
+  });
+}
+
+// Đồng bộ cập nhật toàn bộ picker khi extensions thay đổi (thêm/sửa/xóa)
+function updateAllExtensionPickers() {
+  // 1. Profile modal picker
+  const pContainer = document.getElementById('fExtSelectList');
+  if (pContainer) {
+    const currentChecked = Array.from(pContainer.querySelectorAll('.ext-select-item:checked')).map(cb => cb.dataset.id);
+    const existingDomIds = Array.from(pContainer.querySelectorAll('.ext-select-item')).map(cb => cb.dataset.id);
+    if (existingDomIds.length > 0) {
+      const newlyAddedIds = extensions.filter(e => !existingDomIds.includes(e.id)).map(e => e.id);
+      buildProfileExtPicker([...new Set([...currentChecked, ...newlyAddedIds])]);
+    } else {
+      buildProfileExtPicker(null);
+    }
+  }
+
+  // 2. Batch modal picker
+  const bContainer = document.getElementById('bExtSelectList');
+  if (bContainer) {
+    const currentChecked = Array.from(bContainer.querySelectorAll('.bext-select-item:checked')).map(cb => cb.dataset.id);
+    const existingDomIds = Array.from(bContainer.querySelectorAll('.bext-select-item')).map(cb => cb.dataset.id);
+    if (existingDomIds.length > 0) {
+      const newlyAddedIds = extensions.filter(e => !existingDomIds.includes(e.id)).map(e => e.id);
+      buildBatchExtPicker([...new Set([...currentChecked, ...newlyAddedIds])]);
+    } else {
+      buildBatchExtPicker(null);
+    }
+  }
 }
 
 // ── Extensions Management Page ──
 async function loadExtensions() {
-  extensions = await API.loadExtensions();
+  try {
+    extensions = await API.loadExtensions() || [];
+  } catch(e) {
+    console.error('loadExtensions error:', e);
+    extensions = [];
+  }
 }
 
 async function saveExtensions() {
-  await API.saveExtensions(extensions);
+  try {
+    await API.saveExtensions(extensions);
+  } catch(e) {
+    console.error('saveExtensions error:', e);
+  }
 }
 
 // ── Extension Custom Name Dialog ──
@@ -1388,36 +1530,163 @@ function promptExtensionName(defaultName, extPath, isEditing = false) {
   });
 }
 
-function setupExtensionsPage() {
-  document.getElementById('btnAddExtension').addEventListener('click', async () => {
-    try {
-      const res = await API.selectExtension();
-      if (!res) return;
-      if (!res.ok) {
-        toast(`❌ ${res.error || 'Không thể thêm tiện ích'}`, 'error');
-        return;
-      }
+// Xử lý nạp extension mới
+async function handleExtensionImported(res) {
+  if (!res) return;
+  if (!res.ok) {
+    toast(`❌ ${res.error || 'Không thể thêm tiện ích'}`, 'error');
+    return;
+  }
 
-      // 1. Thêm NGAY LẬP TỨC để đảm bảo tiện ích được lưu và hiển thị
-      extensions.push(res);
+  // 1. Thêm / cập nhật vào danh sách extensions
+  const existingIdx = extensions.findIndex(e => e.id === res.id || (res.path && e.path === res.path));
+  if (existingIdx !== -1) {
+    extensions[existingIdx] = res;
+  } else {
+    extensions.push(res);
+  }
+
+  // 2. Lưu vào file extensions.json
+  await saveExtensions();
+
+  // 3. Render lại trang danh sách Extension
+  renderExtensions();
+
+  // 4. Đồng bộ ngay lập tức vào Profile modal và Batch create modal
+  updateAllExtensionPickers();
+
+  toast(`✅ Đã thêm extension: ${res.name}`, 'success');
+
+  // 5. Sau khi đã thêm xong, mở hộp thoại cho phép đặt lại tên gợi nhớ nếu muốn
+  promptExtensionName(res.name, res.path, false).then(async (customName) => {
+    if (customName && customName !== res.name) {
+      res.name = customName;
       await saveExtensions();
       renderExtensions();
-      toast(`✅ Đã thêm extension: ${res.name}`, 'success');
-
-      // 2. Sau khi đã thêm xong, mở hộp thoại cho phép đặt lại tên gợi nhớ nếu muốn
-      promptExtensionName(res.name, res.path, false).then(async (customName) => {
-        if (customName && customName !== res.name) {
-          res.name = customName;
-          await saveExtensions();
-          renderExtensions();
-          toast(`✅ Đã cập nhật tên: ${customName}`, 'success');
-        }
-      });
-    } catch(err) {
-      console.error('Lỗi khi thêm tiện ích:', err);
-      toast(`❌ Lỗi: ${err.message}`, 'error');
+      updateAllExtensionPickers();
+      toast(`✅ Đã cập nhật tên: ${customName}`, 'success');
     }
   });
+}
+
+function setupExtensionsPage() {
+  const btnFolder = document.getElementById('btnAddExtensionFolder') || document.getElementById('btnAddExtension');
+  const btnZip = document.getElementById('btnAddExtensionZip');
+  const dropzone = document.getElementById('extDropzone');
+  const pageExt = document.getElementById('page-extensions');
+
+  // 1. Nút thêm Thư mục (Unpacked Folder)
+  if (btnFolder) {
+    btnFolder.addEventListener('click', async () => {
+      try {
+        const res = typeof API.selectExtensionFolder === 'function'
+          ? await API.selectExtensionFolder()
+          : await API.selectExtension();
+        await handleExtensionImported(res);
+      } catch (err) {
+        console.error('Lỗi khi thêm tiện ích từ thư mục:', err);
+        toast(`❌ Lỗi: ${err.message}`, 'error');
+      }
+    });
+  }
+
+  // 2. Nút thêm File (.zip / .crx)
+  if (btnZip) {
+    btnZip.addEventListener('click', async () => {
+      try {
+        const res = typeof API.selectExtensionFile === 'function'
+          ? await API.selectExtensionFile()
+          : await API.selectExtension();
+        await handleExtensionImported(res);
+      } catch (err) {
+        console.error('Lỗi khi thêm tiện ích từ file:', err);
+        toast(`❌ Lỗi: ${err.message}`, 'error');
+      }
+    });
+  }
+
+  // 3. Click vào dropzone
+  if (dropzone) {
+    dropzone.addEventListener('click', (e) => {
+      if (btnFolder) btnFolder.click();
+    });
+  }
+
+  // 4. Drag & Drop events trên trang Extensions và dropzone
+  if (pageExt) {
+    let dragCounter = 0;
+
+    const setDragOver = (active) => {
+      if (active) {
+        pageExt.classList.add('drag-over');
+        if (dropzone) dropzone.classList.add('drag-over');
+      } else {
+        pageExt.classList.remove('drag-over');
+        if (dropzone) dropzone.classList.remove('drag-over');
+      }
+    };
+
+    pageExt.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter++;
+      setDragOver(true);
+    }, false);
+
+    pageExt.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'copy';
+      }
+      setDragOver(true);
+    }, false);
+
+    pageExt.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        setDragOver(false);
+      }
+    }, false);
+
+    pageExt.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dragCounter = 0;
+      setDragOver(false);
+
+      const files = e.dataTransfer?.files;
+      if (!files || !files.length) return;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const filePath = file.path;
+        if (!filePath) {
+          toast(`⚠️ Không đọc được đường dẫn của: ${file.name}`, 'warning');
+          continue;
+        }
+
+        try {
+          toast(`⏳ Đang nạp tiện ích từ: ${file.name}...`, 'info');
+          let res;
+          if (typeof API.importExtensionPath === 'function') {
+            res = await API.importExtensionPath(filePath);
+          } else {
+            toast('❌ Tính năng importExtensionPath chưa được preload hỗ trợ', 'error');
+            return;
+          }
+          await handleExtensionImported(res);
+        } catch (err) {
+          console.error('Lỗi khi nạp tiện ích từ đường dẫn kéo thả:', err);
+          toast(`❌ Lỗi: ${err.message}`, 'error');
+        }
+      }
+    }, false);
+  }
+
   renderExtensions();
 }
 
@@ -1436,6 +1705,7 @@ function renderExtensions() {
   grid.innerHTML = '';
 
   extensions.forEach(ext => {
+    const shortPath = getExtensionShortPath(ext.path);
     const card = document.createElement('div');
     card.className = 'ext-card';
     card.innerHTML = `
@@ -1443,14 +1713,14 @@ function renderExtensions() {
         <div class="ext-icon">🧩</div>
         <div style="flex:1; min-width:0;">
           <div class="ext-title" style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-            <span class="ext-name-text" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${ext.name}">${ext.name}</span>
+            <span class="ext-name-text" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(ext.name)}">${escapeHtml(ext.name)}</span>
           </div>
-          <div class="ext-path" title="${ext.path}">${ext.path}</div>
+          <div class="ext-path" title="${escapeHtml(ext.path)}">${escapeHtml(ext.path)}</div>
         </div>
       </div>
       <div class="ext-actions" style="margin-top:10px; display:flex; justify-content:flex-end; gap:8px;">
-        <button class="btn-icon btn-rename-ext" data-id="${ext.id}" title="Đổi tên Extension" style="cursor:pointer;">✏️ Đổi tên</button>
-        <button class="btn-icon btn-danger" data-id="${ext.id}" title="Remove Extension">🗑️</button>
+        <button class="btn-icon btn-rename-ext" data-id="${escapeHtml(ext.id)}" title="Đổi tên Extension" style="cursor:pointer;">✏️ Đổi tên</button>
+        <button class="btn-icon btn-danger" data-id="${escapeHtml(ext.id)}" title="Remove Extension">🗑️</button>
       </div>
     `;
 
@@ -1461,6 +1731,7 @@ function renderExtensions() {
         ext.name = newName;
         await saveExtensions();
         renderExtensions();
+        updateAllExtensionPickers();
         toast(`✅ Đã đổi tên thành: ${newName}`, 'success');
       }
     });
@@ -1470,6 +1741,7 @@ function renderExtensions() {
       extensions = extensions.filter(e => e.id !== ext.id);
       await saveExtensions();
       renderExtensions();
+      updateAllExtensionPickers();
       toast('🗑️ Đã xóa extension', 'info');
     });
     grid.appendChild(card);
@@ -1479,6 +1751,13 @@ function renderExtensions() {
 // ── Device Library Page ──
 function setupDeviceLibrary() {
   const lib = document.getElementById('deviceLibrary');
+  if (!lib) return;
+  const sub = document.querySelector('#page-devices .page-sub');
+  if (sub) {
+    sub.textContent = `${devices.length} thiết bị Android/Desktop được hỗ trợ`;
+  }
+  const elStatDev = document.getElementById('statDevices');
+  if (elStatDev) elStatDev.textContent = devices.length;
   lib.innerHTML = '';
   devices.forEach(d => {
     const card = document.createElement('div');

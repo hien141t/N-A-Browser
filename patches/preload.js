@@ -22,9 +22,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getDisplays: ()          => ipcRenderer.invoke('displays:get'),
 
   // Extensions
-  loadExtensions:  () => ipcRenderer.invoke('extensions:load'),
-  saveExtensions:  (exts) => ipcRenderer.invoke('extensions:save', exts),
-  selectExtension: () => ipcRenderer.invoke('extensions:select'),
+  loadExtensions:        () => ipcRenderer.invoke('extensions:load'),
+  saveExtensions:        (exts) => ipcRenderer.invoke('extensions:save', exts),
+  selectExtension:       () => ipcRenderer.invoke('extensions:select'),
+  selectExtensionFolder: () => ipcRenderer.invoke('extensions:selectFolder'),
+  selectExtensionFile:   () => ipcRenderer.invoke('extensions:selectFile'),
+  importExtensionPath:   (filePath) => ipcRenderer.invoke('extensions:importPath', filePath),
+  selectFolder:          () => ipcRenderer.invoke('extensions:selectFolder'),
+  selectFile:            () => ipcRenderer.invoke('extensions:selectFile'),
+  importPath:            (filePath) => ipcRenderer.invoke('extensions:importPath', filePath),
 
   // Settings
   loadSettings: () => ipcRenderer.invoke('settings:load'),

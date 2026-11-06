@@ -1,16 +1,58 @@
 [
   {
     "ok": true,
+    "id": "ext_1789569933387",
+    "name": "Tool i9 Auto Register",
+    "path": "D:\\NABrowser\\cloakdroid-app\\custom_extensions\\ext_1789569933387",
+    "enabled": true
+  },
+  {
+    "ok": true,
+    "id": "ext_1791086690787",
+    "name": "58WWIN Automation Tool",
+    "path": "D:\\NABrowser\\cloakdroid-app\\custom_extensions\\ext_1791086690787",
+    "enabled": true
+  },
+  {
+    "ok": true,
     "id": "ext_1786469361479",
     "name": "Tool i9 Auto Register",
-    "path": "C:\\Users\\hien1\\AppData\\Roaming\\na-browser\\custom_extensions\\ext_1786469361479",
+    "path": "D:\\NABrowser\\cloakdroid-app\\custom_extensions\\ext_1786469361479",
     "enabled": true
   },
   {
     "ok": true,
     "id": "ext_1786515448618",
     "name": "tool hi88 N/A",
-    "path": "C:\\Users\\hien1\\AppData\\Roaming\\na-browser\\custom_extensions\\ext_1786515448618",
+    "path": "D:\\NABrowser\\cloakdroid-app\\custom_extensions\\ext_1786515448618",
+    "enabled": true
+  },
+  {
+    "ok": true,
+    "id": "ext_1789551710577",
+    "name": "tool hi88 N/A",
+    "path": "D:\\NABrowser\\cloakdroid-app\\custom_extensions\\ext_1789551710577",
+    "enabled": true
+  },
+  {
+    "ok": true,
+    "id": "ext_1789553895819",
+    "name": "Tool i9 Auto Register",
+    "path": "D:\\NABrowser\\cloakdroid-app\\custom_extensions\\ext_1789553895819",
+    "enabled": true
+  },
+  {
+    "ok": true,
+    "id": "ext_1789553926880",
+    "name": "Tool i9 Auto Register",
+    "path": "D:\\NABrowser\\cloakdroid-app\\custom_extensions\\ext_1789553926880",
+    "enabled": true
+  },
+  {
+    "ok": true,
+    "id": "ext_1789554568979",
+    "name": "Tool i9 Auto Register",
+    "path": "D:\\NABrowser\\cloakdroid-app\\custom_extensions\\ext_1789554568979",
     "enabled": true
   }
 ]

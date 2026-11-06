@@ -216,7 +216,7 @@
           <span class="stat-l">Running</span>
         </div>
         <div class="stat-card">
-          <span class="stat-n" id="statDevices">10</span>
+          <span class="stat-n" id="statDevices">16</span>
           <span class="stat-l">Device Types</span>
         </div>
       </div>
@@ -235,12 +235,14 @@
           </select>
           <select id="filterBrand" class="select-sm">
             <option value="all">All Brands</option>
+            <option value="Apple">Apple (iPhone / iPad)</option>
             <option value="Samsung">Samsung</option>
             <option value="Google">Google</option>
             <option value="Xiaomi">Xiaomi</option>
             <option value="OPPO">OPPO</option>
             <option value="OnePlus">OnePlus</option>
             <option value="Vivo">Vivo</option>
+            <option value="Asus">Asus</option>
             <option value="Opera">Opera</option>
           </select>
           <div class="view-toggle">
@@ -269,7 +271,7 @@
       <div class="page-header">
         <div>
           <h1>Device Library</h1>
-          <p class="page-sub">10 thiết bị Android được hỗ trợ</p>
+          <p class="page-sub">20 thiết bị Android / iOS / Tablet được hỗ trợ</p>
         </div>
       </div>
       <div class="device-library" id="deviceLibrary"></div>
@@ -282,21 +284,48 @@
           <h1>Chrome Extensions</h1>
           <p class="page-sub">Quản lý tiện ích Chrome để gán vào các Profile Android</p>
         </div>
-        <div class="page-actions">
-          <button class="btn-primary" id="btnAddExtension">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            + Add Extension (Folder)
+        <div class="page-actions" style="display:flex; gap:10px; align-items:center;">
+          <button class="btn-primary" id="btnAddExtensionFolder" title="Chọn thư mục extension đã giải nén (chứa manifest.json)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+            + Thêm Thư mục (Unpacked Folder)
+          </button>
+          <button class="btn-secondary" id="btnAddExtensionZip" style="display:inline-flex; align-items:center; gap:6px;" title="Chọn file nén .zip hoặc .crx">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            + Thêm File (.zip / .crx)
           </button>
         </div>
       </div>
+
+      <!-- Drag & Drop Zone Area -->
+      <div class="ext-dropzone" id="extDropzone" title="Nhấp chuột hoặc Kéo thả thư mục / file tiện ích vào đây">
+        <div class="ext-dropzone-inner">
+          <div class="ext-dropzone-icon">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/>
+              <line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+          </div>
+          <div class="ext-dropzone-content">
+            <div class="ext-dropzone-title">Kéo & thả Thư mục Extension hoặc File .zip / .crx vào đây</div>
+            <div class="ext-dropzone-hint">Hỗ trợ thư mục unpacked extension, tệp nén <code>.zip</code>, gói tiện ích <code>.crx</code> hoặc tệp <code>manifest.json</code></div>
+          </div>
+        </div>
+      </div>
+
       <div class="extensions-grid" id="extensionsGrid"></div>
       <div class="empty-state" id="extEmptyState" style="display:none">
         <div class="empty-icon">🧩</div>
-        <h3>No Extensions Added</h3>
-        <p>Thêm tiện ích mở rộng Chrome (Unpacked Extension Folder) để sử dụng với các profile</p>
-        <button class="btn-primary" onclick="document.getElementById('btnAddExtension').click()">
-          + Add First Extension
-        </button>
+        <h3>Chưa có tiện ích mở rộng nào</h3>
+        <p>Thêm tiện ích mở rộng Chrome (Unpacked Extension Folder hoặc file .zip/.crx) để sử dụng với các profile</p>
+        <div class="empty-actions" style="display:flex; gap:10px; margin-top:8px;">
+          <button class="btn-primary" onclick="(document.getElementById('btnAddExtensionFolder') || document.getElementById('btnAddExtension')).click()">
+            + Thêm Thư mục
+          </button>
+          <button class="btn-secondary" onclick="document.getElementById('btnAddExtensionZip').click()">
+            + Thêm File (.zip / .crx)
+          </button>
+        </div>
       </div>
     </div>
 
@@ -327,11 +356,13 @@
           <h3>Window Size & Tiling (Kích Thước Cửa Sổ Thủ Công)</h3>
           <div class="settings-row">
             <span>Mẫu Kích Thước (Preset)</span>
-            <select id="settingWinPreset" class="form-select" style="width: 200px">
-              <option value="380x675">📱 4.0 inch (380 × 675 px)</option>
-              <option value="412x732">📱 4.7 inch (412 × 732 px)</option>
-              <option value="450x800">📱 5.5 inch (450 × 800 px)</option>
-              <option value="640x1136">🖥️ Full 640 × 1136 px</option>
+            <select id="settingWinPreset" class="form-select" style="width: 220px">
+              <option value="380x675">📱 4.0 inch Compact (380 × 675 px)</option>
+              <option value="393x852">🍎 iPhone 15/16 Pro (393 × 852 px)</option>
+              <option value="412x915">📱 Galaxy S24 / Pixel (412 × 915 px)</option>
+              <option value="440x956">🍎 iPhone 16 Pro Max (440 × 956 px)</option>
+              <option value="820x1180">📟 iPad Air / Tablet (820 × 1180 px)</option>
+              <option value="1024x1366">📟 iPad Pro 13" (1024 × 1366 px)</option>
               <option value="custom">⚙️ Tùy chỉnh (Custom Width/Height)</option>
             </select>
           </div>
@@ -818,10 +849,12 @@ print(response.json())</pre>
         <div style="display:flex;gap:10px;align-items:center">
           <select id="fWinPreset" class="form-select" style="flex:1">
             <option value="default">🌐 Mặc định theo Cài đặt chung (App Settings)</option>
-            <option value="380x675">📱 4.0 inch (380 × 675 px)</option>
-            <option value="412x732">📱 4.7 inch (412 × 732 px)</option>
-            <option value="450x800">📱 5.5 inch (450 × 800 px)</option>
-            <option value="640x1136">🖥️ Full 640 × 1136 px</option>
+            <option value="380x675">📱 4.0 inch Compact (380 × 675 px)</option>
+            <option value="393x852">🍎 iPhone 15/16 Pro (393 × 852 px)</option>
+            <option value="412x915">📱 Galaxy S24 / Pixel (412 × 915 px)</option>
+            <option value="440x956">🍎 iPhone 16 Pro Max (440 × 956 px)</option>
+            <option value="820x1180">📟 iPad Air / Tablet (820 × 1180 px)</option>
+            <option value="1024x1366">📟 iPad Pro 13" (1024 × 1366 px)</option>
             <option value="custom">⚙️ Tùy chỉnh (Custom Width × Height)</option>
           </select>
         </div>

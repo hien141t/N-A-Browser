@@ -304,6 +304,89 @@ html, body { height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; b
 .mono { font-family: 'JetBrains Mono', monospace; }
 
 /* ── Extensions Page & Select List ── */
+.ext-dropzone {
+  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border-radius: var(--r2);
+  background: rgba(255, 255, 255, 0.02);
+  padding: 18px 20px;
+  margin-bottom: 18px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  user-select: none;
+}
+
+.ext-dropzone:hover {
+  border-color: rgba(99, 102, 241, 0.45);
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.ext-dropzone.drag-over,
+#page-extensions.drag-over .ext-dropzone {
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.15);
+  box-shadow: 0 0 24px rgba(99, 102, 241, 0.35), inset 0 0 14px rgba(99, 102, 241, 0.15);
+  transform: translateY(-2px) scale(1.004);
+}
+
+.ext-dropzone-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  pointer-events: none;
+}
+
+.ext-dropzone-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.25s ease;
+}
+
+.ext-dropzone.drag-over .ext-dropzone-icon,
+#page-extensions.drag-over .ext-dropzone .ext-dropzone-icon {
+  background: var(--accent);
+  color: #fff;
+  transform: scale(1.1) rotate(-6deg);
+}
+
+.ext-dropzone-content {
+  text-align: left;
+}
+
+.ext-dropzone-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--txt);
+  margin-bottom: 2px;
+}
+
+.ext-dropzone-hint {
+  font-size: 11px;
+  color: var(--txt3);
+  line-height: 1.4;
+}
+
+.ext-dropzone-hint code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--accent);
+  background: rgba(99, 102, 241, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+#page-extensions.drag-over {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  border-radius: var(--r);
+}
+
 .extensions-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; overflow-y: auto; padding-bottom: 20px; }
 .ext-card {
   background: var(--card); border: 1px solid var(--border);
@@ -318,12 +401,33 @@ html, body { height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; b
 .ext-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
 .ext-select-list {
-  background: rgba(0,0,0,0.2); border: 1px solid var(--border);
-  border-radius: var(--r); padding: 10px; max-height: 120px; overflow-y: auto;
+  background: rgba(0,0,0,0.22); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 10px 12px; max-height: 150px; overflow-y: auto;
   display: flex; flex-direction: column; gap: 6px;
 }
-.ext-item-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--txt2); cursor: pointer; }
-.ext-item-row input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; }
+.ext-item-row {
+  display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--txt2); cursor: pointer;
+  padding: 5px 8px; border-radius: 6px; background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.03); transition: all 0.15s ease;
+}
+.ext-item-row:hover {
+  background: rgba(99,102,241,0.08); border-color: rgba(99,102,241,0.2); color: var(--txt);
+}
+.ext-item-row input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; width: 14px; height: 14px; flex-shrink: 0; }
+.ext-badge-path {
+  font-size: 10px; color: var(--txt3); background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08); padding: 1px 6px; border-radius: 4px;
+  max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+}
+.ext-picker-toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 6px; margin-bottom: 2px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 11px;
+}
+.ext-picker-toolbar-title { color: var(--txt3); font-weight: 500; }
+.ext-picker-toolbar-actions { display: flex; gap: 10px; }
+.ext-picker-toolbar-actions a { color: var(--accent); text-decoration: none; cursor: pointer; font-weight: 500; }
+.ext-picker-toolbar-actions a:hover { color: var(--accent2); text-decoration: underline; }
 
 /* ── Custom Confirm Modal ── */
 .confirm-overlay {

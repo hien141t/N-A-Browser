@@ -179,6 +179,10 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
     const page = pages[0] || await browser.newPage();
     const client = await page.createCDPSession();
 
+    // ── Kích hoạt Page & Network domain ổn định (không kích hoạt Runtime.enable để tránh rò rỉ runtime bindings) ──
+    await client.send('Page.enable').catch(() => {});
+    await client.send('Network.enable').catch(() => {});
+
     // Khôi phục Cookies & Dữ liệu Web từ Cloud nếu có
     try {
       let targetProfile = profile;
@@ -191,7 +195,6 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
         }
       }
       if (targetProfile && targetProfile.webData && Array.isArray(targetProfile.webData.cookies) && targetProfile.webData.cookies.length > 0) {
-        await client.send('Network.enable');
         const cleanCookies = sanitizeCookiesForCDP(targetProfile.webData.cookies);
         if (cleanCookies.length > 0) {
           await client.send('Network.setCookies', { cookies: cleanCookies });
@@ -202,11 +205,25 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
       console.warn('[CDP] Lỗi khi nạp cookies từ Cloud:', errCookies.message);
     }
 
-    const dpr   = device.device_scale_factor || 3.0;
-    const ua    = device.user_agent || '';
-    const tz    = device.timezone  || 'Asia/Ho_Chi_Minh';
-    const lang  = device.language  || 'vi-VN';
-    const touch = device.max_touch_points || 10;
+    const dev   = device || {};
+    const dpr   = dev.device_scale_factor || 3.0;
+    const ua    = dev.user_agent || '';
+    const tz    = dev.timezone || (profile && profile.timezone) || 'Asia/Ho_Chi_Minh';
+    const lang  = dev.language || (profile && profile.language) || 'vi-VN';
+    const touch = dev.max_touch_points || 10;
+
+    // Thiết lập Network.setExtraHTTPHeaders đồng bộ Accept-Language theo device.language
+    const primaryLang = lang.trim();
+    const langCode = primaryLang.split('-')[0];
+    const acceptLanguageHeader = primaryLang.includes('-')
+      ? `${primaryLang},${langCode};q=0.9,en-US;q=0.8,en;q=0.7`
+      : `${primaryLang};q=0.9,en-US;q=0.8,en;q=0.7`;
+
+    await client.send('Network.setExtraHTTPHeaders', {
+      headers: {
+        'Accept-Language': acceptLanguageHeader,
+      }
+    }).catch(e => console.warn('[CDP] setExtraHTTPHeaders warning:', e.message));
 
     // Proxy auth đã được xử lý bởi local proxy server (startLocalProxy).
     // CDP không cần handle 407 nữa.
@@ -301,14 +318,30 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
     // Dự phòng: một số build Chromium không phát sự kiện windowBoundsChanged cho page session
     const resizePoller = setInterval(syncViewportIfChanged, 1000);
     page.on('close', () => clearInterval(resizePoller));
+    browser.on('disconnected', () => {
+      clearInterval(resizePoller);
+      clearTimeout(resizeTimer);
+    });
 
-    // ── 3. User-Agent & Client Hints ──
-    const isOpera    = ua.includes('OPR/') || ua.includes('Opera/') || device.browser_type === 'opera' || !!device.opera_version;
-    const operaMajor = ua.match(/(?:OPR|Opera)\/(\d+)/)?.[1]     || device.opera_version?.split('.')[0]  || '143';
-    const operaFull  = ua.match(/(?:OPR|Opera)\/([\d.]+)/)?.[1]  || device.opera_version                 || '143.0.0.0';
-    const chromeMajor = ua.match(/Chrome\/(\d+)/)?.[1]           || device.chrome_version?.split('.')[0] || '126';
-    const chromeFull  = ua.match(/Chrome\/([\d.]+)/)?.[1]        || device.chrome_version                || '126.0.0.0';
-    const platformName = device.is_mobile !== false ? 'Android' : (ua.includes('Windows') ? 'Windows' : 'Android');
+    // ── 3. User-Agent & Client Hints (Chuẩn Hóa High Entropy) ──
+    const isOpera    = ua.includes('OPR/') || ua.includes('Opera/') || dev.browser_type === 'opera' || !!dev.opera_version;
+    const operaMajor = ua.match(/(?:OPR|Opera)\/(\d+)/)?.[1]     || dev.opera_version?.split('.')[0]  || '143';
+    const operaFull  = ua.match(/(?:OPR|Opera)\/([\d.]+)/)?.[1]  || dev.opera_version                 || `${operaMajor}.0.0.0`;
+    const chromeMajor = ua.match(/Chrome\/(\d+)/)?.[1]           || dev.chrome_version?.split('.')[0] || '126';
+    const chromeFull  = ua.match(/Chrome\/([\d.]+)/)?.[1]        || dev.chrome_version                || `${chromeMajor}.0.0.0`;
+
+    const ensureFullVersion = (v, defaultVer = '126.0.0.0') => {
+      if (!v) return defaultVer;
+      const parts = String(v).split('.');
+      while (parts.length < 4) parts.push('0');
+      return parts.slice(0, 4).join('.');
+    };
+    const cFull = ensureFullVersion(chromeFull, `${chromeMajor}.0.0.0`);
+    const oFull = ensureFullVersion(operaFull, `${operaMajor}.0.0.0`);
+
+    const isMobile = dev.is_mobile !== false;
+    const isApple = (dev.brand && dev.brand.toLowerCase() === 'apple') || dev.platform === 'iPhone' || dev.platform === 'iPad';
+    const platformName = isApple ? (dev.platform || (dev.model && dev.model.includes('iPad') ? 'iPad' : 'iPhone')) : (isMobile ? 'Android' : (ua.includes('Windows') ? 'Windows' : 'Android'));
 
     const brands = [
       { brand: 'Not/A)Brand', version: '99' },
@@ -316,51 +349,76 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
     ];
     const fullVersionList = [
       { brand: 'Not/A)Brand', version: '99.0.0.0' },
-      { brand: 'Chromium',    version: chromeFull },
+      { brand: 'Chromium',    version: cFull },
     ];
     if (isOpera) {
       brands.push({ brand: 'Opera', version: operaMajor });
-      fullVersionList.push({ brand: 'Opera', version: operaFull });
+      fullVersionList.push({ brand: 'Opera', version: oFull });
     } else {
       brands.push({ brand: 'Google Chrome', version: chromeMajor });
-      fullVersionList.push({ brand: 'Google Chrome', version: chromeFull });
+      fullVersionList.push({ brand: 'Google Chrome', version: cFull });
     }
 
-    await client.send('Emulation.setUserAgentOverride', {
+    // Chuẩn hóa Client Hints High Entropy platformVersion:
+    // Android 14 -> '14.0.0', Android 13 -> '13.0.0', Android 12 -> '12.0.0'
+    const osVerRaw = String(dev.os_version || 'Android 13').replace(/^Android\s*|^Windows\s*/i, '').trim();
+    const osDigits = osVerRaw.replace(/[^0-9.]/g, '');
+    const osParts = osDigits ? osDigits.split('.') : ['13'];
+    while (osParts.length < 3) osParts.push('0');
+    const platformVersion = osParts.slice(0, 3).join('.');
+
+    const userAgentMetadata = {
+      brands,
+      fullVersionList,
+      platform:        platformName,
+      platformVersion: platformVersion,
+      architecture:    isMobile ? 'arm' : 'x86',
+      model:           isMobile ? (dev.model || 'SM-G998B') : '',
+      mobile:          isMobile,
+      bitness:         '64',
+      wow64:           false,
+    };
+
+    const uaOverrideParams = {
       userAgent: ua,
       acceptLanguage: lang,
-      platform: device.platform || 'Linux armv8l',
-      userAgentMetadata: {
-        brands,
-        fullVersionList,
-        platform:        platformName,
-        platformVersion: (device.os_version || 'Android 13').replace(/Android |Windows /, ''),
-        architecture:    device.is_mobile !== false ? 'arm' : 'x86',
-        model:           device.model || 'SM-G998B',
-        mobile:          device.is_mobile !== false,
-        bitness:         '64',
-        wow64:           false,
-      },
-    });
+      platform: dev.platform || (isMobile ? 'Linux armv8l' : 'Win32'),
+      userAgentMetadata,
+    };
 
-    // ── 4. Touch Events ──
+    // Bổ sung Network.setUserAgentOverride song song với Emulation.setUserAgentOverride
+    // đảm bảo tất cả Web Worker, Service Worker, background network requests và DOM
+    // đều nhận 100% Android User-Agent & Client Hints metadata.
+    await client.send('Network.setUserAgentOverride', uaOverrideParams);
+    await client.send('Emulation.setUserAgentOverride', uaOverrideParams);
+
+    // ── 4. Touch Events & Mouse-to-Touch Gesture Emulation ──
     await client.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: touch });
+    if (isMobile) {
+      await client.send('Emulation.setEmitTouchEventsForMouse', { enabled: true, configuration: 'mobile' }).catch(() => {});
+    }
 
     // ── 5. Timezone & Locale ──
     await client.send('Emulation.setTimezoneOverride', { timezoneId: tz });
     await client.send('Emulation.setLocaleOverride',   { locale: lang });
 
     // ── 6. Geolocation ──
-    if (device.geo) {
+    if (dev.geo) {
       await client.send('Emulation.setGeolocationOverride', {
-        latitude:  device.geo.lat,
-        longitude: device.geo.lng,
+        latitude:  dev.geo.lat,
+        longitude: dev.geo.lng,
         accuracy:  18,
       });
     }
 
     // ── 7. Tắt AutomationControlled ──
     await client.send('Emulation.setAutomationOverride', { enabled: false });
+
+    // ── Anti-Debugger Bypass (Bỏ qua toàn bộ bẫy debugger; của game/website khi mở DevTools F12) ──
+    try {
+      await client.send('Debugger.enable');
+      await client.send('Debugger.setSkipAllPauses', { skip: true });
+    } catch(e) {}
 
     // ── 8. Media features (Dark Mode) ──
     await client.send('Emulation.setEmulatedMedia', {
@@ -370,7 +428,42 @@ async function applyCDPDeviceEmulation(debugPort, device, proxy = null, winW = 3
       ]
     });
 
-    console.log(`[CDP] ✅ Emulation applied: ${device.name} | ${initBounds.w}x${initBounds.h} DPR=${dpr} (viewport responsive theo cửa sổ)`);
+    // ── 9. Đồng bộ Emulation cho các Tab mới / Popups tạo trong phiên mà không để lộ runtime bindings ──
+    browser.on('targetcreated', async (target) => {
+      if (target.type() === 'page') {
+        try {
+          const newPage = await target.page();
+          if (newPage && !newPage.isClosed()) {
+            const newClient = await newPage.createCDPSession();
+            await newClient.send('Page.enable').catch(() => {});
+            await newClient.send('Network.enable').catch(() => {});
+            await newClient.send('Network.setExtraHTTPHeaders', {
+              headers: { 'Accept-Language': acceptLanguageHeader }
+            }).catch(() => {});
+            await newClient.send('Network.setUserAgentOverride', uaOverrideParams).catch(() => {});
+            await newClient.send('Emulation.setUserAgentOverride', uaOverrideParams).catch(() => {});
+            await newClient.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: touch }).catch(() => {});
+            if (isMobile) {
+              await newClient.send('Emulation.setEmitTouchEventsForMouse', { enabled: true, configuration: 'mobile' }).catch(() => {});
+            }
+            await newClient.send('Emulation.setTimezoneOverride', { timezoneId: tz }).catch(() => {});
+            await newClient.send('Emulation.setLocaleOverride', { locale: lang }).catch(() => {});
+            if (dev.geo) {
+              await newClient.send('Emulation.setGeolocationOverride', {
+                latitude: dev.geo.lat,
+                longitude: dev.geo.lng,
+                accuracy: 18,
+              }).catch(() => {});
+            }
+            await newClient.send('Emulation.setAutomationOverride', { enabled: false }).catch(() => {});
+            await newClient.send('Debugger.enable').catch(() => {});
+            await newClient.send('Debugger.setSkipAllPauses', { skip: true }).catch(() => {});
+          }
+        } catch (e) {}
+      }
+    });
+
+    console.log(`[CDP] ✅ Emulation applied: ${dev.name || dev.model || 'Device'} | ${initBounds.w}x${initBounds.h} DPR=${dpr} | Android CH: ${platformVersion} | arm64 (viewport responsive theo cửa sổ)`);
 
     // ── Navigate đến URL thật SAU KHI toàn bộ setup xong ──
     // Chrome được spawn với about:blank → giờ mới điều hướng đến startUrl.
@@ -1077,7 +1170,208 @@ function resolveExtensionPath(item) {
   return null;
 }
 
-// Load saved extensions
+// Lấy tên extension từ manifest.json (hỗ trợ resolve locale __MSG_xxx__)
+function getManifestName(dirPath, fallbackName) {
+  const manifestFile = path.join(dirPath, 'manifest.json');
+  if (!fs.existsSync(manifestFile)) return fallbackName;
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf-8'));
+    let name = manifest.name || fallbackName;
+    if (typeof name === 'string' && name.startsWith('__MSG_') && name.endsWith('__')) {
+      const key = name.slice(6, -2);
+      const locales = [manifest.default_locale, 'en', 'vi', 'en_US', 'vi_VN'].filter(Boolean);
+      for (const loc of locales) {
+        const msgFile = path.join(dirPath, '_locales', loc, 'messages.json');
+        if (fs.existsSync(msgFile)) {
+          try {
+            const msgs = JSON.parse(fs.readFileSync(msgFile, 'utf-8'));
+            if (msgs[key]?.message) {
+              name = msgs[key].message;
+              break;
+            }
+          } catch(e){}
+        }
+      }
+    }
+    return name;
+  } catch(e) {
+    return fallbackName;
+  }
+}
+
+// Tìm kiếm thư mục chứa manifest.json đệ quy (tối đa độ sâu 5)
+function findManifestDir(dir, depth = 0) {
+  if (depth > 5) return null;
+  if (fs.existsSync(path.join(dir, 'manifest.json'))) return dir;
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const e of entries) {
+      if (e.isDirectory() && !e.name.startsWith('.') && e.name !== '__MACOSX') {
+        const found = findManifestDir(path.join(dir, e.name), depth + 1);
+        if (found) return found;
+      }
+    }
+  } catch(e){}
+  return null;
+}
+
+// Giải nén file .zip hoặc .crx an toàn bằng PowerShell Expand-Archive (fallback tar)
+function extractArchiveToDir(archivePath, destinationDir) {
+  const { execFileSync } = require('child_process');
+  const ext = path.extname(archivePath).toLowerCase();
+  let zipPath = archivePath;
+  const tempExtractDir = path.join(os.tmpdir(), `agy_ext_tmp_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`);
+  fs.mkdirSync(tempExtractDir, { recursive: true });
+
+  try {
+    // Nếu là file .crx, bóc header CRX (Cr24) nếu có để chuyển thành zip chuẩn
+    if (ext === '.crx') {
+      const buf = fs.readFileSync(archivePath);
+      let zipOffset = 0;
+      if (buf.length > 16 && buf.subarray(0, 4).toString('utf-8') === 'Cr24') {
+        const version = buf.readUInt32LE(4);
+        if (version === 2) {
+          const pubkeyLen = buf.readUInt32LE(8);
+          const sigLen = buf.readUInt32LE(12);
+          zipOffset = 16 + pubkeyLen + sigLen;
+        } else if (version === 3) {
+          const headerLen = buf.readUInt32LE(8);
+          zipOffset = 12 + headerLen;
+        }
+      } else {
+        const pkIndex = buf.indexOf(Buffer.from([0x50, 0x4B, 0x03, 0x04]));
+        if (pkIndex !== -1) {
+          zipOffset = pkIndex;
+        }
+      }
+
+      zipPath = path.join(tempExtractDir, 'archive.zip');
+      if (zipOffset > 0 && zipOffset < buf.length) {
+        fs.writeFileSync(zipPath, buf.subarray(zipOffset));
+      } else {
+        fs.copyFileSync(archivePath, zipPath);
+      }
+    }
+
+    let extracted = false;
+    let extractError = null;
+
+    // 1. Thử giải nén bằng PowerShell Expand-Archive (tương thích hoàn hảo Windows, ổ đĩa D:, khoảng trắng)
+    if (process.platform === 'win32') {
+      try {
+        const psScript = `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${destinationDir.replace(/'/g, "''")}' -Force`;
+        execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', psScript], { stdio: 'pipe' });
+        extracted = true;
+      } catch (err) {
+        extractError = err;
+        console.warn('[extractArchiveToDir] PowerShell Expand-Archive failed, trying tar:', err.message);
+      }
+    }
+
+    // 2. Fallback sang tar -xf
+    if (!extracted) {
+      try {
+        fs.mkdirSync(destinationDir, { recursive: true });
+        execFileSync('tar', ['-xf', zipPath, '-C', destinationDir], { stdio: 'pipe' });
+        extracted = true;
+      } catch (err) {
+        console.warn('[extractArchiveToDir] tar -xf failed:', err.message);
+        throw new Error(extractError?.message || err.message || 'Không thể giải nén tệp.');
+      }
+    }
+  } finally {
+    try {
+      fs.rmSync(tempExtractDir, { recursive: true, force: true });
+    } catch(e){}
+  }
+}
+
+// Xử lý nạp extension từ đường dẫn (thư mục, file zip, crx, manifest.json)
+async function importExtensionFromPath(selectedPath) {
+  if (!selectedPath || typeof selectedPath !== 'string') {
+    return { ok: false, error: 'Đường dẫn tiện ích không hợp lệ.' };
+  }
+
+  const cleanPath = selectedPath.trim().replace(/^["']|["']$/g, '');
+  if (!fs.existsSync(cleanPath)) {
+    return { ok: false, error: `Không tìm thấy đường dẫn: ${cleanPath}` };
+  }
+
+  const extId = 'ext_' + Date.now();
+  const targetDir = path.join(APP_DATA_DIR, 'custom_extensions', extId);
+  const stagingDir = path.join(APP_DATA_DIR, 'custom_extensions', `_staging_${extId}`);
+
+  try {
+    const stat = fs.statSync(cleanPath);
+    let extName = path.basename(cleanPath);
+
+    if (stat.isDirectory()) {
+      const manifestDir = findManifestDir(cleanPath) || cleanPath;
+      if (!fs.existsSync(path.join(manifestDir, 'manifest.json'))) {
+        return { ok: false, error: 'Không tìm thấy file manifest.json trong thư mục đã chọn!' };
+      }
+      fs.mkdirSync(targetDir, { recursive: true });
+      fs.cpSync(manifestDir, targetDir, { recursive: true });
+    } else if (stat.isFile()) {
+      const ext = path.extname(cleanPath).toLowerCase();
+      if (ext === '.zip' || ext === '.crx') {
+        fs.mkdirSync(stagingDir, { recursive: true });
+        extractArchiveToDir(cleanPath, stagingDir);
+
+        const manifestDir = findManifestDir(stagingDir);
+        if (!manifestDir || !fs.existsSync(path.join(manifestDir, 'manifest.json'))) {
+          fs.rmSync(stagingDir, { recursive: true, force: true });
+          return { ok: false, error: 'Không tìm thấy file manifest.json trong tệp nén!' };
+        }
+
+        fs.mkdirSync(targetDir, { recursive: true });
+        // Tự động sao chép nội dung thư mục chứa manifest.json về targetDir (làm phẳng thư mục lồng)
+        fs.cpSync(manifestDir, targetDir, { recursive: true });
+        fs.rmSync(stagingDir, { recursive: true, force: true });
+      } else if (path.basename(cleanPath).toLowerCase() === 'manifest.json') {
+        const parentDir = path.dirname(cleanPath);
+        fs.mkdirSync(targetDir, { recursive: true });
+        fs.cpSync(parentDir, targetDir, { recursive: true });
+      } else {
+        return { ok: false, error: 'Vui lòng chọn thư mục chứa tiện ích hoặc file nén .zip / .crx.' };
+      }
+    }
+
+    // Kiểm tra manifest.json ở targetDir
+    const manifestFile = path.join(targetDir, 'manifest.json');
+    if (!fs.existsSync(manifestFile)) {
+      fs.rmSync(targetDir, { recursive: true, force: true });
+      return { ok: false, error: 'Không tìm thấy file manifest.json trong tiện ích này!' };
+    }
+
+    extName = getManifestName(targetDir, extName);
+    const extInfo = { ok: true, id: extId, name: extName, path: targetDir, enabled: true };
+
+    // Tự động bổ sung vào extensions.json
+    try {
+      const extPath = path.join(APP_DATA_DIR, 'extensions.json');
+      let list = [];
+      if (fs.existsSync(extPath)) {
+        try { list = JSON.parse(fs.readFileSync(extPath, 'utf-8')) || []; } catch(e){}
+      }
+      if (!list.some(e => e.id === extId)) {
+        list.push(extInfo);
+        fs.writeFileSync(extPath, JSON.stringify(list, null, 2), 'utf-8');
+      }
+    } catch(e) {
+      console.warn('[importExtensionFromPath] Lỗi lưu extensions.json:', e.message);
+    }
+
+    return extInfo;
+  } catch (err) {
+    try { fs.rmSync(targetDir, { recursive: true, force: true }); } catch(e){}
+    try { fs.rmSync(stagingDir, { recursive: true, force: true }); } catch(e){}
+    console.error('[importExtensionFromPath] Lỗi:', err);
+    return { ok: false, error: 'Lỗi khi nạp tiện ích: ' + err.message };
+  }
+}
+
+// Load saved extensions & Auto-discovery from APP_DATA_DIR/custom_extensions/
 ipcMain.handle('extensions:load', async () => {
   const extPath = path.join(APP_DATA_DIR, 'extensions.json');
   const defaultExt = path.join(__dirname, 'extensions.json');
@@ -1107,6 +1401,51 @@ ipcMain.handle('extensions:load', async () => {
     }
   });
 
+  // Tự động quét (Auto-discovery) trong APP_DATA_DIR/custom_extensions/
+  let hasDiscovered = false;
+  const scanDirs = [
+    path.join(APP_DATA_DIR, 'custom_extensions'),
+    path.join(__dirname, 'custom_extensions')
+  ];
+
+  for (const dir of scanDirs) {
+    if (!fs.existsSync(dir)) continue;
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory() || entry.name.startsWith('.') || entry.name.startsWith('_staging_')) continue;
+        const subDir = path.join(dir, entry.name);
+        const manifestFile = path.join(subDir, 'manifest.json');
+        if (fs.existsSync(manifestFile)) {
+          // Kiểm tra xem đã có trong validList chưa
+          const exists = validList.some(v => v.id === entry.name || (v.path && path.resolve(v.path) === path.resolve(subDir)));
+          if (!exists) {
+            const extName = getManifestName(subDir, entry.name);
+            validList.push({
+              ok: true,
+              id: entry.name,
+              name: extName,
+              path: path.resolve(subDir),
+              enabled: true
+            });
+            hasDiscovered = true;
+          }
+        }
+      }
+    } catch(e) {
+      console.warn('[extensions:load] Lỗi quét custom_extensions:', e.message);
+    }
+  }
+
+  // Nếu có extension mới phát hiện hoặc danh sách bị thay đổi, lưu lại vào extensions.json
+  if (hasDiscovered || validList.length !== list.length) {
+    try {
+      fs.writeFileSync(extPath, JSON.stringify(validList, null, 2), 'utf-8');
+    } catch(e) {
+      console.warn('[extensions:load] Lỗi ghi extensions.json:', e.message);
+    }
+  }
+
   return validList;
 });
 
@@ -1117,78 +1456,59 @@ ipcMain.handle('extensions:save', async (event, extensions) => {
   return true;
 });
 
-// Select extension folder or zip file
+// Select extension folder (unpacked)
+ipcMain.handle('extensions:selectFolder', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Chọn thư mục tiện ích mở rộng (Unpacked Extension)',
+      properties: ['openDirectory']
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+    return await importExtensionFromPath(result.filePaths[0]);
+  } catch (err) {
+    console.error('[extensions:selectFolder] Lỗi:', err);
+    return { ok: false, error: 'Lỗi khi chọn thư mục tiện ích: ' + err.message };
+  }
+});
+
+// Select extension file (.zip, .crx)
+ipcMain.handle('extensions:selectFile', async () => {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: 'Chọn gói tiện ích mở rộng (.zip, .crx)',
+      properties: ['openFile'],
+      filters: [{ name: 'Extension Pack (.zip, .crx)', extensions: ['zip', 'crx'] }]
+    });
+    if (result.canceled || !result.filePaths.length) return null;
+    return await importExtensionFromPath(result.filePaths[0]);
+  } catch (err) {
+    console.error('[extensions:selectFile] Lỗi:', err);
+    return { ok: false, error: 'Lỗi khi chọn tệp tiện ích: ' + err.message };
+  }
+});
+
+// Backward compatibility: extensions:select (thông minh dùng openDirectory)
 ipcMain.handle('extensions:select', async () => {
   try {
     const result = await dialog.showOpenDialog(mainWindow, {
-      title: 'Chọn tiện ích mở rộng (Thư mục đã giải nén hoặc file .zip/.crx)',
-      properties: ['openDirectory', 'openFile'],
-      filters: [{ name: 'Extension hoặc Tệp nén', extensions: ['zip', 'crx', 'json'] }]
+      title: 'Chọn tiện ích mở rộng (Thư mục unpacked)',
+      properties: ['openDirectory']
     });
     if (result.canceled || !result.filePaths.length) return null;
-    
-    const selectedPath = result.filePaths[0];
-    const extId = 'ext_' + Date.now();
-    const targetDir = path.join(APP_DATA_DIR, 'custom_extensions', extId);
-    fs.mkdirSync(targetDir, { recursive: true });
-
-    const stat = fs.statSync(selectedPath);
-    let extName = path.basename(selectedPath);
-
-    const findManifestDir = (dir, depth = 0) => {
-      if (depth > 3) return null;
-      if (fs.existsSync(path.join(dir, 'manifest.json'))) return dir;
-      try {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const e of entries) {
-          if (e.isDirectory() && !e.name.startsWith('.')) {
-            const found = findManifestDir(path.join(dir, e.name), depth + 1);
-            if (found) return found;
-          }
-        }
-      } catch(e){}
-      return null;
-    };
-
-    if (stat.isDirectory()) {
-      // Tìm xem manifest.json nằm ở đâu (có thể ở root hoặc thư mục con)
-      const manifestDir = findManifestDir(selectedPath) || selectedPath;
-      fs.cpSync(manifestDir, targetDir, { recursive: true });
-    } else if (stat.isFile()) {
-      const ext = path.extname(selectedPath).toLowerCase();
-      if (ext === '.zip' || ext === '.crx') {
-        // Tự động giải nén file zip/crx bằng tar built-in
-        const { execSync } = require('child_process');
-        execSync(`tar -xf "${selectedPath}" -C "${targetDir}"`, { stdio: 'ignore' });
-        const manifestDir = findManifestDir(targetDir);
-        if (manifestDir && manifestDir !== targetDir) {
-          fs.cpSync(manifestDir, targetDir, { recursive: true });
-        }
-      } else if (path.basename(selectedPath).toLowerCase() === 'manifest.json') {
-        const parentDir = path.dirname(selectedPath);
-        fs.cpSync(parentDir, targetDir, { recursive: true });
-      } else {
-        fs.rmSync(targetDir, { recursive: true, force: true });
-        return { ok: false, error: 'Vui lòng chọn thư mục chứa tiện ích hoặc file nén .zip.' };
-      }
-    }
-
-    // Kiểm tra manifest.json
-    const manifestFile = path.join(targetDir, 'manifest.json');
-    if (fs.existsSync(manifestFile)) {
-      try {
-        const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf-8'));
-        if (manifest.name) extName = manifest.name;
-      } catch(e){}
-    } else {
-      fs.rmSync(targetDir, { recursive: true, force: true });
-      return { ok: false, error: 'Không tìm thấy file manifest.json trong tiện ích này!' };
-    }
-
-    return { ok: true, id: extId, name: extName, path: targetDir, enabled: true };
+    return await importExtensionFromPath(result.filePaths[0]);
   } catch (err) {
     console.error('[extensions:select] Lỗi:', err);
     return { ok: false, error: 'Lỗi khi nạp tiện ích: ' + err.message };
+  }
+});
+
+// Import direct path (supporting Drag & Drop from UI)
+ipcMain.handle('extensions:importPath', async (event, selectedPath) => {
+  try {
+    return await importExtensionFromPath(selectedPath);
+  } catch (err) {
+    console.error('[extensions:importPath] Lỗi:', err);
+    return { ok: false, error: 'Lỗi khi nạp tiện ích từ đường dẫn: ' + err.message };
   }
 });
 
@@ -1250,6 +1570,18 @@ function setChromiumWindowPreferences(profileDir, posX, posY, winW, winH, profil
     prefs.profile.avatar_index = 26;
     prefs.profile.using_default_avatar = false;
     prefs.profile.using_default_name = false;
+
+    // Cấu hình DevTools tự động mở ở dạng cửa sổ rời (Undocked / Detached)
+    // Giúp khi bấm F12:
+    // 1. Không làm co giật kích thước cửa sổ game
+    // 2. Không làm mất WebGL context của game
+    // 3. Website không phát hiện DevTools qua chênh lệch outerWidth/innerHeight
+    // 4. Device Toolbar của DevTools không đè lên màn hình game
+    if (!prefs.devtools) prefs.devtools = {};
+    if (!prefs.devtools.preferences) prefs.devtools.preferences = {};
+    prefs.devtools.preferences.currentDockState = '"undocked"';
+    prefs.devtools.preferences.lastDockState = '"undocked"';
+
     fs.writeFileSync(prefsFile, JSON.stringify(prefs, null, 2));
 
     // Cài đặt Google Profile Picture.png cho avatar overlay badge
@@ -1608,11 +1940,10 @@ ipcMain.handle('browser:launch', async (event, profile) => {
     fs.mkdirSync(extDir, { recursive: true });
 
     const manifestJson = {
-      manifest_version: 2,
+      manifest_version: 3,
       name: `NA Stealth Fingerprint ${profile.id}`,
       version: '1.0.0',
       description: 'Native C++ Level Stealth Fingerprint Injector',
-      permissions: ["<all_urls>"],
       content_scripts: [
         {
           matches: ['<all_urls>'],
@@ -1653,6 +1984,7 @@ ipcMain.handle('browser:launch', async (event, profile) => {
     }
 
     const loadExtArg = `--load-extension=${extPaths.join(',')}`;
+    const disableExtExceptArg = `--disable-extensions-except=${extPaths.join(',')}`;
 
     // Determine profile number (1, 2, 3...)
     let profileNum = profile.profileNum;
@@ -1721,6 +2053,7 @@ ipcMain.handle('browser:launch', async (event, profile) => {
       `--window-position=${gridPos.posX},${gridPos.posY}`,
       `--window-size=${winW},${winH}`,
       loadExtArg,
+      disableExtExceptArg,
       '--no-first-run',
       '--no-default-browser-check',
       '--touch-events=enabled',
@@ -1730,6 +2063,10 @@ ipcMain.handle('browser:launch', async (event, profile) => {
       '--disable-plugins-discovery',
       '--disable-infobars',
       '--test-type',                          // ← ẩn thanh cảnh báo "cờ không được hỗ trợ"
+      // ── WebRTC IP Leak Prevention (Chống rò rỉ IP qua STUN/ICE) ──
+      '--force-webrtc-ip-handling-policy=default_public_interface_only',
+      '--enforce-webrtc-ip-permission-check',
+      '--disable-webrtc-multiple-routes',
       `--remote-debugging-port=${debugPort}`,
       `--remote-debugging-address=127.0.0.1`,
       `--remote-allow-origins=*`,
@@ -2374,10 +2711,24 @@ ipcMain.handle('app:info', () => ({
 
 // ── Generate fingerprint injection script (Stealth Native Patch) ──
 function generateFingerprintScript(device) {
+  device = device || {};
   const tz = device.timezone || 'Asia/Ho_Chi_Minh';
   const touchPoints = device.max_touch_points || 10;
   const renderer = device.webgl_renderer || 'Adreno (TM) 650';
   const vendor = device.webgl_vendor || 'Qualcomm';
+  const lang = device.language || 'vi-VN';
+  const dsf = device.device_scale_factor || 3.0;
+  const isMobile = device.is_mobile !== false;
+  const isApple = (device.brand && device.brand.toLowerCase() === 'apple') || device.platform === 'iPhone' || device.platform === 'iPad';
+  const targetPlatform = device.platform || (isApple ? (device.model && device.model.includes('iPad') ? 'iPad' : 'iPhone') : (isMobile ? 'Linux armv8l' : 'Win32'));
+
+  // Compute a stable integer seed unique to this device/profile
+  const seedStr = (device.id || device.name || 'cloakdroid_profile') + '_' + renderer;
+  let deviceSeed = 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    deviceSeed = ((deviceSeed << 5) - deviceSeed + seedStr.charCodeAt(i)) | 0;
+  }
+  deviceSeed = Math.abs(deviceSeed) || 987654321;
 
   return `(function() {
   'use strict';
@@ -2405,37 +2756,118 @@ function generateFingerprintScript(device) {
   };
   nativeToStrings.set(Function.prototype.toString, 'function toString() { [native code] }');
 
-  const navProto = Object.getPrototypeOf(navigator) || Navigator.prototype;
-  const screenProto = Object.getPrototypeOf(screen) || Screen.prototype;
+  const navProto = (typeof Navigator !== 'undefined' && Navigator.prototype) || (typeof navigator !== 'undefined' ? Object.getPrototypeOf(navigator) : {});
+  const screenProto = (typeof Screen !== 'undefined' && Screen.prototype) || (typeof screen !== 'undefined' ? Object.getPrototypeOf(screen) : {});
+  const deviceSeed = ${deviceSeed};
+
+  // ── ANTI-ANTI-DEBUGGING & F12 DEVTOOLS PROTECTION ──
+  // Ngăn chặn các trang game (như winv79, PG Soft...) kích hoạt vòng lặp debugger; đóng băng trang khi bật F12
+  try {
+    const _origFunction = window.Function;
+    const functionHandler = {
+      apply(target, thisArg, args) {
+        if (args.length > 0 && typeof args[args.length - 1] === 'string') {
+          const body = args[args.length - 1];
+          if (body.includes('debugger')) {
+            args[args.length - 1] = body.replace(/\\bdebugger\\b/g, '/* noop */');
+          }
+        }
+        return Reflect.apply(target, thisArg, args);
+      },
+      construct(target, args) {
+        if (args.length > 0 && typeof args[args.length - 1] === 'string') {
+          const body = args[args.length - 1];
+          if (body.includes('debugger')) {
+            args[args.length - 1] = body.replace(/\\bdebugger\\b/g, '/* noop */');
+          }
+        }
+        return Reflect.construct(target, args);
+      }
+    };
+    const functionProxy = new Proxy(_origFunction, functionHandler);
+    makeNative(functionProxy, 'Function');
+    try {
+      Object.defineProperty(Function.prototype, 'constructor', {
+        value: functionProxy,
+        writable: true,
+        configurable: true
+      });
+      window.Function = functionProxy;
+    } catch(e){}
+
+    const _origEval = window.eval;
+    window.eval = makeNative(function eval(code) {
+      if (typeof code === 'string' && code.includes('debugger')) {
+        code = code.replace(/\\bdebugger\\b/g, '/* noop */');
+      }
+      return _origEval.call(this, code);
+    }, 'eval');
+
+    // Chống website chặn phím F12 và phím tắt DevTools (Ctrl+Shift+I / J / C)
+    if (typeof EventTarget !== 'undefined' && EventTarget.prototype.addEventListener) {
+      const _origAddEventListener = EventTarget.prototype.addEventListener;
+      EventTarget.prototype.addEventListener = makeNative(function addEventListener(type, listener, options) {
+        if (type === 'keydown' || type === 'keyup' || type === 'keypress') {
+          const wrapped = function(event) {
+            if (event && (
+              event.key === 'F12' || event.keyCode === 123 ||
+              (event.ctrlKey && event.shiftKey && (event.key === 'I' || event.key === 'i' || event.key === 'J' || event.key === 'j' || event.key === 'C' || event.key === 'c' || event.keyCode === 73 || event.keyCode === 74 || event.keyCode === 67))
+            )) {
+              // Cho phép phím F12/DevTools đi qua bình thường
+              return;
+            }
+            if (typeof listener === 'function') {
+              return listener.apply(this, arguments);
+            } else if (listener && typeof listener.handleEvent === 'function') {
+              return listener.handleEvent.apply(listener, arguments);
+            }
+          };
+          return _origAddEventListener.call(this, type, wrapped, options);
+        }
+        return _origAddEventListener.call(this, type, listener, options);
+      }, 'addEventListener');
+    }
+  } catch(e){}
 
   // 1. HIDDEN WEBDRIVER ➔ Xóa sạch cờ navigator.webdriver (Native Getter)
   try {
-    delete navProto.webdriver;
-    delete navigator.webdriver;
-    const getWebdriver = makeNative(function webdriver() { return false; }, 'get webdriver');
-    Object.defineProperty(navProto, 'webdriver', {
-      get: getWebdriver,
-      configurable: true,
-      enumerable: true
-    });
+    if (typeof navigator !== 'undefined') {
+      delete navProto.webdriver;
+      delete navigator.webdriver;
+      const getWebdriver = makeNative(function webdriver() { return false; }, 'get webdriver');
+      Object.defineProperty(navProto, 'webdriver', {
+        get: getWebdriver,
+        configurable: true,
+        enumerable: true
+      });
+      Object.defineProperty(navigator, 'webdriver', {
+        get: getWebdriver,
+        configurable: true,
+        enumerable: true
+      });
+    }
   } catch(e){}
 
-  // 2. NAVIGATOR PLATFORM ➔ Linux armv8l (Native Getter)
+  // 2. NAVIGATOR PLATFORM ➔ Linux armv8l / iPhone / iPad / Win32 (Native Getter)
   try {
-    delete navProto.platform;
-    delete navigator.platform;
-    const getPlatform = makeNative(function platform() { return 'Linux armv8l'; }, 'get platform');
-    Object.defineProperty(navProto, 'platform', { get: getPlatform, configurable: true, enumerable: true });
-    Object.defineProperty(navigator, 'platform', { get: getPlatform, configurable: true, enumerable: true });
+    if (typeof navigator !== 'undefined') {
+      delete navProto.platform;
+      delete navigator.platform;
+      const getPlatform = makeNative(function platform() { return '${targetPlatform}'; }, 'get platform');
+      Object.defineProperty(navProto, 'platform', { get: getPlatform, configurable: true, enumerable: true });
+      Object.defineProperty(navigator, 'platform', { get: getPlatform, configurable: true, enumerable: true });
+    }
   } catch(e){}
 
   // 3. MAX TOUCH POINTS ➔ 10 / 5 (Native Getter)
   try {
-    delete navProto.maxTouchPoints;
-    delete navigator.maxTouchPoints;
-    const getTouch = makeNative(function maxTouchPoints() { return ${touchPoints}; }, 'get maxTouchPoints');
-    Object.defineProperty(navProto, 'maxTouchPoints', { get: getTouch, configurable: true, enumerable: true });
-    Object.defineProperty(navigator, 'maxTouchPoints', { get: getTouch, configurable: true, enumerable: true });
+    if (typeof navigator !== 'undefined') {
+      delete navProto.maxTouchPoints;
+      delete navigator.maxTouchPoints;
+      const getTouch = makeNative(function maxTouchPoints() { return ${touchPoints}; }, 'get maxTouchPoints');
+      Object.defineProperty(navProto, 'maxTouchPoints', { get: getTouch, configurable: true, enumerable: true });
+      Object.defineProperty(navigator, 'maxTouchPoints', { get: getTouch, configurable: true, enumerable: true });
+    }
   } catch(e){}
 
   // 4. WEBGL VENDOR & RENDERER (Patch cả getParameter lẫn getExtension WEBGL_debug_renderer_info)
@@ -2446,8 +2878,8 @@ function generateFingerprintScript(device) {
       const _origGetExt = glProto.prototype.getExtension;
 
       const patchedGetParam = makeNative(function getParameter(param) {
-        if (param === 37445 || param === 0x9245) return '${renderer}'; // UNMASKED_RENDERER_WEBGL
-        if (param === 37444 || param === 0x9244) return '${vendor}';   // UNMASKED_VENDOR_WEBGL
+        if (param === 37445 || param === 0x9245) return ${JSON.stringify(renderer)}; // UNMASKED_RENDERER_WEBGL
+        if (param === 37444 || param === 0x9244) return ${JSON.stringify(vendor)};   // UNMASKED_VENDOR_WEBGL
         if (param === 7936  || param === 0x1F00) return 'WebKit';
         if (param === 7937  || param === 0x1F01) return 'WebKit WebGL';
         return _origGetParam.call(this, param);
@@ -2472,31 +2904,35 @@ function generateFingerprintScript(device) {
       glProto.prototype.getExtension = patchedGetExt;
     };
 
-    if (window.WebGLRenderingContext) patchGL(WebGLRenderingContext);
-    if (window.WebGL2RenderingContext) patchGL(WebGL2RenderingContext);
+    if (typeof WebGLRenderingContext !== 'undefined') patchGL(WebGLRenderingContext);
+    if (typeof WebGL2RenderingContext !== 'undefined') patchGL(WebGL2RenderingContext);
   } catch(e){}
 
   // 5. PLUGINS & MIMETYPES ➔ Length = 0 (Native Getter)
   try {
-    const emptyPlugins = Object.create(PluginArray.prototype);
-    Object.defineProperty(emptyPlugins, 'length', {
-      get: makeNative(function length() { return 0; }, 'get length'),
-      configurable: true, enumerable: true
-    });
+    if (typeof PluginArray !== 'undefined' && typeof navigator !== 'undefined') {
+      const emptyPlugins = Object.create(PluginArray.prototype);
+      Object.defineProperty(emptyPlugins, 'length', {
+        get: makeNative(function length() { return 0; }, 'get length'),
+        configurable: true, enumerable: true
+      });
 
-    const getPlugins = makeNative(function plugins() { return emptyPlugins; }, 'get plugins');
-    Object.defineProperty(navProto, 'plugins', { get: getPlugins, configurable: true, enumerable: true });
-    Object.defineProperty(navigator, 'plugins', { get: getPlugins, configurable: true, enumerable: true });
+      const getPlugins = makeNative(function plugins() { return emptyPlugins; }, 'get plugins');
+      Object.defineProperty(navProto, 'plugins', { get: getPlugins, configurable: true, enumerable: true });
+      Object.defineProperty(navigator, 'plugins', { get: getPlugins, configurable: true, enumerable: true });
+    }
 
-    const emptyMimeTypes = Object.create(MimeTypeArray.prototype);
-    Object.defineProperty(emptyMimeTypes, 'length', {
-      get: makeNative(function length() { return 0; }, 'get length'),
-      configurable: true, enumerable: true
-    });
+    if (typeof MimeTypeArray !== 'undefined' && typeof navigator !== 'undefined') {
+      const emptyMimeTypes = Object.create(MimeTypeArray.prototype);
+      Object.defineProperty(emptyMimeTypes, 'length', {
+        get: makeNative(function length() { return 0; }, 'get length'),
+        configurable: true, enumerable: true
+      });
 
-    const getMimeTypes = makeNative(function mimeTypes() { return emptyMimeTypes; }, 'get mimeTypes');
-    Object.defineProperty(navProto, 'mimeTypes', { get: getMimeTypes, configurable: true, enumerable: true });
-    Object.defineProperty(navigator, 'mimeTypes', { get: getMimeTypes, configurable: true, enumerable: true });
+      const getMimeTypes = makeNative(function mimeTypes() { return emptyMimeTypes; }, 'get mimeTypes');
+      Object.defineProperty(navProto, 'mimeTypes', { get: getMimeTypes, configurable: true, enumerable: true });
+      Object.defineProperty(navigator, 'mimeTypes', { get: getMimeTypes, configurable: true, enumerable: true });
+    }
   } catch(e){}
 
   // 6. SCREEN & WINDOW METRICS (Native Getter Override)
@@ -2504,48 +2940,56 @@ function generateFingerprintScript(device) {
   // đã báo giá trị đúng bằng vùng hiển thị thật của cửa sổ rồi (responsive).
   // Override cứng ở đây sẽ phá vỡ layout khi người dùng resize cửa sổ.
   try {
-    const patchMetric = (target, prop, val, name) => {
-      try {
-        delete target[prop];
-        const getter = makeNative(function() { return val; }, name || ('get ' + prop));
-        Object.defineProperty(target, prop, { get: getter, configurable: true, enumerable: true });
-      } catch(err){}
-    };
-
-    patchMetric(window, 'devicePixelRatio', ${device.device_scale_factor || 3.0}, 'get devicePixelRatio');
+    if (typeof window !== 'undefined') {
+      delete window.devicePixelRatio;
+      const getDPR = makeNative(function devicePixelRatio() { return ${dsf}; }, 'get devicePixelRatio');
+      Object.defineProperty(window, 'devicePixelRatio', { get: getDPR, configurable: true, enumerable: true });
+    }
   } catch(e){}
 
   // 7. BATTERY & HARDWARE METRICS
   try {
-    patchMetric(navProto, 'deviceMemory', 8, 'get deviceMemory');
-    patchMetric(navigator, 'deviceMemory', 8, 'get deviceMemory');
-    patchMetric(navProto, 'hardwareConcurrency', 8, 'get hardwareConcurrency');
-    patchMetric(navigator, 'hardwareConcurrency', 8, 'get hardwareConcurrency');
+    if (typeof navigator !== 'undefined') {
+      const patchMetric = (target, prop, val, name) => {
+        try {
+          delete target[prop];
+          const getter = makeNative(function() { return val; }, name || ('get ' + prop));
+          Object.defineProperty(target, prop, { get: getter, configurable: true, enumerable: true });
+        } catch(err){}
+      };
 
-    if (navigator.getBattery) {
-      navigator.getBattery = makeNative(function getBattery() {
-        return Promise.resolve({
-          charging: false, chargingTime: Infinity, dischargingTime: 14400, level: 0.75,
-          addEventListener: () => {}, removeEventListener: () => {}
-        });
-      }, 'getBattery');
+      patchMetric(navProto, 'deviceMemory', 8, 'get deviceMemory');
+      patchMetric(navigator, 'deviceMemory', 8, 'get deviceMemory');
+      patchMetric(navProto, 'hardwareConcurrency', 8, 'get hardwareConcurrency');
+      patchMetric(navigator, 'hardwareConcurrency', 8, 'get hardwareConcurrency');
+
+      if (navigator.getBattery) {
+        navigator.getBattery = makeNative(function getBattery() {
+          return Promise.resolve({
+            charging: false, chargingTime: Infinity, dischargingTime: 14400, level: 0.75,
+            addEventListener: () => {}, removeEventListener: () => {}
+          });
+        }, 'getBattery');
+      }
     }
   } catch(e){}
 
   // 8. TIMEZONE OVERRIDE
   try {
-    const _resOpt = Intl.DateTimeFormat.prototype.resolvedOptions;
-    Intl.DateTimeFormat.prototype.resolvedOptions = makeNative(function resolvedOptions() {
-      const o = _resOpt.call(this);
-      o.timeZone = '${tz}';
-      return o;
-    }, 'resolvedOptions');
+    if (typeof Intl !== 'undefined' && Intl.DateTimeFormat) {
+      const _resOpt = Intl.DateTimeFormat.prototype.resolvedOptions;
+      Intl.DateTimeFormat.prototype.resolvedOptions = makeNative(function resolvedOptions() {
+        const o = _resOpt.call(this);
+        o.timeZone = ${JSON.stringify(tz)};
+        return o;
+      }, 'resolvedOptions');
+    }
   } catch(e){}
 
   // 9. GEOLOCATION OVERRIDE
   ${device.geo ? `
   try {
-    if (navigator.geolocation) {
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition = makeNative(function getCurrentPosition(cb) {
         if (typeof cb === 'function') {
           cb({
@@ -2563,7 +3007,455 @@ function generateFingerprintScript(device) {
   } catch(e){}
   ` : ''}
 
-  console.log('[N/A Browser] 🥷 Stealth Native-Masked Mobile Fingerprint Applied: ${device.name}');
+  // 10. CANVAS FINGERPRINT NOISE (Vi nhiễu ngẫu nhiên nhưng nhất quán theo device/profile)
+  try {
+    if (typeof HTMLCanvasElement !== 'undefined' && typeof CanvasRenderingContext2D !== 'undefined') {
+      const _origGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+      const _origToDataURL = HTMLCanvasElement.prototype.toDataURL;
+      const _origToBlob = HTMLCanvasElement.prototype.toBlob;
+
+      function applyCanvasNoise(imgData, offX, offY) {
+        if (!imgData || !imgData.data) return;
+        const data = imgData.data;
+        const w = imgData.width;
+        const h = imgData.height;
+        const ox = offX || 0;
+        const oy = offY || 0;
+
+        for (let y = 0; y < h; y++) {
+          const absY = y + oy;
+          for (let x = 0; x < w; x++) {
+            const absX = x + ox;
+            const idx = (y * w + x) * 4;
+            // Không can thiệp pixel trong suốt (tránh làm bẩn canvas trắng hoặc rỗng)
+            if (data[idx + 3] === 0) continue;
+
+            // Tạo vi nhiễu xác định theo tọa độ và deviceSeed (~6.25% pixel bị lệch nhẹ 1 đơn vị)
+            if (((absX * 31 + absY * 17 + deviceSeed) & 0x0F) === 7) {
+              const delta = ((absX + absY + deviceSeed) & 1) === 0 ? 1 : -1;
+              const c = idx + ((absX ^ absY) & 1 ? 0 : 2); // Luân phiên kênh Red (0) và Blue (2)
+              const val = data[c] + delta;
+              data[c] = val < 0 ? 0 : (val > 255 ? 255 : val);
+            }
+          }
+        }
+      }
+
+      function createNoisyCanvasClone(canvas) {
+        const w = canvas.width;
+        const h = canvas.height;
+        if (!w || !h || w <= 0 || h <= 0) return canvas;
+        try {
+          const clone = document.createElement('canvas');
+          clone.width = w;
+          clone.height = h;
+          const ctx = clone.getContext('2d');
+          if (!ctx) return canvas;
+          ctx.drawImage(canvas, 0, 0);
+          const imgData = _origGetImageData.call(ctx, 0, 0, w, h);
+          applyCanvasNoise(imgData, 0, 0);
+          ctx.putImageData(imgData, 0, 0);
+          return clone;
+        } catch(e) {
+          return canvas;
+        }
+      }
+
+      CanvasRenderingContext2D.prototype.getImageData = makeNative(function getImageData(sx, sy, sw, sh, settings) {
+        const imgData = _origGetImageData.apply(this, arguments);
+        try {
+          applyCanvasNoise(imgData, sx, sy);
+        } catch(e) {}
+        return imgData;
+      }, 'getImageData');
+
+      HTMLCanvasElement.prototype.toDataURL = makeNative(function toDataURL(type, quality) {
+        try {
+          const noisy = createNoisyCanvasClone(this);
+          return _origToDataURL.call(noisy, type, quality);
+        } catch(e) {
+          return _origToDataURL.apply(this, arguments);
+        }
+      }, 'toDataURL');
+
+      HTMLCanvasElement.prototype.toBlob = makeNative(function toBlob(callback, type, quality) {
+        try {
+          const noisy = createNoisyCanvasClone(this);
+          return _origToBlob.call(noisy, callback, type, quality);
+        } catch(e) {
+          return _origToBlob.apply(this, arguments);
+        }
+      }, 'toBlob');
+
+      if (typeof OffscreenCanvasRenderingContext2D !== 'undefined' && OffscreenCanvasRenderingContext2D.prototype) {
+        const _origOffscreenGetImageData = OffscreenCanvasRenderingContext2D.prototype.getImageData;
+        if (_origOffscreenGetImageData) {
+          OffscreenCanvasRenderingContext2D.prototype.getImageData = makeNative(function getImageData(sx, sy, sw, sh, settings) {
+            const imgData = _origOffscreenGetImageData.apply(this, arguments);
+            try { applyCanvasNoise(imgData, sx, sy); } catch(e) {}
+            return imgData;
+          }, 'getImageData');
+        }
+      }
+    }
+  } catch(e){}
+
+  // 11. AUDIOCONTEXT FINGERPRINT NOISE (Micro-noise toán học ngăn chặn audio hash Windows)
+  try {
+    if (typeof AudioBuffer !== 'undefined' && AudioBuffer.prototype.getChannelData) {
+      const _origGetChannelData = AudioBuffer.prototype.getChannelData;
+      const noisedAudioBuffers = new WeakMap();
+
+      AudioBuffer.prototype.getChannelData = makeNative(function getChannelData(channel) {
+        const data = _origGetChannelData.apply(this, arguments);
+        try {
+          let chSet = noisedAudioBuffers.get(this);
+          if (!chSet) {
+            chSet = new Set();
+            noisedAudioBuffers.set(this, chSet);
+          }
+          const chIdx = channel || 0;
+          if (!chSet.has(chIdx) && data && data.length) {
+            chSet.add(chIdx);
+            for (let i = 0; i < data.length; i += 4) {
+              const noise = (((i * 31 + deviceSeed) % 7) - 3) * 1e-7;
+              data[i] += noise;
+            }
+          }
+        } catch(e) {}
+        return data;
+      }, 'getChannelData');
+
+      if (AudioBuffer.prototype.copyFromChannel) {
+        const _origCopyFromChannel = AudioBuffer.prototype.copyFromChannel;
+        AudioBuffer.prototype.copyFromChannel = makeNative(function copyFromChannel(destination, channelNumber, bufferOffset) {
+          try {
+            const chData = this.getChannelData(channelNumber || 0);
+            const offset = bufferOffset || 0;
+            if (destination && chData) {
+              destination.set(chData.subarray(offset, offset + destination.length));
+              return;
+            }
+          } catch(err) {}
+          return _origCopyFromChannel.apply(this, arguments);
+        }, 'copyFromChannel');
+      }
+    }
+
+    if (typeof AnalyserNode !== 'undefined' && AnalyserNode.prototype.getFloatFrequencyData) {
+      const _origGetFloatFreq = AnalyserNode.prototype.getFloatFrequencyData;
+
+      AnalyserNode.prototype.getFloatFrequencyData = makeNative(function getFloatFrequencyData(array) {
+        _origGetFloatFreq.apply(this, arguments);
+        try {
+          if (array && array.length) {
+            for (let i = 0; i < array.length; i += 4) {
+              if (array[i] !== -Infinity && !isNaN(array[i])) {
+                const noise = (((i * 23 + deviceSeed) % 7) - 3) * 0.01;
+                array[i] += noise;
+              }
+            }
+          }
+        } catch(e) {}
+      }, 'getFloatFrequencyData');
+    }
+  } catch(e){}
+
+  // 12. MEDIA DEVICES SPOOFING (navigator.mediaDevices.enumerateDevices)
+  try {
+    function makeDeviceId(prefix) {
+      let h1 = 0xdeadbeef ^ deviceSeed;
+      let h2 = 0x41c64e6d ^ deviceSeed;
+      const str = prefix + '_' + deviceSeed;
+      for (let i = 0; i < str.length; i++) {
+        const ch = str.charCodeAt(i);
+        h1 = Math.imul(h1 ^ ch, 2654435761);
+        h2 = Math.imul(h2 ^ ch, 1597334677);
+      }
+      const p1 = (h1 >>> 0).toString(16).padStart(8, '0');
+      const p2 = (h2 >>> 0).toString(16).padStart(8, '0');
+      return (p1 + p2 + p2 + p1 + p1 + p2 + p1 + p2).slice(0, 64);
+    }
+
+    function createMediaDevice(id, kind, label, grpId) {
+      const proto = typeof MediaDeviceInfo !== 'undefined' ? MediaDeviceInfo.prototype : Object.prototype;
+      const dev = Object.create(proto);
+      Object.defineProperties(dev, {
+        deviceId: { value: id, enumerable: true },
+        kind: { value: kind, enumerable: true },
+        label: { value: label, enumerable: true },
+        groupId: { value: grpId, enumerable: true },
+        toJSON: {
+          value: makeNative(function toJSON() {
+            return { deviceId: id, kind: kind, label: label, groupId: grpId };
+          }, 'toJSON'),
+          enumerable: true,
+          configurable: true
+        }
+      });
+      return dev;
+    }
+
+    if (typeof navigator !== 'undefined') {
+      if (!navigator.mediaDevices) {
+        const md = Object.create(typeof MediaDevices !== 'undefined' ? MediaDevices.prototype : (typeof EventTarget !== 'undefined' ? EventTarget.prototype : Object.prototype));
+        Object.defineProperty(navProto, 'mediaDevices', {
+          get: makeNative(function mediaDevices() { return md; }, 'get mediaDevices'),
+          configurable: true,
+          enumerable: true
+        });
+        Object.defineProperty(navigator, 'mediaDevices', {
+          get: makeNative(function mediaDevices() { return md; }, 'get mediaDevices'),
+          configurable: true,
+          enumerable: true
+        });
+      }
+
+      const fakeDevices = [
+        createMediaDevice(makeDeviceId('mic'), 'audioinput', 'Microphone tích hợp Android', makeDeviceId('grp_audio')),
+        createMediaDevice(makeDeviceId('cam_front'), 'videoinput', 'Camera trước (Front Camera)', makeDeviceId('grp_video_front')),
+        createMediaDevice(makeDeviceId('cam_back'), 'videoinput', 'Camera sau (Back Camera)', makeDeviceId('grp_video_back'))
+      ];
+
+      const enumDevFn = makeNative(function enumerateDevices() {
+        return Promise.resolve(fakeDevices);
+      }, 'enumerateDevices');
+
+      if (navigator.mediaDevices) {
+        navigator.mediaDevices.enumerateDevices = enumDevFn;
+      }
+      if (typeof MediaDevices !== 'undefined' && MediaDevices.prototype) {
+        MediaDevices.prototype.enumerateDevices = enumDevFn;
+      }
+    }
+  } catch(e){}
+
+  // 13. TOUCH & POINTER MEDIA QUERIES (window.matchMedia)
+  try {
+    if (typeof window !== 'undefined' && window.matchMedia) {
+      const _origMatchMedia = window.matchMedia;
+
+      function evalTouchMedia(query) {
+        if (!query || typeof query !== 'string') return null;
+        const norm = query.toLowerCase().replace(/\\s+/g, '');
+        if (norm.includes('pointer:coarse') || norm.includes('any-pointer:coarse')) return true;
+        if (norm.includes('pointer:fine') || norm.includes('any-pointer:fine')) return false;
+        if (norm.includes('hover:none') || norm.includes('any-hover:none')) return true;
+        if (norm.includes('hover:hover') || norm.includes('any-hover:hover')) return false;
+        return null;
+      }
+
+      const patchedMatchMedia = makeNative(function matchMedia(query) {
+        const mql = _origMatchMedia.apply(this, arguments);
+        const forced = evalTouchMedia(query);
+        if (forced !== null && mql) {
+          try {
+            Object.defineProperty(mql, 'matches', {
+              get: makeNative(function matches() { return forced; }, 'get matches'),
+              configurable: true,
+              enumerable: true
+            });
+          } catch(e) {}
+        }
+        return mql;
+      }, 'matchMedia');
+
+      window.matchMedia = patchedMatchMedia;
+      if (typeof Window !== 'undefined' && Window.prototype && Window.prototype.matchMedia) {
+        Window.prototype.matchMedia = patchedMatchMedia;
+      }
+    }
+  } catch(e){}
+
+  // 14. SCREEN ORIENTATION & METRICS
+  try {
+    if (typeof screen !== 'undefined') {
+      if (typeof ScreenOrientation !== 'undefined' && ScreenOrientation.prototype) {
+        try {
+          Object.defineProperty(ScreenOrientation.prototype, 'type', {
+            get: makeNative(function type() { return 'portrait-primary'; }, 'get type'),
+            configurable: true,
+            enumerable: true
+          });
+          Object.defineProperty(ScreenOrientation.prototype, 'angle', {
+            get: makeNative(function angle() { return 0; }, 'get angle'),
+            configurable: true,
+            enumerable: true
+          });
+          ScreenOrientation.prototype.lock = makeNative(function lock() { return Promise.resolve(); }, 'lock');
+          ScreenOrientation.prototype.unlock = makeNative(function unlock() {}, 'unlock');
+        } catch(e) {}
+      }
+
+      if (screen.orientation) {
+        try {
+          Object.defineProperty(screen.orientation, 'type', {
+            get: makeNative(function type() { return 'portrait-primary'; }, 'get type'),
+            configurable: true,
+            enumerable: true
+          });
+          Object.defineProperty(screen.orientation, 'angle', {
+            get: makeNative(function angle() { return 0; }, 'get angle'),
+            configurable: true,
+            enumerable: true
+          });
+          if (!screen.orientation.lock) {
+            screen.orientation.lock = makeNative(function lock() { return Promise.resolve(); }, 'lock');
+          }
+          if (!screen.orientation.unlock) {
+            screen.orientation.unlock = makeNative(function unlock() {}, 'unlock');
+          }
+        } catch(e) {}
+      }
+
+      try {
+        if (typeof window !== 'undefined') {
+          Object.defineProperty(window, 'orientation', {
+            get: makeNative(function orientation() { return 0; }, 'get orientation'),
+            configurable: true,
+            enumerable: true
+          });
+        }
+      } catch(e){}
+
+      const patchScreen = (prop, getterFn, name) => {
+        try {
+          delete screen[prop];
+          delete screenProto[prop];
+          const g = makeNative(getterFn, name || ('get ' + prop));
+          Object.defineProperty(screen, prop, { get: g, configurable: true, enumerable: true });
+          Object.defineProperty(screenProto, prop, { get: g, configurable: true, enumerable: true });
+        } catch(err) {}
+      };
+
+      patchScreen('colorDepth', function colorDepth() { return 24; }, 'get colorDepth');
+      patchScreen('pixelDepth', function pixelDepth() { return 24; }, 'get pixelDepth');
+      patchScreen('availHeight', function availHeight() { return Math.max(0, (screen.height || 800) - 36); }, 'get availHeight');
+      patchScreen('availWidth', function availWidth() { return screen.width || 360; }, 'get availWidth');
+      patchScreen('availTop', function availTop() { return 0; }, 'get availTop');
+      patchScreen('availLeft', function availLeft() { return 0; }, 'get availLeft');
+    }
+  } catch(e){}
+
+  // 15. NETWORK INFORMATION (navigator.connection)
+  try {
+    if (typeof navigator !== 'undefined') {
+      let conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+      if (!conn) {
+        conn = Object.create(typeof NetworkInformation !== 'undefined' ? NetworkInformation.prototype : (typeof EventTarget !== 'undefined' ? EventTarget.prototype : Object.prototype));
+        const getConn = makeNative(function connection() { return conn; }, 'get connection');
+        Object.defineProperty(navProto, 'connection', { get: getConn, configurable: true, enumerable: true });
+        Object.defineProperty(navigator, 'connection', { get: getConn, configurable: true, enumerable: true });
+      }
+
+      const patchConnProp = (target, prop, val, name) => {
+        try {
+          delete target[prop];
+          const getter = makeNative(function() { return val; }, name || ('get ' + prop));
+          Object.defineProperty(target, prop, { get: getter, configurable: true, enumerable: true });
+        } catch(err){}
+      };
+
+      const netProto = typeof NetworkInformation !== 'undefined' ? NetworkInformation.prototype : Object.getPrototypeOf(conn);
+
+      patchConnProp(conn, 'effectiveType', '4g', 'get effectiveType');
+      patchConnProp(conn, 'rtt', 50, 'get rtt');
+      patchConnProp(conn, 'downlink', 10, 'get downlink');
+      patchConnProp(conn, 'saveData', false, 'get saveData');
+      patchConnProp(conn, 'type', 'cellular', 'get type');
+
+      if (netProto) {
+        patchConnProp(netProto, 'effectiveType', '4g', 'get effectiveType');
+        patchConnProp(netProto, 'rtt', 50, 'get rtt');
+        patchConnProp(netProto, 'downlink', 10, 'get downlink');
+        patchConnProp(netProto, 'saveData', false, 'get saveData');
+        patchConnProp(netProto, 'type', 'cellular', 'get type');
+      }
+    }
+  } catch(e){}
+
+  // 16. SPEECHSYNTHESIS VOICES (Google Android voices thay vì Microsoft Windows Desktop)
+  try {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      function createVoice(name, vLang, isDefault) {
+        const proto = typeof SpeechSynthesisVoice !== 'undefined' ? SpeechSynthesisVoice.prototype : Object.prototype;
+        const v = Object.create(proto);
+        Object.defineProperties(v, {
+          name: { value: name, enumerable: true },
+          lang: { value: vLang, enumerable: true },
+          localService: { value: false, enumerable: true },
+          voiceURI: { value: name, enumerable: true },
+          default: { value: !!isDefault, enumerable: true }
+        });
+        return v;
+      }
+
+      const isVi = ${JSON.stringify(lang)}.toLowerCase().startsWith('vi');
+      const androidVoices = [
+        createVoice('Google Tiếng Việt', 'vi-VN', isVi),
+        createVoice('Google US English', 'en-US', !isVi),
+        createVoice('Google UK English Female', 'en-GB', false),
+        createVoice('Google UK English Male', 'en-GB', false),
+        createVoice('Google français', 'fr-FR', false),
+        createVoice('Google Deutsch', 'de-DE', false),
+        createVoice('Google español', 'es-ES', false),
+        createVoice('Google 日本語', 'ja-JP', false),
+        createVoice('Google 한국 của', 'ko-KR', false),
+        createVoice('Google 普通话 (中国)', 'zh-CN', false)
+      ];
+
+      const getVoices = makeNative(function getVoices() {
+        return androidVoices;
+      }, 'getVoices');
+
+      window.speechSynthesis.getVoices = getVoices;
+      if (typeof SpeechSynthesis !== 'undefined' && SpeechSynthesis.prototype) {
+        SpeechSynthesis.prototype.getVoices = getVoices;
+      }
+
+      if (window.speechSynthesis.onvoiceschanged !== undefined) {
+        setTimeout(() => {
+          try {
+            if (typeof window.speechSynthesis.onvoiceschanged === 'function') {
+              window.speechSynthesis.onvoiceschanged();
+            }
+            window.speechSynthesis.dispatchEvent(new Event('voiceschanged'));
+          } catch(e) {}
+        }, 50);
+      }
+    }
+  } catch(e){}
+
+  // ── TOUCH CON TRỎ CHUỘT HÌNH TRÒN (MÔ PHỎNG ĐẦU NGÓN TAY CẢM ỨNG DEVTOOLS) ──
+  ${isMobile ? `
+  try {
+    if (typeof document !== 'undefined') {
+      const injectTouchCursor = () => {
+        if (document.getElementById('na-touch-cursor-style')) return;
+        const style = document.createElement('style');
+        style.id = 'na-touch-cursor-style';
+        style.textContent = \`
+          /* Con trỏ chuột hình tròn mờ mô phỏng ngón tay chạm cảm ứng như Chrome DevTools */
+          html, body, *:not(input):not(textarea):not([contenteditable="true"]) {
+            cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><circle cx='16' cy='16' r='10' fill='rgba(100,116,139,0.38)' stroke='rgba(255,255,255,0.85)' stroke-width='1.5'/><circle cx='16' cy='16' r='3' fill='rgba(255,255,255,0.7)'/></svg>") 16 16, auto !important;
+          }
+          /* Khi nhấn chuột xuống (chạm ngón tay) con trỏ thu nhỏ và sáng màu xanh */
+          html:active, body:active, *:active:not(input):not(textarea) {
+            cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><circle cx='16' cy='16' r='8' fill='rgba(99,102,241,0.65)' stroke='rgba(255,255,255,0.95)' stroke-width='1.8'/><circle cx='16' cy='16' r='2.5' fill='rgba(255,255,255,0.9)'/></svg>") 16 16, auto !important;
+          }
+        \`;
+        (document.head || document.documentElement).appendChild(style);
+      };
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', injectTouchCursor);
+      } else {
+        injectTouchCursor();
+      }
+    }
+  } catch(e){}
+  ` : ''}
+
+  console.log('[N/A Browser] 🥷 Stealth Native-Masked Mobile Fingerprint Applied: ' + ${JSON.stringify(device.name || "Mobile Device")});
 })();`;
 }
 
@@ -2828,38 +3720,35 @@ async function handleApiRequest(req, res) {
       fs.mkdirSync(extDir, { recursive: true });
 
       const manifestJson = {
-        manifest_version: 2,
+        manifest_version: 3,
         name: `NA Stealth ${id}`,
         version: '1.0.0',
-        permissions: ['<all_urls>'],
         content_scripts: [{ matches: ['<all_urls>'], js: ['inject.js'], run_at: 'document_start', all_frames: true }]
       };
-
-      // ── Proxy Auth Extension (webRequest MV2 blocking) ──
-      if (profile.proxy && profile.proxy.user && profile.proxy.pass) {
-        manifestJson.permissions = ['webRequest', 'webRequestBlocking', '<all_urls>'];
-        manifestJson.background = { scripts: ['background.js'] };
-        const bgJs = `
-chrome.webRequest.onAuthRequired.addListener(
-  function(details) {
-    return {
-      authCredentials: {
-        username: ${JSON.stringify(profile.proxy.user)},
-        password: ${JSON.stringify(profile.proxy.pass)}
-      }
-    };
-  },
-  { urls: ["<all_urls>"] },
-  ["blocking"]
-);
-`;
-        fs.writeFileSync(path.join(extDir, 'background.js'), bgJs);
-      }
 
       fs.writeFileSync(path.join(extDir, 'manifest.json'), JSON.stringify(manifestJson, null, 2));
       fs.writeFileSync(path.join(extDir, 'inject.js'), injectScript);
 
       const extPaths = [extDir];
+      const allExtsFile = path.join(APP_DATA_DIR, 'extensions.json');
+      if (fs.existsSync(allExtsFile)) {
+        try {
+          const allExts = JSON.parse(fs.readFileSync(allExtsFile, 'utf-8'));
+          if (profile.selectedExtensions && Array.isArray(profile.selectedExtensions) && profile.selectedExtensions.length > 0) {
+            profile.selectedExtensions.forEach(extId => {
+              const item = allExts.find(e => e.id === extId);
+              const resolved = resolveExtensionPath(item || { id: extId });
+              if (resolved) extPaths.push(resolved);
+            });
+          } else {
+            // Tự động nạp TẤT CẢ Extension có trong thư viện
+            allExts.forEach(item => {
+              const resolved = resolveExtensionPath(item);
+              if (resolved) extPaths.push(resolved);
+            });
+          }
+        } catch(e){}
+      }
 
       // Tính vị trí cửa sổ
       const runningCount = launchedBrowsers.size;
@@ -2899,20 +3788,34 @@ chrome.webRequest.onAuthRequired.addListener(
 
       const args = [
         `--user-data-dir=${profileDir}`,
+        '--profile-directory=Default',
         `--user-agent=${device.user_agent || ''}`,
         `--lang=${device.language || 'vi-VN'}`,
         `--window-position=${gridPos.posX},${gridPos.posY}`,
         `--window-size=${gridPos.winW},${gridPos.winH}`,
         `--load-extension=${extPaths.join(',')}`,
-        '--no-first-run', '--no-default-browser-check',
-        '--touch-events=enabled', '--enable-touch-drag-drop',
+        `--disable-extensions-except=${extPaths.join(',')}`,
+        '--no-first-run',
+        '--no-default-browser-check',
+        '--touch-events=enabled',
+        '--enable-touch-drag-drop',
         '--disable-blink-features=AutomationControlled',
-        '--disable-infobars', '--test-type',
+        '--disable-pdf-extension',
+        '--disable-plugins-discovery',
+        '--disable-infobars',
+        '--test-type',
+        // ── WebRTC IP Leak Prevention (Chống rò rỉ IP qua STUN/ICE) ──
+        '--force-webrtc-ip-handling-policy=default_public_interface_only',
+        '--enforce-webrtc-ip-permission-check',
+        '--disable-webrtc-multiple-routes',
         `--remote-debugging-port=${debugPort}`,
         '--remote-debugging-address=127.0.0.1',
         '--remote-allow-origins=*',
         'about:blank', // Luôn spawn với about:blank → CDP navigate đến URL thật sau khi proxy auth sẵn sàng
       ];
+      if (device && (device.timezone || profile.timezone)) {
+        args.push(`--timezone-for-testing=${device.timezone || profile.timezone}`);
+      }
       if (process.platform === 'linux') { args.push('--no-sandbox', '--disable-setuid-sandbox'); }
 
       // ── Proxy Server Arg ──
@@ -2957,7 +3860,7 @@ chrome.webRequest.onAuthRequired.addListener(
           proc.unref();
           launchedBrowsers.set(id, { pid: proc.pid, startTime: Date.now(), debugPort });
           // CDP: setup proxy auth → apply emulation → navigate URL thật
-          applyCDPDeviceEmulation(debugPort, device, profile.proxy, gridPos.winW, gridPos.winH, startUrl).catch(e => {});
+          applyCDPDeviceEmulation(debugPort, device, profile.proxy, gridPos.winW, gridPos.winH, startUrl, profile).catch(e => {});
           // Notify renderer UI
           if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
           console.log(`[API] 🚀 Launched profile "${profile.name}" PID=${proc.pid} debugPort=${debugPort}`);
