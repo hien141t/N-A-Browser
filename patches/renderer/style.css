@@ -873,6 +873,19 @@ html, body { height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; b
   50% { transform: scale(1.6); opacity: 0.4; }
 }
 
+.cdp-port-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.16);
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  color: #a5b4fc;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
 /* ── Launch Action Buttons ── */
 .btn-launch-state {
   display: inline-flex;

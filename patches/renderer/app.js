@@ -449,7 +449,8 @@ function renderProfiles() {
         <th>Tên Profile & Nhãn</th>
         <th style="width:130px;">Trạng Thái</th>
         <th style="width:170px;">Thiết Bị (OS)</th>
-        <th style="width:110px;">Trình Duyệt</th>
+        <th style="width:100px;">Trình Duyệt</th>
+        <th style="width:95px;text-align:center;">CDP Port</th>
         <th style="width:140px;">Proxy</th>
         <th style="width:160px;text-align:right;">Thao Tác</th>
       </tr>
@@ -524,8 +525,10 @@ function renderProfiles() {
           <div style="font-size:10px;color:var(--txt3);font-family:monospace;">${device?.os_version || 'Android'} · ${device?.platform || 'Linux'}</div>
         </td>
         <td>
-          <div style="font-size:11px;font-weight:600;color:#06d6a0;">Opera 139</div>
-          <div style="font-size:10px;color:var(--txt3);font-family:monospace;">CDP Port: ${st.debugPort || '—'}</div>
+          <div style="font-size:12px;font-weight:600;color:#06d6a0;">Opera 139</div>
+        </td>
+        <td style="text-align:center;">
+          ${st.debugPort ? `<span class="cdp-port-badge">${st.debugPort}</span>` : '<span style="color:var(--txt3);font-size:11px;">—</span>'}
         </td>
         <td>
           <div style="font-size:11px;">${proxyText}</div>
