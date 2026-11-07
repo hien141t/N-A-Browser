@@ -390,7 +390,7 @@ async function launchOperaProfile({
     });
 
     // 9. State: CONNECTING (CDP Connection with Retry & Timeout)
-    broadcastState(profileId, LAUNCH_STATES.CONNECTING, 'Đang kết nối giao thức CDP...');
+    broadcastState(profileId, LAUNCH_STATES.CONNECTING, 'Đang kết nối giao thức CDP...', { debugPort, pid: childProc.pid });
     let browser = null;
     const maxRetries = 60; // 60 * 300ms = 18.0 seconds max for cold starts under Windows load
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -419,7 +419,7 @@ async function launchOperaProfile({
     session.browser = browser;
 
     // 10. State: NAVIGATING (Apply Emulation & Navigate to Target URL)
-    broadcastState(profileId, LAUNCH_STATES.NAVIGATING, 'Đang thiết lập thông số giả lập...');
+    broadcastState(profileId, LAUNCH_STATES.NAVIGATING, 'Đang thiết lập thông số giả lập...', { debugPort, pid: session.pid });
 
     const pages = await browser.pages();
     const page = pages[0] || await browser.newPage();
@@ -476,7 +476,7 @@ async function launchOperaProfile({
       ? profile.startUrl.trim()
       : 'https://bot.sannysoft.com';
 
-    broadcastState(profileId, LAUNCH_STATES.NAVIGATING, `Đang mở ${targetUrl}...`);
+    broadcastState(profileId, LAUNCH_STATES.NAVIGATING, `Đang mở ${targetUrl}...`, { debugPort, pid: session.pid });
 
     try {
       await page.goto(targetUrl, {
@@ -508,7 +508,7 @@ async function launchOperaProfile({
     // 12. State: READY (Launch Successfully Verified)
     session.state = LAUNCH_STATES.READY;
     session.message = 'Sẵn sàng';
-    broadcastState(profileId, LAUNCH_STATES.READY, 'Sẵn sàng');
+    broadcastState(profileId, LAUNCH_STATES.READY, 'Sẵn sàng', { debugPort, pid: session.pid });
 
     return {
       ok: true,
@@ -534,7 +534,7 @@ async function launchOperaProfile({
 async function cancelLaunch(profileId) {
   const session = activeSessions.get(profileId);
   if (!session) {
-    return { ok: false, error: 'Không tìm thấy phiên khởi chạy để hủy.' };
+    return { ok: true, cancelled: true, alreadyStopped: true };
   }
 
   session.isCancelled = true;

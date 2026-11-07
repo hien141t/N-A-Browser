@@ -238,10 +238,13 @@ async function init() {
   await checkOperaStatus();
   if (typeof API.onLaunchStateChanged === 'function') {
     API.onLaunchStateChanged((data) => {
+      console.log('[onLaunchStateChanged]', data);
       if (!browserStatus[data.profileId]) browserStatus[data.profileId] = {};
       browserStatus[data.profileId].state = data.state;
       browserStatus[data.profileId].message = data.message;
       browserStatus[data.profileId].running = (data.state === 'READY');
+      if (data.debugPort) browserStatus[data.profileId].debugPort = data.debugPort;
+      if (data.pid) browserStatus[data.profileId].pid = data.pid;
       if (data.state === 'ERROR') browserStatus[data.profileId].error = data.message;
       updateStatusIndicators();
       renderProfiles();
@@ -482,19 +485,19 @@ function renderProfiles() {
       switch (state) {
         case 'STARTING':
           stateBadgeHtml = `<span class="launch-badge starting pulse">⏳ Starting</span>`;
-          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy (Cancel)</button>`;
           break;
         case 'CONNECTING':
           stateBadgeHtml = `<span class="launch-badge connecting pulse">🔗 Connecting</span>`;
-          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy (Cancel)</button>`;
           break;
         case 'NAVIGATING':
           stateBadgeHtml = `<span class="launch-badge navigating pulse">🌐 Navigating</span>`;
-          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy (Cancel)</button>`;
           break;
         case 'READY':
           stateBadgeHtml = `<span class="launch-badge ready">🟢 Ready</span>`;
-          actionBtnHtml = `<button class="btn-launch btn-launch-state stop" data-action="stop" data-id="${profile.id}">■ Stop</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state stop" data-action="stop" data-id="${profile.id}">■ Dừng (Stop)</button>`;
           break;
         case 'CANCELLING':
           stateBadgeHtml = `<span class="launch-badge cancelling pulse">⏳ Cancelling</span>`;
@@ -502,11 +505,11 @@ function renderProfiles() {
           break;
         case 'ERROR':
           stateBadgeHtml = `<span class="launch-badge error" title="${st.error || 'Lỗi khởi chạy'}">🔴 Error</span>`;
-          actionBtnHtml = `<button class="btn-launch btn-launch-state retry" data-action="launch" data-id="${profile.id}">🔄 Thử lại</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state retry" data-action="launch" data-id="${profile.id}">🔄 Thử lại (Retry)</button>`;
           break;
         default:
           stateBadgeHtml = `<span class="launch-badge stopped">Stopped</span>`;
-          actionBtnHtml = `<button class="btn-launch btn-launch-state launch" data-action="launch" data-id="${profile.id}">▶ Launch</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state launch" data-action="launch" data-id="${profile.id}">▶ Khởi chạy (Launch)</button>`;
           break;
       }
 
@@ -609,19 +612,19 @@ function renderProfiles() {
       switch (state) {
         case 'STARTING':
           stateBadgeHtml = `<span class="launch-badge starting pulse">⏳ Starting</span>`;
-          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" style="width:100%;padding:8px;" data-id="${profile.id}">⏹ Hủy khởi chạy</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" style="width:100%;padding:8px;" data-action="cancel" data-id="${profile.id}">⏹ Hủy (Cancel)</button>`;
           break;
         case 'CONNECTING':
           stateBadgeHtml = `<span class="launch-badge connecting pulse">🔗 Connecting</span>`;
-          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" style="width:100%;padding:8px;" data-id="${profile.id}">⏹ Hủy kết nối</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" style="width:100%;padding:8px;" data-action="cancel" data-id="${profile.id}">⏹ Hủy (Cancel)</button>`;
           break;
         case 'NAVIGATING':
           stateBadgeHtml = `<span class="launch-badge navigating pulse">🌐 Navigating</span>`;
-          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" style="width:100%;padding:8px;" data-id="${profile.id}">⏹ Hủy điều hướng</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" style="width:100%;padding:8px;" data-action="cancel" data-id="${profile.id}">⏹ Hủy (Cancel)</button>`;
           break;
         case 'READY':
           stateBadgeHtml = `<span class="launch-badge ready">🟢 Ready</span>`;
-          actionBtnHtml = `<button class="btn-launch btn-launch-state stop" style="width:100%;padding:8px;" data-id="${profile.id}">■ Dừng Browser</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state stop" style="width:100%;padding:8px;" data-action="stop" data-id="${profile.id}">■ Dừng (Stop)</button>`;
           break;
         case 'CANCELLING':
           stateBadgeHtml = `<span class="launch-badge cancelling pulse">⏳ Cancelling</span>`;
@@ -629,11 +632,11 @@ function renderProfiles() {
           break;
         case 'ERROR':
           stateBadgeHtml = `<span class="launch-badge error" title="${st.error || 'Lỗi'}">🔴 Error</span>`;
-          actionBtnHtml = `<button class="btn-launch btn-launch-state retry" style="width:100%;padding:8px;" data-id="${profile.id}">🔄 Thử lại</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state retry" style="width:100%;padding:8px;" data-action="launch" data-id="${profile.id}">🔄 Thử lại (Retry)</button>`;
           break;
         default:
           stateBadgeHtml = `<span class="launch-badge stopped">Stopped</span>`;
-          actionBtnHtml = `<button class="btn-launch btn-launch-state launch" style="width:100%;padding:8px;" data-id="${profile.id}">▶ Khởi chạy Opera</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state launch" style="width:100%;padding:8px;" data-action="launch" data-id="${profile.id}">▶ Khởi chạy (Launch)</button>`;
           break;
       }
 
@@ -684,8 +687,13 @@ function renderProfiles() {
 }
 // ── Toggle Browser: Lifecycle Orchestration (Launch / Cancel / Stop / Retry) ──
 async function toggleBrowser(profileId) {
-  const profile = profiles.find(p => p.id === profileId);
-  if (!profile) return;
+  console.log('[toggleBrowser] Được gọi cho profileId:', profileId);
+  const profile = profiles.find(p => String(p.id).trim() === String(profileId).trim());
+  if (!profile) {
+    console.error('[toggleBrowser] Không tìm thấy profile:', profileId, 'Danh sách profile ID hiện có:', profiles.map(p => p.id));
+    toast(`❌ Lỗi: Không tìm thấy hồ sơ (ID: ${profileId})`, 'error');
+    return;
+  }
 
   try {
     const st = browserStatus[profileId] || {};
@@ -722,6 +730,7 @@ async function toggleBrowser(profileId) {
       } catch (err) {
         toast(`⚠️ Lỗi IPC khi hủy khởi chạy: ${err.message}`, 'error');
       }
+      renderProfiles();
       return;
     }
 
@@ -765,7 +774,15 @@ async function toggleBrowser(profileId) {
     renderProfiles();
     toast(`🚀 Đang khởi chạy ${profile.name} qua Opera Engine...`, 'info');
 
-    const baseDevice = devices.find(d => d.id === profile.deviceId);
+    const baseDevice = devices.find(d => d.id === profile.deviceId) || {
+      id: profile.deviceId || 'samsung_s21_ultra',
+      name: profile.name || 'Android Device',
+      brand: 'Samsung',
+      model: 'Galaxy S21 Ultra',
+      platform: 'Linux armv8l',
+      os_version: 'Android 13',
+      viewport: { width: 412, height: 915 }
+    };
     const device = {
       ...baseDevice,
       timezone: profile.timezone || baseDevice?.timezone || 'Asia/Ho_Chi_Minh'
@@ -773,13 +790,16 @@ async function toggleBrowser(profileId) {
     const profileIndex = profiles.findIndex(p => p.id === profile.id);
     const profileNum = profileIndex >= 0 ? profileIndex + 1 : 1;
 
+    console.log(`[toggleBrowser] Gọi API.launchBrowser cho "${profile.name}" (ID: ${profile.id})...`);
     const res = await API.launchBrowser({ ...profile, device, profileNum });
+    console.log(`[toggleBrowser] API.launchBrowser kết quả:`, res);
     if (!res || !res.ok) {
       if (res && res.cancelled) {
         toast(`⏹ Phiên khởi chạy đã được hủy`, 'info');
         browserStatus[profileId] = { running: false, state: 'STOPPED', message: 'Đã hủy' };
       } else {
         const errMsg = res?.error || (res?.errorCode ? `[${res.errorCode}] Khởi chạy thất bại` : 'Khởi chạy thất bại');
+        console.error(`[toggleBrowser] Khởi chạy thất bại:`, errMsg);
         toast(`❌ ${errMsg}`, 'error');
         browserStatus[profileId] = { running: false, state: 'ERROR', error: errMsg };
       }
@@ -799,6 +819,15 @@ async function toggleBrowser(profileId) {
     } catch (e) {}
   }
 }
+
+// Global delegation for Launch, Cancel, Stop, and Retry buttons
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.btn-launch-state, .btn-launch, [data-action="launch"], [data-action="cancel"], [data-action="stop"]');
+  if (btn && btn.dataset.id) {
+    console.log('[Global Click Delegation] Nhận click trên nút:', btn.className, 'ID:', btn.dataset.id);
+    toggleBrowser(btn.dataset.id);
+  }
+});
 // ── Test proxy thủ công (bấm nút 🔌 riêng) ──
 async function testProxyOnly(profile) {
   if (!profile.proxy?.host) return;

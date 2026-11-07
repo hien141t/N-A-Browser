@@ -20,6 +20,7 @@ const { runChromiumEmulationTests } = require('./test_chromium_emulation_live');
 const { runMultiProfilesSimulation } = require('./test_multi_profiles_sim');
 const { runOperaLaunchAndFpTests } = require('./test_opera_launch_and_fp');
 const { runOtaUpgradeTests } = require('./test_ota_upgrade');
+const { runS21UltraTest } = require('./test_s21_ultra_live');
 
 async function main() {
   console.log('############################################################');
@@ -63,6 +64,10 @@ async function main() {
   // 9. Hot-Patch OTA Upgrade & Module Distribution (Patch #19)
   const otaRes = runOtaUpgradeTests();
   results.push({ name: 'OTA Patch #19 Distribution', ...otaRes });
+
+  // 10. Samsung Galaxy S21 Ultra Live Opera Test
+  const s21Res = await runS21UltraTest();
+  results.push({ name: 'Samsung S21 Ultra Live Opera', ...s21Res });
 
   console.log('============================================================');
   console.log('                 BẢNG TỔNG KẾT KẾT QUẢ KIỂM THỬ             ');
