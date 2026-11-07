@@ -21,6 +21,7 @@ const { runMultiProfilesSimulation } = require('./test_multi_profiles_sim');
 const { runOperaLaunchAndFpTests } = require('./test_opera_launch_and_fp');
 const { runOtaUpgradeTests } = require('./test_ota_upgrade');
 const { runS21UltraTest } = require('./test_s21_ultra_live');
+const { runChromiumMasterIntegrationTests } = require('./test_chromium_integration_master');
 
 async function main() {
   console.log('############################################################');
@@ -68,6 +69,10 @@ async function main() {
   // 10. Samsung Galaxy S21 Ultra Live Opera Test
   const s21Res = await runS21UltraTest();
   results.push({ name: 'Samsung S21 Ultra Live Opera', ...s21Res });
+
+  // 11. Chromium Engine Master Integration Test (Lifecycle, Cookies, Cancel, Fingerprint, 5-10 Multi-Window)
+  const masterRes = await runChromiumMasterIntegrationTests();
+  results.push({ name: 'Chromium Engine Master Live', ...masterRes });
 
   console.log('============================================================');
   console.log('                 BẢNG TỔNG KẾT KẾT QUẢ KIỂM THỬ             ');

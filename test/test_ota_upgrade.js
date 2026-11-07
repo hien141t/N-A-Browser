@@ -47,22 +47,23 @@ function runOtaUpgradeTests() {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   const patchInfo = JSON.parse(fs.readFileSync(patchInfoPath, 'utf8'));
 
-  // --- 1. Kiểm tra cấu hình Manifest Patch #19 ---
-  console.log('--- 1. Kiểm tra Cấu Hình Manifest Patch #19 ---');
+  // --- 1. Kiểm tra cấu hình Manifest Patch #20 ---
+  console.log('--- 1. Kiểm tra Cấu Hình Manifest Patch #20 ---');
 
-  test('Manifest và PatchInfo đã được nâng cấp lên Patch #19 (v1.0.19)', () => {
-    assert.strictEqual(manifest.patchNumber, 19, 'patchNumber phải là 19');
-    assert.strictEqual(manifest.version, '1.0.19', 'version phải là 1.0.19');
-    assert.strictEqual(patchInfo.patchNumber, 19, 'patchInfo patchNumber phải là 19');
-    assert.strictEqual(patchInfo.version, '1.0.19', 'patchInfo version phải là 1.0.19');
+  test('Manifest và PatchInfo đã được nâng cấp lên Patch #20 (v1.0.20)', () => {
+    assert.strictEqual(manifest.patchNumber, 20, 'patchNumber phải là 20');
+    assert.strictEqual(manifest.version, '1.0.20', 'version phải là 1.0.20');
+    assert.strictEqual(patchInfo.patchNumber, 20, 'patchInfo patchNumber phải là 20');
+    assert.strictEqual(patchInfo.version, '1.0.20', 'patchInfo version phải là 1.0.20');
   });
 
-  test('Manifest chứa đầy đủ 4 module cốt lõi (layoutEngine, fingerprintGenerator, fingerprintManager, operaLauncher)', () => {
+  test('Manifest chứa đầy đủ các module cốt lõi (layoutEngine, fingerprintGenerator, fingerprintManager, operaLauncher, browserLauncher)', () => {
     const requiredModules = [
       'src/layoutEngine.js',
       'src/fingerprintGenerator.js',
       'src/fingerprintManager.js',
-      'src/operaLauncher.js'
+      'src/operaLauncher.js',
+      'src/browserLauncher.js'
     ];
 
     for (const mod of requiredModules) {
@@ -127,11 +128,13 @@ function runOtaUpgradeTests() {
       const clientFp = path.join(tempClientDir, 'src', 'fingerprintGenerator.js');
       const clientFpMgr = path.join(tempClientDir, 'src', 'fingerprintManager.js');
       const clientOpera = path.join(tempClientDir, 'src', 'operaLauncher.js');
+      const clientBrowser = path.join(tempClientDir, 'src', 'browserLauncher.js');
 
       assert(fs.existsSync(clientLayout), 'Client thiếu src/layoutEngine.js sau cập nhật OTA');
       assert(fs.existsSync(clientFp), 'Client thiếu src/fingerprintGenerator.js sau cập nhật OTA');
       assert(fs.existsSync(clientFpMgr), 'Client thiếu src/fingerprintManager.js sau cập nhật OTA');
       assert(fs.existsSync(clientOpera), 'Client thiếu src/operaLauncher.js sau cập nhật OTA');
+      assert(fs.existsSync(clientBrowser), 'Client thiếu src/browserLauncher.js sau cập nhật OTA');
 
       // Thử nạp các module bằng require trong client context
       const importedLayout = require(clientLayout);
@@ -151,23 +154,27 @@ function runOtaUpgradeTests() {
       assert.strictEqual(typeof importedOpera.findOperaBinary, 'function');
       assert.strictEqual(typeof importedOpera.launchOperaProfile, 'function');
       assert.strictEqual(typeof importedOpera.cancelLaunch, 'function');
+
+      const importedBrowser = require(clientBrowser);
+      assert.strictEqual(typeof importedBrowser.findBrowserBinary, 'function');
+      assert.strictEqual(typeof importedBrowser.launchBrowserProfile, 'function');
     } finally {
       try { fs.rmSync(tempClientDir, { recursive: true, force: true }); } catch (e) {}
     }
   });
 
-  test('Nâng cấp tuần tự Patch #18 -> #19: Cài đặt Patch 18 cũ, sau đó nhận bản vá 19 và chuyển đổi version 1.0.18 -> 1.0.19 hoàn hảo', () => {
-    const tempOldClient = path.join(__dirname, `temp_ota_p18_to_p19_${Date.now()}`);
+  test('Nâng cấp tuần tự Patch #19 -> #20: Cài đặt Patch 19 cũ, sau đó nhận bản vá 20 và chuyển đổi version 1.0.19 -> 1.0.20 hoàn hảo', () => {
+    const tempOldClient = path.join(__dirname, `temp_ota_p19_to_p20_${Date.now()}`);
     fs.mkdirSync(tempOldClient, { recursive: true });
 
     try {
-      // 1. Tạo bản cài đặt Patch #18 cũ:
-      const p18Info = { patchNumber: 18, version: '1.0.18', title: 'Patch #18 Old' };
-      fs.writeFileSync(path.join(tempOldClient, 'patch_info.json'), JSON.stringify(p18Info, null, 2));
+      // 1. Tạo bản cài đặt Patch #19 cũ:
+      const p19Info = { patchNumber: 19, version: '1.0.19', title: 'Patch #19 Old' };
+      fs.writeFileSync(path.join(tempOldClient, 'patch_info.json'), JSON.stringify(p19Info, null, 2));
       fs.mkdirSync(path.join(tempOldClient, 'patches'), { recursive: true });
-      fs.writeFileSync(path.join(tempOldClient, 'patches', 'patch_info.json'), JSON.stringify(p18Info, null, 2));
+      fs.writeFileSync(path.join(tempOldClient, 'patches', 'patch_info.json'), JSON.stringify(p19Info, null, 2));
 
-      // 2. Chạy quy trình OTA Updater: Áp dụng manifest Patch #19
+      // 2. Chạy quy trình OTA Updater: Áp dụng manifest Patch #20
       const rootDir = path.join(__dirname, '..');
       for (const item of manifest.files) {
         if (!item.dest) continue;
@@ -191,29 +198,33 @@ function runOtaUpgradeTests() {
 
       // 3. Xác minh tính toàn vẹn sau khi nâng cấp
       const upgradedInfo = JSON.parse(fs.readFileSync(path.join(tempOldClient, 'patch_info.json'), 'utf8'));
-      assert.strictEqual(upgradedInfo.patchNumber, 19, 'Phải nâng lên patchNumber = 19');
-      assert.strictEqual(upgradedInfo.version, '1.0.19', 'Phải nâng lên version = 1.0.19');
+      assert.strictEqual(upgradedInfo.patchNumber, 20, 'Phải nâng lên patchNumber = 20');
+      assert.strictEqual(upgradedInfo.version, '1.0.20', 'Phải nâng lên version = 1.0.20');
 
-      // Cả 4 module mới phải tồn tại và nạp thành công
+      // Cả 5 module mới phải tồn tại và nạp thành công
       const layoutFile = path.join(tempOldClient, 'src', 'layoutEngine.js');
       const fpFile = path.join(tempOldClient, 'src', 'fingerprintGenerator.js');
       const fpMgrFile = path.join(tempOldClient, 'src', 'fingerprintManager.js');
       const operaFile = path.join(tempOldClient, 'src', 'operaLauncher.js');
+      const browserFile = path.join(tempOldClient, 'src', 'browserLauncher.js');
 
       assert(fs.existsSync(layoutFile), 'Thiếu src/layoutEngine.js sau nâng cấp');
       assert(fs.existsSync(fpFile), 'Thiếu src/fingerprintGenerator.js sau nâng cấp');
       assert(fs.existsSync(fpMgrFile), 'Thiếu src/fingerprintManager.js sau nâng cấp');
       assert(fs.existsSync(operaFile), 'Thiếu src/operaLauncher.js sau nâng cấp');
+      assert(fs.existsSync(browserFile), 'Thiếu src/browserLauncher.js sau nâng cấp');
 
       const layoutMod = require(layoutFile);
       const fpMod = require(fpFile);
       const fpMgrMod = require(fpMgrFile);
       const operaMod = require(operaFile);
+      const browserMod = require(browserFile);
 
       assert.strictEqual(typeof layoutMod.calculateGridPosition, 'function');
       assert.strictEqual(typeof fpMod.generateFingerprintScript, 'function');
       assert.strictEqual(typeof fpMgrMod.validateFingerprint, 'function');
       assert.strictEqual(typeof operaMod.launchOperaProfile, 'function');
+      assert.strictEqual(typeof browserMod.launchBrowserProfile, 'function');
     } finally {
       try { fs.rmSync(tempOldClient, { recursive: true, force: true }); } catch (e) {}
     }

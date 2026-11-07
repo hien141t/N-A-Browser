@@ -92,37 +92,44 @@ async function openFingerprintTestModal(profileId) {
   });
 }
 
-// ── Opera Engine Status Check & Settings ──
+// ── Chromium Browser Engine Status Check & Settings ──
 async function checkOperaStatus() {
   try {
     const settings = await API.loadSettings();
-    const customPath = settings.operaPath || null;
-    const res = await (API.getOperaInfo ? API.getOperaInfo(customPath) : Promise.resolve({ found: true, path: 'launcher.exe' }));
+    const customPath = settings.chromePath || settings.browserPath || settings.operaPath || null;
+    const fetchInfo = API.getBrowserInfo || API.getOperaInfo;
+    const res = await (fetchInfo ? fetchInfo(customPath) : Promise.resolve({ found: true, path: 'chrome.exe', name: 'Google Chrome' }));
     
     const dot = document.getElementById('operaHeaderDot');
     const text = document.getElementById('operaHeaderText');
     const settingStatus = document.getElementById('settingOperaStatus');
     const pathInput = document.getElementById('settingOperaPath');
+    const statEngine = document.getElementById('statEngine');
     
-    if (pathInput && settings.operaPath) pathInput.value = settings.operaPath;
+    if (pathInput && (settings.chromePath || settings.browserPath || settings.operaPath)) {
+      pathInput.value = settings.chromePath || settings.browserPath || settings.operaPath;
+    }
 
-    if (res.found) {
+    if (res && res.found) {
+      const engineName = res.name || 'Chromium';
       if (dot) dot.style.background = '#06d6a0';
-      if (text) text.textContent = '🟢 Opera Engine Ready';
+      if (text) text.textContent = `🟢 ${engineName} Ready`;
+      if (statEngine) statEngine.textContent = `${engineName}`;
       if (settingStatus) {
-        settingStatus.textContent = `✅ Đã tìm thấy Opera: ${res.path}`;
+        settingStatus.textContent = `✅ Đã tìm thấy ${engineName}: ${res.path}`;
         settingStatus.style.color = '#06d6a0';
       }
     } else {
       if (dot) dot.style.background = '#ef4444';
-      if (text) text.textContent = '🔴 Opera Missing (Cài đặt)';
+      if (text) text.textContent = '🔴 Chromium Missing';
+      if (statEngine) statEngine.textContent = 'Chưa cài đặt';
       if (settingStatus) {
-        settingStatus.textContent = `❌ ${res.error || 'Không tìm thấy Opera'}`;
+        settingStatus.textContent = `❌ ${res?.error || 'Không tìm thấy Chromium/Google Chrome'}`;
         settingStatus.style.color = '#ef4444';
       }
     }
   } catch(e) {
-    console.warn('[Opera Check Error]', e.message);
+    console.warn('[Browser Check Error]', e.message);
   }
 }
 /* ═══════════════════════════════════════════
@@ -536,7 +543,8 @@ function renderProfiles() {
           <div style="font-size:10px;color:var(--txt3);font-family:monospace;">${device?.os_version || 'Android'} · ${device?.platform || 'Linux'}</div>
         </td>
         <td>
-          <div style="font-size:12px;font-weight:600;color:#06d6a0;">Opera 139</div>
+          <div style="font-size:12px;font-weight:600;color:#06d6a0;">${device?.chrome_version ? 'Chrome ' + device.chrome_version.split('.')[0] : (device?.opera_version ? 'Opera ' + device.opera_version.split('.')[0] : 'Chromium 156')}</div>
+          <div style="font-size:10px;color:var(--txt3);">Chromium Core</div>
         </td>
         <td style="text-align:center;">
           ${st.debugPort ? `<span class="cdp-port-badge">${st.debugPort}</span>` : '<span style="color:var(--txt3);font-size:11px;">—</span>'}
@@ -647,12 +655,12 @@ function renderProfiles() {
           <div class="card-device-icon">${device?.icon || '📱'}</div>
           <div class="card-info">
             <div class="card-name" title="${profile.name}">${profile.name}</div>
-            <div class="card-device">${device?.name || 'Opera Profile'}</div>
+            <div class="card-device">${device?.name || 'Chromium Profile'}</div>
           </div>
           ${stateBadgeHtml}
         </div>
         <div class="card-fp">
-          <span class="fp-tag ok">✓ Opera 139</span>
+          <span class="fp-tag ok">✓ ${device?.chrome_version ? 'Chrome ' + device.chrome_version.split('.')[0] : (device?.opera_version ? 'Opera ' + device.opera_version.split('.')[0] : 'Chromium 156')}</span>
           <span class="fp-tag">${device?.os_version || 'Android'}</span>
           <span class="fp-tag">${profile.orientationLock === 'landscape' ? '🖥️ Ngang' : '📱 Dọc'}</span>
           ${profile.diagnosticMode ? '<span class="fp-tag" style="color:#06d6a0;">CLEAN</span>' : '<span class="fp-tag ok">✓ Fingerprint</span>'}
@@ -770,9 +778,9 @@ async function toggleBrowser(profileId) {
     }
 
     // Set immediate state to STARTING so UI immediately turns button into Cancel
-    browserStatus[profileId] = { running: false, state: 'STARTING', message: 'Đang chuẩn bị Opera...' };
+    browserStatus[profileId] = { running: false, state: 'STARTING', message: 'Đang chuẩn bị Chromium...' };
     renderProfiles();
-    toast(`🚀 Đang khởi chạy ${profile.name} qua Opera Engine...`, 'info');
+    toast(`🚀 Đang khởi chạy ${profile.name} qua Chromium Engine...`, 'info');
 
     const baseDevice = devices.find(d => d.id === profile.deviceId) || {
       id: profile.deviceId || 'samsung_s21_ultra',
@@ -1345,12 +1353,12 @@ function setupModal() {
     });
   }
 
-  // Opera Executable Settings
+  // Browser Executable Settings
   const btnDetectOpera = document.getElementById('btnDetectOpera');
   if (btnDetectOpera) {
     btnDetectOpera.addEventListener('click', async () => {
       await checkOperaStatus();
-      toast('🔍 Đã quét phát hiện trình duyệt Opera', 'info');
+      toast('🔍 Đã quét phát hiện trình duyệt Chromium/Chrome', 'info');
     });
   }
 
@@ -1359,10 +1367,12 @@ function setupModal() {
     btnSaveOpera.addEventListener('click', async () => {
       const pathVal = document.getElementById('settingOperaPath').value.trim();
       const settings = await API.loadSettings();
+      settings.chromePath = pathVal;
+      settings.browserPath = pathVal;
       settings.operaPath = pathVal;
       await API.saveSettings(settings);
       await checkOperaStatus();
-      toast('💾 Đã lưu cấu hình đường dẫn Opera!', 'success');
+      toast('💾 Đã lưu cấu hình đường dẫn trình duyệt!', 'success');
     });
   }
 

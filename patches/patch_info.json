@@ -1,7 +1,7 @@
 {
-  "patchNumber": 19,
-  "version": "1.0.19",
-  "title": "Bản vá Hot-Patch #19: Khởi chạy Opera Engine v139 thật độc lập, Fingerprint Manager 8 nhóm, Giao diện Hidemium Profile và Dọn rác toàn diện",
-  "changelog": "Khởi chạy Opera Engine v139 thật độc lập, Fingerprint Manager 8 nhóm, Giao diện Hidemium Profile và Dọn rác toàn diện",
-  "appliedAt": "2026-11-06T23:30:55.831Z"
+  "patchNumber": 20,
+  "version": "1.0.20",
+  "title": "Bản vá Hot-Patch #20: Khôi phục Chromium Engine làm trình duyệt chính, bảo toàn State Machine và Hidemium UI",
+  "changelog": "Khôi phục Chromium / Google Chrome v156 làm core engine chính, đồng bộ trạng thái Chromium Engine trên giao diện Hidemium, hỗ trợ đa profile không kẹt about:blank.",
+  "appliedAt": "2026-11-07T15:35:00.000Z"
 }

@@ -235,9 +235,9 @@
           <p class="page-sub">Quản lý profile trình duyệt Android giả lập</p>
         </div>
         <div class="page-actions">
-          <div class="opera-header-badge" id="operaHeaderStatus" title="Trạng thái Opera Engine (Bấm để cài đặt)">
+          <div class="opera-header-badge" id="operaHeaderStatus" title="Trạng thái Chromium Engine (Bấm để cài đặt)">
             <span id="operaHeaderDot" style="width:7px;height:7px;border-radius:50%;background:#06d6a0;display:inline-block"></span>
-            <span id="operaHeaderText">Opera Stable 139 Ready</span>
+            <span id="operaHeaderText">Chromium Engine Ready</span>
           </div>
           <button class="btn-secondary" id="btnManualSyncCloud" style="background:rgba(99,102,241,0.18);border-color:rgba(99,102,241,0.4);color:#a5b4fc;font-weight:600;display:flex;align-items:center;gap:6px;" title="Đồng bộ 2 chiều hồ sơ & dữ liệu web với Cloud (Mã: 151206)">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="pointer-events:none;"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><polyline points="12 13 12 9 10 11"/></svg>
@@ -276,7 +276,7 @@
           <span class="stat-l">Stopped Profiles</span>
         </div>
         <div class="stat-card">
-          <span class="stat-n" id="statEngine" style="font-size:1.3rem;color:#06d6a0">Opera 139</span>
+          <span class="stat-n" id="statEngine" style="font-size:1.3rem;color:#06d6a0">Chromium 156</span>
           <span class="stat-l">Active Engine</span>
         </div>
       </div>
@@ -425,19 +425,19 @@
           </div>
         </div>
         <div class="settings-group">
-          <h3>Opera Browser Engine (Trình Duyệt Chính)</h3>
+          <h3>Chromium Browser Engine (Trình Duyệt Chính)</h3>
           <p class="small muted" style="margin-bottom:12px">
-            N/A Browser V2 sử dụng trình duyệt Opera Stable kết hợp giao thức CDP. Không tự ý fallback sang Chrome.
+            N/A Browser sử dụng trình duyệt Chromium / Google Chrome kết hợp giao thức CDP Native.
           </p>
           <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:6px">
-            <label style="font-weight:500;font-size:12px">Đường dẫn Opera Executable (launcher.exe / opera.exe)</label>
-            <input type="text" id="settingOperaPath" class="form-input" style="width:100%" placeholder="Để trống để tự động quét hệ thống..."/>
+            <label style="font-weight:500;font-size:12px">Đường dẫn Trình duyệt Executable (chrome.exe / msedge.exe)</label>
+            <input type="text" id="settingOperaPath" class="form-input" style="width:100%" placeholder="Để trống để tự động nhận diện Google Chrome / Chromium..."/>
           </div>
           <div style="margin-top:14px;display:flex;justify-content:space-between;align-items:center">
             <span id="settingOperaStatus" class="small muted">Đang kiểm tra...</span>
             <div style="display:flex;gap:8px">
               <button class="btn-secondary" id="btnDetectOpera">🔍 Tự động quét</button>
-              <button class="btn-primary" id="btnSaveOperaSettings">💾 Lưu Cấu Hình Opera</button>
+              <button class="btn-primary" id="btnSaveOperaSettings">💾 Lưu Cấu Hình Trình Duyệt</button>
             </div>
           </div>
         </div>
@@ -886,7 +886,7 @@ print(response.json())</pre>
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px;">
             <div>
               <div style="font-size: 12px; font-weight: 600; color: #fff;">Chế độ Diagnostic (Clean Profile)</div>
-              <div style="font-size: 11px; color: var(--txt3);">Chạy Opera nguyên bản hoàn toàn sạch, không can thiệp fingerprint, không nạp extension.</div>
+              <div style="font-size: 11px; color: var(--txt3);">Chạy Chromium/Chrome nguyên bản hoàn toàn sạch, không can thiệp fingerprint, không nạp extension.</div>
             </div>
             <label class="toggle" style="flex-shrink: 0;"><input type="checkbox" id="fDiagnosticMode"/><span class="toggle-slider"></span></label>
           </div>
@@ -936,7 +936,7 @@ print(response.json())</pre>
 
         <!-- 2. Browser & User-Agent -->
         <div class="fp-param-group">
-          <div class="fp-group-header">2. Trình duyệt & User-Agent (Opera Engine)</div>
+          <div class="fp-group-header">2. Trình duyệt & User-Agent (Chromium Engine)</div>
           <div>
             <span class="small muted">User-Agent Chuỗi:</span>
             <textarea id="fpBrowserUa" class="form-input mono" rows="2" style="font-size:11px;resize:vertical;"></textarea>
@@ -984,7 +984,7 @@ print(response.json())</pre>
               <div id="fViewportDisplay" class="dim-value vp">412 × 915 px</div>
             </div>
             <div>
-              <div class="dim-title">🪟 Cửa sổ Opera vật lý:</div>
+              <div class="dim-title">🪟 Cửa sổ Trình duyệt vật lý:</div>
               <div id="fWindowDisplay" class="dim-value win">412 × 915 px</div>
             </div>
           </div>
