@@ -74,6 +74,28 @@ function findOperaBinary(customPath = null) {
     };
   }
 
+  // Check saved settings if no explicit customPath provided
+  if (!customPath) {
+    try {
+      const settingsPaths = [
+        path.join(__dirname, '..', 'settings.json'),
+        path.join(__dirname, 'settings.json'),
+        path.join(process.cwd(), 'settings.json'),
+      ];
+      for (const sp of settingsPaths) {
+        if (fs.existsSync(sp)) {
+          const cfg = JSON.parse(fs.readFileSync(sp, 'utf-8'));
+          if (cfg.operaPath && typeof cfg.operaPath === 'string' && fs.existsSync(cfg.operaPath.trim())) {
+            const stats = fs.statSync(cfg.operaPath.trim());
+            if (stats.isFile()) {
+              return { found: true, path: cfg.operaPath.trim(), isCustom: true };
+            }
+          }
+        }
+      }
+    } catch (e) {}
+  }
+
   const candidates = [];
   const localAppData = process.env.LOCALAPPDATA || '';
   const progFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
@@ -89,6 +111,32 @@ function findOperaBinary(customPath = null) {
       path.join(progFilesX86, 'Opera', 'opera.exe'),
       path.join(localAppData, 'Programs', 'Opera GX', 'launcher.exe'),
       path.join(localAppData, 'Programs', 'Opera GX', 'opera.exe')
+    );
+
+    // Multi-user & system directory scan on Windows (handles multi-account desktop environments)
+    const systemDrive = process.env.SystemDrive || 'C:';
+    const usersRoot = path.join(systemDrive, 'Users');
+    if (fs.existsSync(usersRoot)) {
+      try {
+        const userDirs = fs.readdirSync(usersRoot);
+        for (const u of userDirs) {
+          candidates.push(
+            path.join(usersRoot, u, 'AppData', 'Local', 'Programs', 'Opera', 'opera.exe'),
+            path.join(usersRoot, u, 'AppData', 'Local', 'Programs', 'Opera', 'launcher.exe'),
+            path.join(usersRoot, u, 'AppData', 'Local', 'Programs', 'Opera GX', 'opera.exe'),
+            path.join(usersRoot, u, 'AppData', 'Local', 'Programs', 'Opera GX', 'launcher.exe'),
+            path.join(usersRoot, u, 'AppData', 'Local', 'Programs', 'Opera Crypto', 'opera.exe')
+          );
+        }
+      } catch (eScan) {}
+    }
+
+    // Direct fallbacks for known accounts
+    candidates.push(
+      'C:\\Users\\hien666shop\\AppData\\Local\\Programs\\Opera\\opera.exe',
+      'C:\\Users\\hien666shop\\AppData\\Local\\Programs\\Opera\\launcher.exe',
+      'C:\\Users\\hien1\\AppData\\Local\\Programs\\Opera\\opera.exe',
+      'C:\\Users\\hien1\\AppData\\Local\\Programs\\Opera\\launcher.exe'
     );
   } else if (process.platform === 'linux') {
     candidates.push(
@@ -437,15 +485,22 @@ async function launchOperaProfile({
       });
     } catch (eNav) {
       if (session.isCancelled) return handleAbortedSession(session);
-      console.error(`[Navigation Error] Profile ${profileId} không thể mở ${targetUrl}:`, eNav.message);
-      try { await browser.close(); } catch(eClose) {}
-      if (session.pid) killProcessTree(session.pid);
-      session.state = LAUNCH_STATES.ERROR;
-      const errMsg = `[NAVIGATION_FAILED] Không thể mở trang "${targetUrl}": ${eNav.message}`;
-      session.error = errMsg;
-      broadcastState(profileId, LAUNCH_STATES.ERROR, errMsg);
-      activeSessions.delete(profileId);
-      return { ok: false, errorCode: 'NAVIGATION_FAILED', error: errMsg };
+      console.warn(`[Navigation Warning] Profile ${profileId} không thể tải ${targetUrl}:`, eNav.message);
+      
+      // Nếu là trang mặc định bot.sannysoft.com và bị lỗi mạng/timeout, giữ browser mở để người dùng vẫn dùng được
+      const hasCustomUrl = profile.startUrl && profile.startUrl.trim().length > 0;
+      if (!hasCustomUrl) {
+        console.log(`[Navigation Fallback] Trang kiểm tra mặc định tải chậm hoặc lỗi mạng, giữ Opera sẵn sàng.`);
+      } else {
+        try { await browser.close(); } catch(eClose) {}
+        if (session.pid) killProcessTree(session.pid);
+        session.state = LAUNCH_STATES.ERROR;
+        const errMsg = `[NAVIGATION_FAILED] Không thể mở trang "${targetUrl}": ${eNav.message}`;
+        session.error = errMsg;
+        broadcastState(profileId, LAUNCH_STATES.ERROR, errMsg);
+        activeSessions.delete(profileId);
+        return { ok: false, errorCode: 'NAVIGATION_FAILED', error: errMsg };
+      }
     }
 
     if (session.isCancelled) return handleAbortedSession(session);
