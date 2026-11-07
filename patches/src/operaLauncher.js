@@ -1,8 +1,16 @@
 /**
- * N/A Browser - Opera Browser Engine & Lifecycle Manager
- * Handles Opera discovery, process spawning, CDP orchestration,
- * state machine (STOPPED -> STARTING -> CONNECTING -> NAVIGATING -> READY),
- * graceful cancel/abort without data loss, and isolated profile multi-instance support.
+ * N/A Browser - Chromium Engine & Browser Lifecycle Manager
+ * Primary engine: Chromium / Google Chrome / CloakBrowser
+ * 
+ * Features:
+ * - Multi-platform binary discovery (CloakBrowser, Chrome, Chromium, Edge, Opera fallback)
+ * - State Machine: STOPPED -> STARTING -> CONNECTING -> NAVIGATING -> READY
+ * - Immediate Cancel without orphan processes or data loss
+ * - Isolated Profile Directories (clean_<id> for diagnostic mode)
+ * - CDP emulation: Viewport, DPR, Screen Orientation, Touch, Mobile, Timezone, User-Agent
+ * - Fingerprint script injection via CDP Page.addScriptToEvaluateOnNewDocument
+ * - Authenticated Proxy support with local proxy tunneling
+ * - Clear separation: Chromium engine vs device presets (no false "Opera thật" claims)
  */
 
 const fs = require('fs');
@@ -24,8 +32,7 @@ const LAUNCH_STATES = {
   ERROR: 'ERROR',
 };
 
-// Map of currently running or launching sessions
-// profileId -> LaunchSession
+// Map of currently running or launching sessions: profileId -> LaunchSession
 const activeSessions = new Map();
 
 // Global callback for state broadcasts to Electron renderer
@@ -53,113 +60,170 @@ function broadcastState(profileId, state, message = '', extra = {}) {
 }
 
 /**
- * Searches and validates Opera Stable executable on the host system.
- * DOES NOT silently fallback to Chrome.
+ * Searches and validates Chromium / Chrome / CloakBrowser executable on the host system.
+ * Prioritizes:
+ * 1. customBrowserPath (from profile or settings.json)
+ * 2. CloakHQ C++ Engine Patched Stealth Chromium (.cloakbrowser)
+ * 3. Google Chrome Stable (C:\Program Files\Google\Chrome\Application\chrome.exe)
+ * 4. Chromium
+ * 5. Microsoft Edge (Chromium-based)
+ * 6. Opera (fallback if no Chrome/Chromium found)
  */
-function findOperaBinary(customPath = null) {
+function findBrowserBinary(customPath = null) {
   if (customPath && typeof customPath === 'string' && customPath.trim().length > 0) {
     const trimmed = customPath.trim();
     if (fs.existsSync(trimmed)) {
       try {
         const stats = fs.statSync(trimmed);
         if (stats.isFile()) {
-          return { found: true, path: trimmed, isCustom: true };
+          const lcase = trimmed.toLowerCase();
+          const name = lcase.includes('cloak') ? 'CloakBrowser' : (lcase.includes('chrome') ? 'Google Chrome' : (lcase.includes('edge') ? 'Microsoft Edge' : 'Chromium'));
+          return { found: true, path: trimmed, name, engine: 'Chromium Engine', isCustom: true };
         }
       } catch (e) {}
     }
     return {
       found: false,
       path: null,
-      error: `Không tìm thấy trình duyệt Opera tại đường dẫn: "${trimmed}". Vui lòng kiểm tra lại đường dẫn!`
+      error: `Không tìm thấy trình duyệt tại đường dẫn tùy chỉnh: "${trimmed}". Vui lòng kiểm tra lại đường dẫn!`
     };
   }
 
   // Check saved settings if no explicit customPath provided
-  if (!customPath) {
-    try {
-      const settingsPaths = [
-        path.join(__dirname, '..', 'settings.json'),
-        path.join(__dirname, 'settings.json'),
-        path.join(process.cwd(), 'settings.json'),
-      ];
-      for (const sp of settingsPaths) {
-        if (fs.existsSync(sp)) {
-          const cfg = JSON.parse(fs.readFileSync(sp, 'utf-8'));
-          if (cfg.operaPath && typeof cfg.operaPath === 'string' && fs.existsSync(cfg.operaPath.trim())) {
-            const stats = fs.statSync(cfg.operaPath.trim());
-            if (stats.isFile()) {
-              return { found: true, path: cfg.operaPath.trim(), isCustom: true };
-            }
+  let savedOperaFallback = null;
+  try {
+    const settingsPaths = [
+      path.join(__dirname, '..', 'settings.json'),
+      path.join(__dirname, 'settings.json'),
+      path.join(process.cwd(), 'settings.json'),
+    ];
+    for (const sp of settingsPaths) {
+      if (fs.existsSync(sp)) {
+        const cfg = JSON.parse(fs.readFileSync(sp, 'utf-8'));
+        const savedChrome = cfg.chromePath || cfg.browserPath;
+        if (savedChrome && typeof savedChrome === 'string' && fs.existsSync(savedChrome.trim())) {
+          const stats = fs.statSync(savedChrome.trim());
+          if (stats.isFile()) {
+            const lcase = savedChrome.toLowerCase();
+            const name = lcase.includes('cloak') ? 'CloakBrowser' : (lcase.includes('chrome') ? 'Google Chrome' : (lcase.includes('edge') ? 'Microsoft Edge' : 'Chromium'));
+            return { found: true, path: savedChrome.trim(), name, engine: 'Chromium Engine', isCustom: true };
           }
         }
+        if (cfg.operaPath && typeof cfg.operaPath === 'string' && fs.existsSync(cfg.operaPath.trim())) {
+          savedOperaFallback = cfg.operaPath.trim();
+        }
       }
-    } catch (e) {}
+    }
+  } catch (e) {}
+
+  // 1. CloakHQ C++ Patched Stealth Chromium
+  const cloakCandidates = [
+    path.join(os.homedir(), '.cloakbrowser'),
+    'C:\\Users\\hien666shop\\.cloakbrowser',
+    'C:\\Users\\hien1\\.cloakbrowser',
+  ];
+  for (const cDir of cloakCandidates) {
+    if (fs.existsSync(cDir)) {
+      try {
+        const subs = fs.readdirSync(cDir);
+        for (const sub of subs) {
+          const exeWin = path.join(cDir, sub, 'chrome.exe');
+          const exeLinux = path.join(cDir, sub, 'chrome');
+          if (fs.existsSync(exeWin) && fs.statSync(exeWin).isFile()) {
+            return { found: true, path: exeWin, name: 'CloakBrowser', engine: 'CloakHQ Stealth Chromium', isCloak: true };
+          }
+          if (fs.existsSync(exeLinux) && fs.statSync(exeLinux).isFile()) {
+            return { found: true, path: exeLinux, name: 'CloakBrowser', engine: 'CloakHQ Stealth Chromium', isCloak: true };
+          }
+        }
+      } catch (e) {}
+    }
   }
 
   const candidates = [];
   const localAppData = process.env.LOCALAPPDATA || '';
   const progFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
   const progFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+  const systemDrive = process.env.SystemDrive || 'C:';
 
   if (process.platform === 'win32') {
+    // 2. Google Chrome (Highest priority for stability and cross-user support)
     candidates.push(
-      path.join(localAppData, 'Programs', 'Opera', 'launcher.exe'),
-      path.join(localAppData, 'Programs', 'Opera', 'opera.exe'),
-      path.join(progFiles, 'Opera', 'launcher.exe'),
-      path.join(progFiles, 'Opera', 'opera.exe'),
-      path.join(progFilesX86, 'Opera', 'launcher.exe'),
-      path.join(progFilesX86, 'Opera', 'opera.exe'),
-      path.join(localAppData, 'Programs', 'Opera GX', 'launcher.exe'),
-      path.join(localAppData, 'Programs', 'Opera GX', 'opera.exe')
+      { path: path.join(progFiles, 'Google', 'Chrome', 'Application', 'chrome.exe'), name: 'Google Chrome' },
+      { path: path.join(progFilesX86, 'Google', 'Chrome', 'Application', 'chrome.exe'), name: 'Google Chrome' },
+      { path: path.join(localAppData, 'Google', 'Chrome', 'Application', 'chrome.exe'), name: 'Google Chrome' },
+      { path: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe', name: 'Google Chrome' }
     );
 
-    // Multi-user & system directory scan on Windows (handles multi-account desktop environments)
-    const systemDrive = process.env.SystemDrive || 'C:';
+    // 3. Chromium Stable / Portable
+    candidates.push(
+      { path: path.join(progFiles, 'Chromium', 'Application', 'chrome.exe'), name: 'Chromium' },
+      { path: path.join(progFilesX86, 'Chromium', 'Application', 'chrome.exe'), name: 'Chromium' },
+      { path: path.join(localAppData, 'Chromium', 'Application', 'chrome.exe'), name: 'Chromium' }
+    );
+
+    // 4. Microsoft Edge (Chromium engine)
+    candidates.push(
+      { path: path.join(progFilesX86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'), name: 'Microsoft Edge' },
+      { path: path.join(progFiles, 'Microsoft', 'Edge', 'Application', 'msedge.exe'), name: 'Microsoft Edge' },
+      { path: path.join(localAppData, 'Microsoft', 'Edge', 'Application', 'msedge.exe'), name: 'Microsoft Edge' }
+    );
+
+    // Multi-user scan for Chrome / Chromium
     const usersRoot = path.join(systemDrive, 'Users');
     if (fs.existsSync(usersRoot)) {
       try {
         const userDirs = fs.readdirSync(usersRoot);
         for (const u of userDirs) {
           candidates.push(
-            path.join(usersRoot, u, 'AppData', 'Local', 'Programs', 'Opera', 'opera.exe'),
-            path.join(usersRoot, u, 'AppData', 'Local', 'Programs', 'Opera', 'launcher.exe'),
-            path.join(usersRoot, u, 'AppData', 'Local', 'Programs', 'Opera GX', 'opera.exe'),
-            path.join(usersRoot, u, 'AppData', 'Local', 'Programs', 'Opera GX', 'launcher.exe'),
-            path.join(usersRoot, u, 'AppData', 'Local', 'Programs', 'Opera Crypto', 'opera.exe')
+            { path: path.join(usersRoot, u, 'AppData', 'Local', 'Google', 'Chrome', 'Application', 'chrome.exe'), name: 'Google Chrome' },
+            { path: path.join(usersRoot, u, 'AppData', 'Local', 'Chromium', 'Application', 'chrome.exe'), name: 'Chromium' },
+            { path: path.join(usersRoot, u, 'AppData', 'Local', 'Programs', 'Opera', 'opera.exe'), name: 'Opera' }
           );
         }
       } catch (eScan) {}
     }
 
-    // Direct fallbacks for known accounts
+    // Known account fallbacks
     candidates.push(
-      'C:\\Users\\hien666shop\\AppData\\Local\\Programs\\Opera\\opera.exe',
-      'C:\\Users\\hien666shop\\AppData\\Local\\Programs\\Opera\\launcher.exe',
-      'C:\\Users\\hien1\\AppData\\Local\\Programs\\Opera\\opera.exe',
-      'C:\\Users\\hien1\\AppData\\Local\\Programs\\Opera\\launcher.exe'
+      { path: 'C:\\Users\\hien666shop\\AppData\\Local\\Programs\\Opera\\opera.exe', name: 'Opera' },
+      { path: 'C:\\Users\\hien1\\AppData\\Local\\Programs\\Opera\\opera.exe', name: 'Opera' }
     );
   } else if (process.platform === 'linux') {
     candidates.push(
-      '/usr/bin/opera',
-      '/snap/bin/opera',
-      '/usr/local/bin/opera',
-      '/opt/opera/opera'
+      { path: '/usr/bin/google-chrome-stable', name: 'Google Chrome' },
+      { path: '/usr/bin/google-chrome', name: 'Google Chrome' },
+      { path: '/usr/bin/chromium', name: 'Chromium' },
+      { path: '/usr/bin/chromium-browser', name: 'Chromium' },
+      { path: '/snap/bin/chromium', name: 'Chromium' },
+      { path: '/usr/local/bin/chromium', name: 'Chromium' },
+      { path: '/usr/bin/brave-browser', name: 'Brave' },
+      { path: '/usr/bin/opera', name: 'Opera' }
     );
   } else if (process.platform === 'darwin') {
     candidates.push(
-      '/Applications/Opera.app/Contents/MacOS/Opera'
+      { path: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', name: 'Google Chrome' },
+      { path: '/Applications/Chromium.app/Contents/MacOS/Chromium', name: 'Chromium' },
+      { path: '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge', name: 'Microsoft Edge' },
+      { path: '/Applications/Opera.app/Contents/MacOS/Opera', name: 'Opera' }
     );
   }
 
-  for (const p of candidates) {
-    if (p && fs.existsSync(p)) {
+  if (savedOperaFallback) {
+    candidates.push({ path: savedOperaFallback, name: 'Opera' });
+  }
+
+  for (const item of candidates) {
+    if (item && item.path && fs.existsSync(item.path)) {
       try {
-        const stats = fs.statSync(p);
+        const stats = fs.statSync(item.path);
         if (stats.isFile()) {
           return {
             found: true,
-            path: p,
-            isCustom: customPath ? p === customPath.trim() : false,
+            path: item.path,
+            name: item.name,
+            engine: 'Chromium Engine',
+            isCustom: false,
           };
         }
       } catch (e) {}
@@ -169,8 +233,15 @@ function findOperaBinary(customPath = null) {
   return {
     found: false,
     path: null,
-    error: 'Không tìm thấy trình duyệt Opera trên hệ thống. Vui lòng cài đặt Opera Stable hoặc thiết lập đường dẫn Opera executable trong mục Cài đặt (Settings).'
+    error: 'Không tìm thấy trình duyệt Chromium/Google Chrome trên hệ thống. Vui lòng cài đặt Google Chrome hoặc thiết lập đường dẫn trình duyệt trong mục Cài đặt (Settings).'
   };
+}
+
+/**
+ * Backward-compatibility alias for findOperaBinary
+ */
+function findOperaBinary(customPath = null) {
+  return findBrowserBinary(customPath);
 }
 
 /**
@@ -199,12 +270,13 @@ function killProcessTree(pid) {
 }
 
 /**
- * Main Launch Orchestrator for Opera
+ * Main Launch Orchestrator for Chromium / Chrome / CloakBrowser
  */
-async function launchOperaProfile({
+async function launchBrowserProfile({
   profile,
   appDataDir,
-  customOperaPath = null,
+  customBrowserPath = null,
+  customOperaPath = null, // backward compatibility
   injectScript = null,
   extPaths = [],
   mainWindow = null,
@@ -244,20 +316,21 @@ async function launchOperaProfile({
     error: null,
   };
   activeSessions.set(profileId, session);
-  broadcastState(profileId, LAUNCH_STATES.STARTING, 'Đang chuẩn bị môi trường Opera...');
+  broadcastState(profileId, LAUNCH_STATES.STARTING, 'Đang chuẩn bị môi trường Chromium/Chrome...');
 
   try {
-    // 3. Locate Opera Binary
-    const operaDetect = findOperaBinary(customOperaPath);
-    if (!operaDetect.found) {
+    // 3. Locate Browser Binary
+    const targetPath = customBrowserPath || customOperaPath || profile.browserPath || profile.operaPath || null;
+    const browserDetect = findBrowserBinary(targetPath);
+    if (!browserDetect.found) {
       session.state = LAUNCH_STATES.ERROR;
-      const errMsg = `[OPERA_NOT_FOUND] ${operaDetect.error}`;
+      const errMsg = `[BROWSER_NOT_FOUND] ${browserDetect.error}`;
       session.error = errMsg;
       broadcastState(profileId, LAUNCH_STATES.ERROR, errMsg);
       activeSessions.delete(profileId);
-      return { ok: false, errorCode: 'OPERA_NOT_FOUND', error: errMsg };
+      return { ok: false, errorCode: 'BROWSER_NOT_FOUND', error: errMsg };
     }
-    const operaBin = operaDetect.path;
+    const browserBin = browserDetect.path;
 
     if (session.isCancelled) return handleAbortedSession(session);
 
@@ -277,8 +350,8 @@ async function launchOperaProfile({
     const debugPort = getRandomDebugPort();
     session.debugPort = debugPort;
 
-    // 6. Build Opera Arguments
-    const operaArgs = [
+    // 6. Build Chromium Arguments
+    const browserArgs = [
       `--user-data-dir=${profileDir}`,
       '--profile-directory=Default',
       `--window-position=${gridPos.posX},${gridPos.posY}`,
@@ -294,7 +367,7 @@ async function launchOperaProfile({
     ];
 
     if (extPaths.length > 0) {
-      operaArgs.push(
+      browserArgs.push(
         `--load-extension=${extPaths.join(',')}`,
         `--disable-extensions-except=${extPaths.join(',')}`
       );
@@ -302,12 +375,12 @@ async function launchOperaProfile({
 
     if (!isDiagnostic) {
       if (profile.device && profile.device.user_agent) {
-        operaArgs.push(`--user-agent=${profile.device.user_agent}`);
+        browserArgs.push(`--user-agent=${profile.device.user_agent}`);
       }
       if (profile.device && profile.device.language) {
-        operaArgs.push(`--lang=${profile.device.language || 'vi-VN'}`);
+        browserArgs.push(`--lang=${profile.device.language || 'vi-VN'}`);
       }
-      operaArgs.push(
+      browserArgs.push(
         '--touch-events=enabled',
         '--enable-touch-drag-drop',
         '--force-webrtc-ip-handling-policy=default_public_interface_only',
@@ -315,7 +388,7 @@ async function launchOperaProfile({
         '--disable-webrtc-multiple-routes'
       );
       if (profile.device && profile.device.timezone) {
-        operaArgs.push(`--timezone-for-testing=${profile.device.timezone}`);
+        browserArgs.push(`--timezone-for-testing=${profile.device.timezone}`);
       }
     }
 
@@ -331,38 +404,38 @@ async function launchOperaProfile({
             profile.proxy.user,
             profile.proxy.pass
           );
-          operaArgs.push(`--proxy-server=http://127.0.0.1:${localPort}`);
+          browserArgs.push(`--proxy-server=http://127.0.0.1:${localPort}`);
         } catch (e) {
           const fullHost = `${profile.proxy.host.trim()}:${profile.proxy.port || 8080}`;
-          operaArgs.push(`--proxy-server=http://${fullHost}`);
+          browserArgs.push(`--proxy-server=http://${fullHost}`);
         }
       } else {
         const fullHost = `${profile.proxy.host.trim()}:${profile.proxy.port || 8080}`;
         if (pType.includes('socks')) {
-          operaArgs.push(`--proxy-server=${pType}://${fullHost}`);
+          browserArgs.push(`--proxy-server=${pType}://${fullHost}`);
         } else {
-          operaArgs.push(`--proxy-server=http://${fullHost}`);
+          browserArgs.push(`--proxy-server=http://${fullHost}`);
         }
       }
-      operaArgs.push('--ignore-certificate-errors');
+      browserArgs.push('--ignore-certificate-errors');
     }
 
     // Always start with blank window while setting up CDP emulation
-    operaArgs.push('about:blank');
+    browserArgs.push('about:blank');
 
     if (session.isCancelled) return handleAbortedSession(session);
 
-    // 8. Spawn Opera Child Process
-    broadcastState(profileId, LAUNCH_STATES.STARTING, 'Đang mở tiến trình Opera...');
+    // 8. Spawn Browser Process
+    broadcastState(profileId, LAUNCH_STATES.STARTING, 'Đang mở tiến trình trình duyệt...');
     let childProc;
     try {
-      childProc = spawn(operaBin, operaArgs, { detached: true, stdio: 'ignore' });
+      childProc = spawn(browserBin, browserArgs, { detached: true, stdio: 'ignore' });
       session.childProcess = childProc;
       session.pid = childProc.pid;
     } catch (spawnErr) {
-      console.error(`[Opera Launcher Spawn Error] Profile ${profileId}:`, spawnErr);
+      console.error(`[Browser Launcher Spawn Error] Profile ${profileId}:`, spawnErr);
       session.state = LAUNCH_STATES.ERROR;
-      const errMsg = `[SPAWN_FAILED] Không thể khởi động tiến trình Opera: ${spawnErr.message}`;
+      const errMsg = `[SPAWN_FAILED] Không thể khởi động tiến trình trình duyệt: ${spawnErr.message}`;
       session.error = errMsg;
       broadcastState(profileId, LAUNCH_STATES.ERROR, errMsg);
       activeSessions.delete(profileId);
@@ -370,18 +443,18 @@ async function launchOperaProfile({
     }
 
     childProc.on('error', (err) => {
-      console.error(`[Opera Launcher Error] Profile ${profileId}:`, err);
+      console.error(`[Browser Launcher Error] Profile ${profileId}:`, err);
       session.state = LAUNCH_STATES.ERROR;
-      session.error = `[SPAWN_FAILED] Lỗi tiến trình Opera: ${err.message}`;
+      session.error = `[SPAWN_FAILED] Lỗi tiến trình trình duyệt: ${err.message}`;
       broadcastState(profileId, LAUNCH_STATES.ERROR, session.error);
       activeSessions.delete(profileId);
     });
 
     childProc.on('exit', (code) => {
-      console.log(`[Opera Process Exit] Profile ${profileId} exited with code ${code}`);
+      console.log(`[Browser Process Exit] Profile ${profileId} exited with code ${code}`);
       const wasActive = activeSessions.has(profileId);
       activeSessions.delete(profileId);
-      if (wasActive && !session.isCancelled) {
+      if (wasActive && !session.isCancelled && session.state === LAUNCH_STATES.READY) {
         broadcastState(profileId, LAUNCH_STATES.STOPPED, 'Đã đóng trình duyệt');
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('profiles:reload');
@@ -412,7 +485,7 @@ async function launchOperaProfile({
       if (session.isCancelled) return handleAbortedSession(session);
       killProcessTree(session.pid);
       activeSessions.delete(profileId);
-      const errMsg = `[CDP_TIMEOUT] Không thể kết nối CDP tới Opera (port ${debugPort}) sau ${maxRetries * 300 / 1000}s.`;
+      const errMsg = `[CDP_TIMEOUT] Không thể kết nối CDP tới trình duyệt (port ${debugPort}) sau ${maxRetries * 300 / 1000}s.`;
       broadcastState(profileId, LAUNCH_STATES.ERROR, errMsg);
       return { ok: false, errorCode: 'CDP_TIMEOUT', error: errMsg };
     }
@@ -471,7 +544,7 @@ async function launchOperaProfile({
 
     if (session.isCancelled) return handleAbortedSession(session);
 
-    // 11. Navigate to Target URL
+    // 11. Navigate to Target URL (Ensures browser NEVER stays on about:blank)
     const targetUrl = profile.startUrl && profile.startUrl.trim().length > 0
       ? profile.startUrl.trim()
       : 'https://bot.sannysoft.com';
@@ -487,10 +560,10 @@ async function launchOperaProfile({
       if (session.isCancelled) return handleAbortedSession(session);
       console.warn(`[Navigation Warning] Profile ${profileId} không thể tải ${targetUrl}:`, eNav.message);
       
-      // Nếu là trang mặc định bot.sannysoft.com và bị lỗi mạng/timeout, giữ browser mở để người dùng vẫn dùng được
+      // Fallback: Nếu trang mặc định tải chậm hoặc lỗi mạng, vẫn giữ trình duyệt mở để người dùng thao tác
       const hasCustomUrl = profile.startUrl && profile.startUrl.trim().length > 0;
       if (!hasCustomUrl) {
-        console.log(`[Navigation Fallback] Trang kiểm tra mặc định tải chậm hoặc lỗi mạng, giữ Opera sẵn sàng.`);
+        console.log(`[Navigation Fallback] Trang kiểm tra mặc định tải chậm, giữ trình duyệt ở trạng thái READY.`);
       } else {
         try { await browser.close(); } catch(eClose) {}
         if (session.pid) killProcessTree(session.pid);
@@ -515,16 +588,24 @@ async function launchOperaProfile({
       pid: session.pid,
       debugPort,
       state: LAUNCH_STATES.READY,
+      engine: browserDetect.name || 'Chromium Engine',
     };
 
   } catch (err) {
     console.error(`[Launch Exception] Profile ${profileId}:`, err);
     if (session.pid) killProcessTree(session.pid);
     activeSessions.delete(profileId);
-    const errorMsg = `Lỗi khởi chạy Opera: ${err.message}`;
+    const errorMsg = `Lỗi khởi chạy trình duyệt: ${err.message}`;
     broadcastState(profileId, LAUNCH_STATES.ERROR, errorMsg);
     return { ok: false, error: errorMsg };
   }
+}
+
+/**
+ * Backward-compatibility alias for launchOperaProfile
+ */
+async function launchOperaProfile(opts) {
+  return launchBrowserProfile(opts);
 }
 
 /**
@@ -570,7 +651,7 @@ async function handleAbortedSession(session) {
 /**
  * Graceful close for a running profile
  */
-async function closeOperaProfile(profileId) {
+async function closeBrowserProfile(profileId) {
   const session = activeSessions.get(profileId);
   if (!session) {
     return { ok: true, alreadyStopped: true };
@@ -594,6 +675,13 @@ async function closeOperaProfile(profileId) {
 }
 
 /**
+ * Backward-compatibility alias for closeOperaProfile
+ */
+async function closeOperaProfile(profileId) {
+  return closeBrowserProfile(profileId);
+}
+
+/**
  * Returns a map of all profile launch/running states
  */
 function getAllBrowserStatuses() {
@@ -613,11 +701,16 @@ function getAllBrowserStatuses() {
 
 module.exports = {
   LAUNCH_STATES,
+  findBrowserBinary,
+  findChromiumBinary: findBrowserBinary,
   findOperaBinary,
+  launchBrowserProfile,
+  launchChromiumProfile: launchBrowserProfile,
   launchOperaProfile,
   cancelLaunch,
+  closeBrowserProfile,
   closeOperaProfile,
   getAllBrowserStatuses,
   setStateChangeCallback,
-  getRandomDebugPort,
+  killProcessTree,
 };

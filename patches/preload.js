@@ -24,7 +24,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('browser:state-changed', listener);
     return () => ipcRenderer.removeListener('browser:state-changed', listener);
   },
-  getOperaInfo: (customPath) => ipcRenderer.invoke('opera:info', customPath),
+  getBrowserInfo: (customPath) => ipcRenderer.invoke('browser:info', customPath),
+  getOperaInfo: (customPath) => ipcRenderer.invoke('browser:info', customPath),
   arrangeWindows: (opts)   => ipcRenderer.invoke('browser:arrangeWindows', opts),
   getDisplays: ()          => ipcRenderer.invoke('displays:get'),
 

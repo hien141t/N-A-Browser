@@ -16,7 +16,7 @@ const puppeteer = require('puppeteer-core');
 const { normalizeDeviceRatio, computeEmulationState } = require('../src/layoutEngine');
 const { generateFingerprintScript } = require('../src/fingerprintGenerator');
 
-// Tìm Chrome binary trên máy Windows
+// Tìm Chrome/Chromium binary trên máy Windows
 function findChromeBinary() {
   const cloakDir = path.join(os.homedir(), '.cloakbrowser');
   if (fs.existsSync(cloakDir)) {
@@ -29,15 +29,17 @@ function findChromeBinary() {
   }
 
   const standardPaths = [
-    path.join(os.homedir(), 'AppData\\Local\\Programs\\Opera\\opera.exe'),
-    path.join(os.homedir(), 'AppData\\Local\\Programs\\Opera\\launcher.exe'),
-    'C:\\Program Files\\Opera\\launcher.exe',
-    'C:\\Program Files (x86)\\Opera\\launcher.exe',
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
     path.join(os.homedir(), 'AppData\\Local\\Google\\Chrome\\Application\\chrome.exe'),
+    'C:\\Users\\hien666shop\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Users\\hien1\\AppData\\Local\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files\\Chromium\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Chromium\\Application\\chrome.exe',
     'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
     'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+    path.join(os.homedir(), 'AppData\\Local\\Programs\\Opera\\opera.exe'),
+    'C:\\Users\\hien666shop\\AppData\\Local\\Programs\\Opera\\opera.exe',
   ];
 
   for (const p of standardPaths) {

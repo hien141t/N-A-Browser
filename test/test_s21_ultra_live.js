@@ -27,7 +27,7 @@ const appDataDir = rootDir;
 
 async function runS21UltraTest() {
   console.log('====================================================');
-  console.log('📱 BẮT ĐẦU KIỂM THỬ LIVE: Samsung Galaxy S21 Ultra – Opera 139');
+  console.log('📱 BẮT ĐẦU KIỂM THỬ LIVE: Samsung Galaxy S21 Ultra – Chromium Engine');
   console.log('====================================================\n');
 
   // 1. Locate S21 Profile from profiles.json
@@ -38,10 +38,10 @@ async function runS21UltraTest() {
   assert.ok(s21Profile, 'Phải có profile Samsung Galaxy S21 Ultra trong danh sách');
   console.log(`  ✅ 1. Tìm thấy Profile: "${s21Profile.name}" (ID: ${s21Profile.id})`);
 
-  // 2. Validate Opera Binary found on Windows
-  const operaCheck = findOperaBinary();
-  assert.strictEqual(operaCheck.found, true, 'Opera binary phải được tìm thấy');
-  console.log(`  ✅ 2. Opera Binary khả dụng: ${operaCheck.path}`);
+  // 2. Validate Browser Binary found on Windows
+  const browserCheck = findOperaBinary();
+  assert.strictEqual(browserCheck.found, true, 'Trình duyệt phải được tìm thấy');
+  console.log(`  ✅ 2. Browser Binary khả dụng: ${browserCheck.name || 'Chromium'} (${browserCheck.path})`);
 
   // 3. Test Full Launch Sequence to READY
   const recordedStates = [];

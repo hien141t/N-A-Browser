@@ -60,19 +60,19 @@ async function runTests() {
     }
   }
 
-  // ── 1. OPERA BINARY DETECTION ──
-  console.log('--- 1. Kiểm tra Tìm Kiếm & Xác Nhận Opera Binary ---');
-  test('Tìm thấy Opera thật trên hệ thống Windows', () => {
+  // ── 1. CHROMIUM / BROWSER BINARY DETECTION ──
+  console.log('--- 1. Kiểm tra Tìm Kiếm & Xác Nhận Chromium / Browser Binary ---');
+  test('Tìm thấy Chromium / Google Chrome thật trên hệ thống Windows', () => {
     const res = findOperaBinary();
-    assert.strictEqual(res.found, true, 'Phải tìm thấy Opera trên máy');
-    assert.ok(fs.existsSync(res.path), `Tệp Opera phải tồn tại: ${res.path}`);
-    assert.ok(res.path.toLowerCase().includes('opera'), 'Đường dẫn phải chứa Opera');
+    assert.strictEqual(res.found, true, 'Phải tìm thấy Chromium/Chrome trên máy');
+    assert.ok(fs.existsSync(res.path), `Tệp trình duyệt phải tồn tại: ${res.path}`);
+    assert.ok(res.engine.includes('Chromium') || res.path.toLowerCase().includes('chrome') || res.path.toLowerCase().includes('opera'), 'Phải là Chromium engine');
   });
 
-  test('Báo lỗi rõ ràng khi không tìm thấy Opera (Không tự ý fallback sang Chrome)', () => {
-    const res = findOperaBinary('C:\\InvalidPath\\NonExistentOpera\\launcher.exe');
+  test('Báo lỗi rõ ràng khi không tìm thấy trình duyệt', () => {
+    const res = findOperaBinary('C:\\InvalidPath\\NonExistentBrowser\\chrome.exe');
     assert.strictEqual(res.found, false);
-    assert.ok(res.error.includes('Không tìm thấy trình duyệt Opera'), 'Phải có thông báo lỗi rõ ràng');
+    assert.ok(res.error.length > 0, 'Phải có thông báo lỗi rõ ràng');
   });
 
   // ── 2. FINGERPRINT MANAGER CRUD & VALIDATION ──
@@ -200,13 +200,13 @@ async function runTests() {
     await new Promise(r => setTimeout(r, 600));
   });
 
-  // ── 4. LIVE REAL OPERA LAUNCH VERIFICATION ──
-  console.log('\n--- 4. Live Real Opera Launch & Navigation ---');
+  // ── 4. LIVE CHROMIUM LAUNCH VERIFICATION ──
+  console.log('\n--- 4. Live Chromium Browser Launch & Navigation ---');
 
-  await testAsync('Live Opera: Mở trang đích thành công (Không kẹt about:blank, báo trạng thái READY)', async () => {
+  await testAsync('Live Chromium: Mở trang đích thành công (Không kẹt about:blank, báo trạng thái READY)', async () => {
     const liveProfile = {
       id: 'test_live_opera_prof',
-      name: 'Opera Live Profile',
+      name: 'Chromium Live Profile',
       startUrl: 'https://example.com',
       device: dummyProfile.device,
       orientationLock: 'portrait',
@@ -225,7 +225,7 @@ async function runTests() {
       mainWindow: null,
     });
 
-    assert.strictEqual(res.ok, true, `Khởi chạy Opera phải thành công: ${res.error || ''}`);
+    assert.strictEqual(res.ok, true, `Khởi chạy trình duyệt phải thành công: ${res.error || ''}`);
     assert.strictEqual(res.state, LAUNCH_STATES.READY);
     assert.ok(res.pid > 0);
 

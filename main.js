@@ -48,25 +48,34 @@ try {
 }
 const { generateFingerprintScript } = fingerprintGeneratorModule;
 
-let operaLauncherModule;
+let browserLauncherModule;
 try {
-  operaLauncherModule = require('./src/operaLauncher');
+  browserLauncherModule = require('./src/browserLauncher');
 } catch (e) {
   try {
-    operaLauncherModule = require('./patches/operaLauncher');
+    browserLauncherModule = require('./src/operaLauncher');
   } catch (e2) {
-    operaLauncherModule = require('./operaLauncher');
+    try {
+      browserLauncherModule = require('./patches/browserLauncher');
+    } catch (e3) {
+      browserLauncherModule = require('./patches/operaLauncher');
+    }
   }
 }
 const {
   LAUNCH_STATES,
+  findBrowserBinary,
+  findChromiumBinary,
   findOperaBinary,
+  launchBrowserProfile,
+  launchChromiumProfile,
   launchOperaProfile,
   cancelLaunch,
+  closeBrowserProfile,
   closeOperaProfile,
   getAllBrowserStatuses,
   setStateChangeCallback,
-} = operaLauncherModule;
+} = browserLauncherModule;
 
 let fingerprintManagerModule;
 try {
@@ -2431,12 +2440,12 @@ ipcMain.handle('browser:launch', async (event, profile) => {
     }
 
     const settings = getAppSettings();
-    const customOperaPath = profile.operaPath || settings.operaPath || null;
+    const customBrowserPath = profile.browserPath || profile.chromePath || profile.operaPath || settings.browserPath || settings.chromePath || settings.operaPath || null;
 
-    const launchResult = await launchOperaProfile({
+    const launchResult = await launchBrowserProfile({
       profile,
       appDataDir: APP_DATA_DIR,
-      customOperaPath,
+      customBrowserPath,
       injectScript,
       extPaths,
       mainWindow,
@@ -2505,9 +2514,12 @@ ipcMain.handle('browser:status', async () => {
   return getAllBrowserStatuses();
 });
 
-// Opera discovery & validation API
+// Browser discovery & validation API (Chromium / Google Chrome / CloakBrowser)
+ipcMain.handle('browser:info', async (event, customPath) => {
+  return findBrowserBinary(customPath);
+});
 ipcMain.handle('opera:info', async (event, customPath) => {
-  return findOperaBinary(customPath);
+  return findBrowserBinary(customPath);
 });
 
 // ── Fingerprint Manager IPC Handlers ──
@@ -3388,12 +3400,12 @@ async function handleApiRequest(req, res) {
       }
 
       const settings = getAppSettings();
-      const customOperaPath = profile.operaPath || settings.operaPath || null;
+      const customBrowserPath = profile.browserPath || profile.chromePath || profile.operaPath || settings.browserPath || settings.chromePath || settings.operaPath || null;
 
-      const launchResult = await launchOperaProfile({
+      const launchResult = await launchBrowserProfile({
         profile: { ...profile, id },
         appDataDir: APP_DATA_DIR,
-        customOperaPath,
+        customBrowserPath,
         injectScript,
         extPaths,
         mainWindow,
