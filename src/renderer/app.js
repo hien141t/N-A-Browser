@@ -793,16 +793,14 @@ async function toggleBrowser(profileId) {
     console.log(`[toggleBrowser] Gọi API.launchBrowser cho "${profile.name}" (ID: ${profile.id})...`);
     const res = await API.launchBrowser({ ...profile, device, profileNum });
     console.log(`[toggleBrowser] API.launchBrowser kết quả:`, res);
-    if (!res || !res.ok) {
-      if (res && res.cancelled) {
-        toast(`⏹ Phiên khởi chạy đã được hủy`, 'info');
-        browserStatus[profileId] = { running: false, state: 'STOPPED', message: 'Đã hủy' };
-      } else {
-        const errMsg = res?.error || (res?.errorCode ? `[${res.errorCode}] Khởi chạy thất bại` : 'Khởi chạy thất bại');
-        console.error(`[toggleBrowser] Khởi chạy thất bại:`, errMsg);
-        toast(`❌ ${errMsg}`, 'error');
-        browserStatus[profileId] = { running: false, state: 'ERROR', error: errMsg };
-      }
+    if (res?.cancelled) {
+      toast(`⏹ Phiên khởi chạy đã được hủy`, 'info');
+      browserStatus[profileId] = { running: false, state: 'CANCELLED', message: 'Đã hủy' };
+    } else if (!res?.ok) {
+      const errMsg = res?.error || (res?.errorCode ? `[${res.errorCode}] Khởi chạy thất bại` : 'Khởi chạy thất bại');
+      console.error(`[toggleBrowser] Khởi chạy thất bại:`, errMsg);
+      toast(`❌ ${errMsg}`, 'error');
+      browserStatus[profileId] = { running: false, state: 'ERROR', error: errMsg };
     } else {
       toast(`✅ ${profile.name} đã sẵn sàng (PID: ${res.pid})!`, 'success');
       browserStatus[profileId] = { running: true, state: 'READY', pid: res.pid, debugPort: res.debugPort };
@@ -820,14 +818,6 @@ async function toggleBrowser(profileId) {
   }
 }
 
-// Global delegation for Launch, Cancel, Stop, and Retry buttons
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('.btn-launch-state, .btn-launch, [data-action="launch"], [data-action="cancel"], [data-action="stop"]');
-  if (btn && btn.dataset.id) {
-    console.log('[Global Click Delegation] Nhận click trên nút:', btn.className, 'ID:', btn.dataset.id);
-    toggleBrowser(btn.dataset.id);
-  }
-});
 // ── Test proxy thủ công (bấm nút 🔌 riêng) ──
 async function testProxyOnly(profile) {
   if (!profile.proxy?.host) return;
