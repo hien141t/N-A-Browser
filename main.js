@@ -2377,7 +2377,14 @@ function getSystemBrowserBinary() {
 
 // Launch browser (Opera Engine với State Machine & Navigation Verification)
 ipcMain.handle('browser:launch', async (event, profile) => {
+  console.log(`[IPC browser:launch] Nhận yêu cầu khởi chạy profile: "${profile?.name || profile?.id}" (ID: ${profile?.id})`);
   try {
+    if (!profile || !profile.id) {
+      const err = '[INVALID_ARGUMENT] Profile không hợp lệ hoặc thiếu profileId';
+      console.error(`[IPC browser:launch] Lỗi: ${err}`);
+      return { ok: false, errorCode: 'INVALID_ARGUMENT', error: err };
+    }
+
     const isDiagnostic = !!profile.diagnosticMode;
     const profileDirName = isDiagnostic ? `clean_${profile.id}` : profile.id;
     const profileDir = path.join(APP_DATA_DIR, 'profiles', profileDirName);
@@ -2449,18 +2456,21 @@ ipcMain.handle('browser:launch', async (event, profile) => {
     });
 
     if (launchResult.ok && launchResult.pid) {
+      console.log(`[IPC browser:launch] 🚀 Khởi chạy THÀNH CÔNG profile "${profile.name}" (PID: ${launchResult.pid}, CDP Port: ${launchResult.debugPort})`);
       launchedBrowsers.set(profile.id, {
         pid: launchResult.pid,
         startTime: Date.now(),
         debugPort: launchResult.debugPort
       });
       triggerAutoArrangeIfNeeded();
+    } else {
+      console.error(`[IPC browser:launch] ❌ Khởi chạy THẤT BẠI profile "${profile.name}":`, launchResult.error);
     }
 
     return launchResult;
   } catch (err) {
     console.error('[Browser Launch Exception]', err);
-    return { ok: false, error: err.message };
+    return { ok: false, errorCode: 'LAUNCH_EXCEPTION', error: `[LAUNCH_EXCEPTION] ${err.message}` };
   }
 });
 
@@ -3377,138 +3387,55 @@ async function handleApiRequest(req, res) {
         }
       }
 
-      // Tính vị trí cửa sổ
-      const runningCount = launchedBrowsers.size;
-      const gridPos = calculateGridPosition(runningCount, runningCount + 1, profile.customWindow, null, profile);
-      setChromiumWindowPreferences(profileDir, gridPos.posX, gridPos.posY, gridPos.winW, gridPos.winH);
+      const settings = getAppSettings();
+      const customOperaPath = profile.operaPath || settings.operaPath || null;
 
-      const debugPort = getRandomDebugPort();
-      const startUrl = profile.startUrl || 'https://bot.sannysoft.com';
-
-      // Tìm Chrome binary
-      const cloakDir = path.join(os.homedir(), '.cloakbrowser');
-      let cloakBin = null;
-      if (fs.existsSync(cloakDir)) {
-        try {
-          for (const sub of fs.readdirSync(cloakDir)) {
-            const exe = path.join(cloakDir, sub, 'chrome.exe');
-            const lin = path.join(cloakDir, sub, 'chrome');
-            if (fs.existsSync(exe)) { cloakBin = exe; break; }
-            if (fs.existsSync(lin)) { cloakBin = lin; break; }
+      const launchResult = await launchOperaProfile({
+        profile: { ...profile, id },
+        appDataDir: APP_DATA_DIR,
+        customOperaPath,
+        injectScript,
+        extPaths,
+        mainWindow,
+        getProfileNum: (p) => {
+          let num = p.profileNum;
+          if (!num) {
+            try {
+              const allProfiles = JSON.parse(fs.readFileSync(path.join(APP_DATA_DIR, 'profiles.json'), 'utf-8'));
+              const idx = allProfiles.findIndex(x => x.id === (p.id || id));
+              if (idx >= 0) num = idx + 1;
+            } catch(e) {}
           }
-        } catch(e){}
-      }
-      const chromePaths = [
-        cloakBin,
-        'C:\\Program Files\\Opera\\launcher.exe',
-        'C:\\Program Files (x86)\\Opera\\launcher.exe',
-        path.join(process.env.LOCALAPPDATA || '', 'Programs\\Opera\\launcher.exe'),
-        path.join(process.env.LOCALAPPDATA || '', 'Programs\\Opera GX\\launcher.exe'),
-        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-        path.join(process.env.LOCALAPPDATA || '', 'Google\\Chrome\\Application\\chrome.exe'),
-        '/usr/bin/opera', '/snap/bin/opera', '/usr/bin/chromium',
-        '/usr/bin/google-chrome-stable', '/usr/bin/google-chrome',
-      ];
-      const chromeBin = chromePaths.find(p => p && fs.existsSync(p));
-      if (!chromeBin) return sendJSON(res, 500, { ok: false, error: 'Chưa cài Chrome/Chromium!' });
-
-      const args = [
-        `--user-data-dir=${profileDir}`,
-        '--profile-directory=Default',
-        `--window-position=${gridPos.posX},${gridPos.posY}`,
-        `--window-size=${gridPos.winW},${gridPos.winH}`,
-        ...(extPaths.length > 0 ? [
-          `--load-extension=${extPaths.join(',')}`,
-          `--disable-extensions-except=${extPaths.join(',')}`
-        ] : []),
-        '--no-first-run',
-        '--no-default-browser-check',
-        `--remote-debugging-port=${debugPort}`,
-        '--remote-debugging-address=127.0.0.1',
-        '--remote-allow-origins=*',
-        'about:blank', // Luôn spawn với about:blank → CDP navigate đến URL thật sau khi proxy auth sẵn sàng
-      ];
-
-      if (!isDiagnostic) {
-        if (device && device.user_agent) args.push(`--user-agent=${device.user_agent}`);
-        if (device && device.language) args.push(`--lang=${device.language || 'vi-VN'}`);
-        args.push(
-          '--touch-events=enabled',
-          '--enable-touch-drag-drop',
-          '--disable-blink-features=AutomationControlled',
-          '--disable-pdf-extension',
-          '--disable-plugins-discovery',
-          '--disable-infobars',
-          '--test-type',
-          // ── WebRTC IP Leak Prevention (Chống rò rỉ IP qua STUN/ICE) ──
-          '--force-webrtc-ip-handling-policy=default_public_interface_only',
-          '--enforce-webrtc-ip-permission-check',
-          '--disable-webrtc-multiple-routes'
-        );
-        if (device && (device.timezone || profile.timezone)) {
-          args.push(`--timezone-for-testing=${device.timezone || profile.timezone}`);
-        }
-      }
-      if (process.platform === 'linux') { args.push('--no-sandbox', '--disable-setuid-sandbox'); }
-
-      // ── Proxy Server Arg ──
-      if (profile.proxy && profile.proxy.host) {
-        const pType = (profile.proxy.type || 'http').toLowerCase();
-        if ((pType === 'http' || pType === 'https') && profile.proxy.user && profile.proxy.pass) {
-          // HTTP proxy có auth → dùng local proxy
-          try {
-            const localPort = await startLocalProxy(
-              id,
-              profile.proxy.host.trim(),
-              profile.proxy.port || 8080,
-              profile.proxy.user,
-              profile.proxy.pass
-            );
-            args.push(`--proxy-server=http://127.0.0.1:${localPort}`);
-          } catch(e) {
-            console.error('[API LocalProxy] Không start được local proxy:', e.message);
-            const fullHost = `${profile.proxy.host.trim()}:${profile.proxy.port || 8080}`;
-            args.push(`--proxy-server=http://${fullHost}`);
-          }
-        } else {
-          const fullHost = `${profile.proxy.host.trim()}:${profile.proxy.port || 8080}`;
-          if (pType === 'socks5' || pType === 'socks4') {
-            args.push(`--proxy-server=${pType}://${fullHost}`);
-          } else {
-            args.push(`--proxy-server=http://${fullHost}`);
-          }
-        }
-        args.push('--ignore-certificate-errors');
-      }
-
-      const proc = spawn(chromeBin, args, { detached: true, stdio: 'ignore' });
-
-      await new Promise(resolve => {
-        proc.on('error', (err) => {
-          console.error('[API Launch Error]', err);
-          sendJSON(res, 500, { ok: false, error: err.message });
-          resolve();
-        });
-        proc.on('exit', () => {
-          launchedBrowsers.delete(id);
-          triggerAutoArrangeIfNeeded();
-          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
-        });
-        setTimeout(() => {
-          proc.unref();
-          launchedBrowsers.set(id, { pid: proc.pid, startTime: Date.now(), debugPort });
-          triggerAutoArrangeIfNeeded();
-          // CDP: setup proxy auth → apply emulation → navigate URL thật
-          applyCDPDeviceEmulation(debugPort, device, profile.proxy, gridPos.winW, gridPos.winH, startUrl, profile, injectScript).catch(e => {});
-          // Notify renderer UI
-          if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
-          console.log(`[API] 🚀 Launched profile "${profile.name}" PID=${proc.pid} debugPort=${debugPort}`);
-          sendJSON(res, 200, { ok: true, pid: proc.pid, debugPort, profileId: id, profileName: profile.name });
-          resolve();
-        }, 600);
+          return num || 1;
+        },
+        startLocalProxy,
+        generateProfileIcon,
       });
-      return;
+
+      if (!launchResult.ok) {
+        return sendJSON(res, 500, {
+          ok: false,
+          errorCode: launchResult.errorCode || 'LAUNCH_FAILED',
+          error: launchResult.error || 'Khởi chạy Opera thất bại'
+        });
+      }
+
+      launchedBrowsers.set(id, {
+        pid: launchResult.pid,
+        startTime: Date.now(),
+        debugPort: launchResult.debugPort
+      });
+      triggerAutoArrangeIfNeeded();
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('profiles:reload');
+
+      return sendJSON(res, 200, {
+        ok: true,
+        pid: launchResult.pid,
+        debugPort: launchResult.debugPort,
+        profileId: id,
+        profileName: profile.name,
+        state: 'READY'
+      });
     } catch(err) {
       console.error('[API Launch Exception]', err);
       return sendJSON(res, 500, { ok: false, error: err.message });

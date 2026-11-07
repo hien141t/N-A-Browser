@@ -203,10 +203,11 @@ async function launchOperaProfile({
     const operaDetect = findOperaBinary(customOperaPath);
     if (!operaDetect.found) {
       session.state = LAUNCH_STATES.ERROR;
-      session.error = operaDetect.error;
-      broadcastState(profileId, LAUNCH_STATES.ERROR, operaDetect.error);
+      const errMsg = `[OPERA_NOT_FOUND] ${operaDetect.error}`;
+      session.error = errMsg;
+      broadcastState(profileId, LAUNCH_STATES.ERROR, errMsg);
       activeSessions.delete(profileId);
-      return { ok: false, error: operaDetect.error };
+      return { ok: false, errorCode: 'OPERA_NOT_FOUND', error: errMsg };
     }
     const operaBin = operaDetect.path;
 
@@ -305,14 +306,25 @@ async function launchOperaProfile({
 
     // 8. Spawn Opera Child Process
     broadcastState(profileId, LAUNCH_STATES.STARTING, 'Đang mở tiến trình Opera...');
-    const childProc = spawn(operaBin, operaArgs, { detached: true, stdio: 'ignore' });
-    session.childProcess = childProc;
-    session.pid = childProc.pid;
+    let childProc;
+    try {
+      childProc = spawn(operaBin, operaArgs, { detached: true, stdio: 'ignore' });
+      session.childProcess = childProc;
+      session.pid = childProc.pid;
+    } catch (spawnErr) {
+      console.error(`[Opera Launcher Spawn Error] Profile ${profileId}:`, spawnErr);
+      session.state = LAUNCH_STATES.ERROR;
+      const errMsg = `[SPAWN_FAILED] Không thể khởi động tiến trình Opera: ${spawnErr.message}`;
+      session.error = errMsg;
+      broadcastState(profileId, LAUNCH_STATES.ERROR, errMsg);
+      activeSessions.delete(profileId);
+      return { ok: false, errorCode: 'SPAWN_FAILED', error: errMsg };
+    }
 
     childProc.on('error', (err) => {
       console.error(`[Opera Launcher Error] Profile ${profileId}:`, err);
       session.state = LAUNCH_STATES.ERROR;
-      session.error = `Lỗi tiến trình Opera: ${err.message}`;
+      session.error = `[SPAWN_FAILED] Lỗi tiến trình Opera: ${err.message}`;
       broadcastState(profileId, LAUNCH_STATES.ERROR, session.error);
       activeSessions.delete(profileId);
     });
@@ -352,9 +364,9 @@ async function launchOperaProfile({
       if (session.isCancelled) return handleAbortedSession(session);
       killProcessTree(session.pid);
       activeSessions.delete(profileId);
-      const errMsg = `Không thể kết nối CDP tới Opera (port ${debugPort}) sau ${maxRetries * 300 / 1000}s.`;
+      const errMsg = `[CDP_TIMEOUT] Không thể kết nối CDP tới Opera (port ${debugPort}) sau ${maxRetries * 300 / 1000}s.`;
       broadcastState(profileId, LAUNCH_STATES.ERROR, errMsg);
-      return { ok: false, error: errMsg };
+      return { ok: false, errorCode: 'CDP_TIMEOUT', error: errMsg };
     }
     session.browser = browser;
 
@@ -425,8 +437,15 @@ async function launchOperaProfile({
       });
     } catch (eNav) {
       if (session.isCancelled) return handleAbortedSession(session);
-      // If navigation failed (e.g. offline or invalid URL), log warning but still proceed if page opened
-      console.warn(`[Navigation Warning] Profile ${profileId} page.goto warning:`, eNav.message);
+      console.error(`[Navigation Error] Profile ${profileId} không thể mở ${targetUrl}:`, eNav.message);
+      try { await browser.close(); } catch(eClose) {}
+      if (session.pid) killProcessTree(session.pid);
+      session.state = LAUNCH_STATES.ERROR;
+      const errMsg = `[NAVIGATION_FAILED] Không thể mở trang "${targetUrl}": ${eNav.message}`;
+      session.error = errMsg;
+      broadcastState(profileId, LAUNCH_STATES.ERROR, errMsg);
+      activeSessions.delete(profileId);
+      return { ok: false, errorCode: 'NAVIGATION_FAILED', error: errMsg };
     }
 
     if (session.isCancelled) return handleAbortedSession(session);

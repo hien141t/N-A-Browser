@@ -179,6 +179,14 @@ const API = window.electronAPI || {
   saveSettings:          async (s) => { localStorage.setItem('settings', JSON.stringify(s)); return { ok: true }; },
   getDisplays:           async () => [{ id: 0, name: 'Màn hình chính (1920x1080)' }],
   arrangeWindows:        async (opts) => ({ ok: false, error: 'No Electron API' }),
+  cancelLaunch:          async (id) => ({ ok: true }),
+  onLaunchStateChanged:  (callback) => () => {},
+  getOperaInfo:          async (p) => ({ ok: false }),
+  fingerprintGet:        async (id) => ({ ok: false }),
+  fingerprintUpdate:     async (id, s) => ({ ok: false }),
+  fingerprintGenerate:   async (id, o) => ({ ok: false }),
+  fingerprintReset:      async (id) => ({ ok: false }),
+  fingerprintValidate:   async (id) => ({ ok: false }),
 };
 
 // Đảm bảo API luôn có các hàm extension an toàn ngay cả khi preload chưa định nghĩa các method mở rộng
@@ -474,31 +482,31 @@ function renderProfiles() {
       switch (state) {
         case 'STARTING':
           stateBadgeHtml = `<span class="launch-badge starting pulse">⏳ Starting</span>`;
-          actionBtnHtml = `<button class="btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy</button>`;
           break;
         case 'CONNECTING':
           stateBadgeHtml = `<span class="launch-badge connecting pulse">🔗 Connecting</span>`;
-          actionBtnHtml = `<button class="btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy</button>`;
           break;
         case 'NAVIGATING':
           stateBadgeHtml = `<span class="launch-badge navigating pulse">🌐 Navigating</span>`;
-          actionBtnHtml = `<button class="btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" data-action="cancel" data-id="${profile.id}">⏹ Hủy</button>`;
           break;
         case 'READY':
           stateBadgeHtml = `<span class="launch-badge ready">🟢 Ready</span>`;
-          actionBtnHtml = `<button class="btn-launch-state stop" data-action="stop" data-id="${profile.id}">■ Stop</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state stop" data-action="stop" data-id="${profile.id}">■ Stop</button>`;
           break;
         case 'CANCELLING':
           stateBadgeHtml = `<span class="launch-badge cancelling pulse">⏳ Cancelling</span>`;
-          actionBtnHtml = `<button class="btn-launch-state cancel" disabled style="opacity:0.6;">Đang hủy...</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" disabled style="opacity:0.6;">Đang hủy...</button>`;
           break;
         case 'ERROR':
           stateBadgeHtml = `<span class="launch-badge error" title="${st.error || 'Lỗi khởi chạy'}">🔴 Error</span>`;
-          actionBtnHtml = `<button class="btn-launch-state retry" data-action="launch" data-id="${profile.id}">🔄 Thử lại</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state retry" data-action="launch" data-id="${profile.id}">🔄 Thử lại</button>`;
           break;
         default:
           stateBadgeHtml = `<span class="launch-badge stopped">Stopped</span>`;
-          actionBtnHtml = `<button class="btn-launch-state launch" data-action="launch" data-id="${profile.id}">▶ Launch</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state launch" data-action="launch" data-id="${profile.id}">▶ Launch</button>`;
           break;
       }
 
@@ -601,31 +609,31 @@ function renderProfiles() {
       switch (state) {
         case 'STARTING':
           stateBadgeHtml = `<span class="launch-badge starting pulse">⏳ Starting</span>`;
-          actionBtnHtml = `<button class="btn-launch-state cancel" style="width:100%;padding:8px;" data-id="${profile.id}">⏹ Hủy khởi chạy</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" style="width:100%;padding:8px;" data-id="${profile.id}">⏹ Hủy khởi chạy</button>`;
           break;
         case 'CONNECTING':
           stateBadgeHtml = `<span class="launch-badge connecting pulse">🔗 Connecting</span>`;
-          actionBtnHtml = `<button class="btn-launch-state cancel" style="width:100%;padding:8px;" data-id="${profile.id}">⏹ Hủy kết nối</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" style="width:100%;padding:8px;" data-id="${profile.id}">⏹ Hủy kết nối</button>`;
           break;
         case 'NAVIGATING':
           stateBadgeHtml = `<span class="launch-badge navigating pulse">🌐 Navigating</span>`;
-          actionBtnHtml = `<button class="btn-launch-state cancel" style="width:100%;padding:8px;" data-id="${profile.id}">⏹ Hủy điều hướng</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" style="width:100%;padding:8px;" data-id="${profile.id}">⏹ Hủy điều hướng</button>`;
           break;
         case 'READY':
           stateBadgeHtml = `<span class="launch-badge ready">🟢 Ready</span>`;
-          actionBtnHtml = `<button class="btn-launch-state stop" style="width:100%;padding:8px;" data-id="${profile.id}">■ Dừng Browser</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state stop" style="width:100%;padding:8px;" data-id="${profile.id}">■ Dừng Browser</button>`;
           break;
         case 'CANCELLING':
           stateBadgeHtml = `<span class="launch-badge cancelling pulse">⏳ Cancelling</span>`;
-          actionBtnHtml = `<button class="btn-launch-state cancel" disabled style="width:100%;padding:8px;opacity:0.6;">Đang hủy...</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state cancel" disabled style="width:100%;padding:8px;opacity:0.6;">Đang hủy...</button>`;
           break;
         case 'ERROR':
           stateBadgeHtml = `<span class="launch-badge error" title="${st.error || 'Lỗi'}">🔴 Error</span>`;
-          actionBtnHtml = `<button class="btn-launch-state retry" style="width:100%;padding:8px;" data-id="${profile.id}">🔄 Thử lại</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state retry" style="width:100%;padding:8px;" data-id="${profile.id}">🔄 Thử lại</button>`;
           break;
         default:
           stateBadgeHtml = `<span class="launch-badge stopped">Stopped</span>`;
-          actionBtnHtml = `<button class="btn-launch-state launch" style="width:100%;padding:8px;" data-id="${profile.id}">▶ Khởi chạy Opera</button>`;
+          actionBtnHtml = `<button class="btn-launch btn-launch-state launch" style="width:100%;padding:8px;" data-id="${profile.id}">▶ Khởi chạy Opera</button>`;
           break;
       }
 
@@ -679,88 +687,117 @@ async function toggleBrowser(profileId) {
   const profile = profiles.find(p => p.id === profileId);
   if (!profile) return;
 
-  const st = browserStatus[profileId] || {};
-  const state = st.state || (st.running ? 'READY' : 'STOPPED');
-
-  // Case 1: Browser is READY -> Stop it
-  if (state === 'READY') {
-    toast(`🛑 Đang đóng ${profile.name}...`, 'info');
-    browserStatus[profileId] = { running: false, state: 'CANCELLING', message: 'Đang đóng...' };
-    renderProfiles();
-    const res = await API.closeBrowser(profileId);
-    if (res.ok) toast(`🛑 Đã đóng ${profile.name}`, 'info');
-    else toast('⚠️ Lỗi khi đóng trình duyệt', 'error');
-    await refreshStatus();
-    return;
-  }
-
-  // Case 2: In-flight launch -> CANCEL IT IMMEDIATELY
-  if (['STARTING', 'CONNECTING', 'NAVIGATING', 'CANCELLING'].includes(state)) {
-    toast(`⏹ Đang hủy phiên khởi chạy ${profile.name}...`, 'warn');
-    browserStatus[profileId] = { running: false, state: 'CANCELLING', message: 'Đang hủy...' };
-    renderProfiles();
-    const res = await API.cancelLaunch(profileId);
-    if (res.ok) toast(`⏹ Đã hủy khởi chạy ${profile.name} an toàn`, 'info');
-    await refreshStatus();
-    return;
-  }
-
-  // Case 3: STOPPED, CANCELLED, or ERROR -> Launch Opera!
-  // Proxy Check if host provided
-  if (profile.proxy?.host && profile.proxy?.port) {
-    const proxyHost = profile.proxy.host.split(':')[0] || profile.proxy.host;
-    const proxyPort = profile.proxy.port || 8080;
-    toast(`🔌 Đang kiểm tra proxy ${proxyHost}:${proxyPort}...`, 'info');
-
-    try {
-      const checkRes = await API.proxyCheck({ host: proxyHost, port: proxyPort, type: profile.proxy.type || 'http' });
-      if (!checkRes.ok) {
-        toast(`⚠️ Proxy không kết nối được: ${checkRes.error}`, 'error');
-        const confirmed = await showConfirmModal({
-          icon: '⚠️',
-          title: 'Proxy không hoạt động!',
-          message: `${proxyHost}:${proxyPort} — ${checkRes.error}`,
-          sub: 'Vẫn muốn mở profile không? (Trình duyệt sẽ dùng IP thật của máy)',
-          confirmText: 'Vẫn mở',
-          danger: true
-        });
-        if (!confirmed) return;
-      }
-    } catch(e) {}
-  }
-
-  // Set immediate state to STARTING
-  browserStatus[profileId] = { running: false, state: 'STARTING', message: 'Đang chuẩn bị Opera...' };
-  renderProfiles();
-  toast(`🚀 Đang khởi chạy ${profile.name} qua Opera Engine...`, 'info');
-
-  const baseDevice = devices.find(d => d.id === profile.deviceId);
-  const device = {
-    ...baseDevice,
-    timezone: profile.timezone || baseDevice?.timezone || 'Asia/Ho_Chi_Minh'
-  };
-  const profileIndex = profiles.findIndex(p => p.id === profile.id);
-  const profileNum = profileIndex >= 0 ? profileIndex + 1 : 1;
-
   try {
+    const st = browserStatus[profileId] || {};
+    const state = st.state || (st.running ? 'READY' : 'STOPPED');
+
+    // Case 1: Browser is READY -> Stop it
+    if (state === 'READY') {
+      toast(`🛑 Đang đóng ${profile.name}...`, 'info');
+      browserStatus[profileId] = { running: false, state: 'CANCELLING', message: 'Đang đóng...' };
+      renderProfiles();
+      try {
+        const res = await API.closeBrowser(profileId);
+        if (res && res.ok) toast(`🛑 Đã đóng ${profile.name}`, 'info');
+        else toast(`⚠️ Lỗi khi đóng trình duyệt: ${res?.error || 'Không xác định'}`, 'error');
+      } catch (err) {
+        toast(`⚠️ Lỗi IPC khi đóng trình duyệt: ${err.message}`, 'error');
+      }
+      return;
+    }
+
+    // Case 2: In-flight launch -> CANCEL IT IMMEDIATELY
+    if (['STARTING', 'CONNECTING', 'NAVIGATING', 'CANCELLING'].includes(state)) {
+      toast(`⏹ Đang hủy phiên khởi chạy ${profile.name}...`, 'warn');
+      browserStatus[profileId] = { running: false, state: 'CANCELLING', message: 'Đang hủy...' };
+      renderProfiles();
+      try {
+        const res = await API.cancelLaunch(profileId);
+        if (res && res.ok) {
+          toast(`⏹ Đã hủy khởi chạy ${profile.name} an toàn`, 'info');
+          browserStatus[profileId] = { running: false, state: 'STOPPED', message: 'Đã hủy' };
+        } else {
+          toast(`⚠️ Hủy thất bại: ${res?.error || 'Không xác định'}`, 'error');
+        }
+      } catch (err) {
+        toast(`⚠️ Lỗi IPC khi hủy khởi chạy: ${err.message}`, 'error');
+      }
+      return;
+    }
+
+    // Case 3: STOPPED, CANCELLED, or ERROR -> Launch Opera!
+    // Check if API method is available
+    if (typeof API.launchBrowser !== 'function') {
+      throw new Error('[PRELOAD_MISSING] API.launchBrowser không tồn tại hoặc chưa được nạp từ Electron preload!');
+    }
+
+    // Proxy Check if host provided
+    if (profile.proxy?.host && profile.proxy?.port) {
+      const proxyHost = profile.proxy.host.split(':')[0] || profile.proxy.host;
+      const proxyPort = profile.proxy.port || 8080;
+      toast(`🔌 Đang kiểm tra proxy ${proxyHost}:${proxyPort}...`, 'info');
+
+      try {
+        const checkRes = await API.proxyCheck({ host: proxyHost, port: proxyPort, type: profile.proxy.type || 'http' });
+        if (!checkRes.ok) {
+          toast(`⚠️ Proxy không kết nối được: ${checkRes.error}`, 'error');
+          const confirmed = await showConfirmModal({
+            icon: '⚠️',
+            title: 'Proxy không hoạt động!',
+            message: `${proxyHost}:${proxyPort} — ${checkRes.error}`,
+            sub: 'Vẫn muốn mở profile không? (Trình duyệt sẽ dùng IP thật của máy)',
+            confirmText: 'Vẫn mở',
+            danger: true
+          });
+          if (!confirmed) {
+            browserStatus[profileId] = { running: false, state: 'STOPPED', message: 'Hủy mở profile' };
+            toast(`ℹ️ Đã dừng mở ${profile.name} do proxy không kết nối được`, 'info');
+            return;
+          }
+        }
+      } catch(e) {
+        console.warn('Proxy check exception:', e);
+      }
+    }
+
+    // Set immediate state to STARTING so UI immediately turns button into Cancel
+    browserStatus[profileId] = { running: false, state: 'STARTING', message: 'Đang chuẩn bị Opera...' };
+    renderProfiles();
+    toast(`🚀 Đang khởi chạy ${profile.name} qua Opera Engine...`, 'info');
+
+    const baseDevice = devices.find(d => d.id === profile.deviceId);
+    const device = {
+      ...baseDevice,
+      timezone: profile.timezone || baseDevice?.timezone || 'Asia/Ho_Chi_Minh'
+    };
+    const profileIndex = profiles.findIndex(p => p.id === profile.id);
+    const profileNum = profileIndex >= 0 ? profileIndex + 1 : 1;
+
     const res = await API.launchBrowser({ ...profile, device, profileNum });
-    if (!res.ok) {
-      if (res.cancelled) {
+    if (!res || !res.ok) {
+      if (res && res.cancelled) {
         toast(`⏹ Phiên khởi chạy đã được hủy`, 'info');
+        browserStatus[profileId] = { running: false, state: 'STOPPED', message: 'Đã hủy' };
       } else {
-        toast(`❌ Khởi chạy thất bại: ${res.error || 'Lỗi Opera'}`, 'error');
-        browserStatus[profileId] = { running: false, state: 'ERROR', error: res.error };
+        const errMsg = res?.error || (res?.errorCode ? `[${res.errorCode}] Khởi chạy thất bại` : 'Khởi chạy thất bại');
+        toast(`❌ ${errMsg}`, 'error');
+        browserStatus[profileId] = { running: false, state: 'ERROR', error: errMsg };
       }
     } else {
       toast(`✅ ${profile.name} đã sẵn sàng (PID: ${res.pid})!`, 'success');
       browserStatus[profileId] = { running: true, state: 'READY', pid: res.pid, debugPort: res.debugPort };
     }
   } catch (err) {
-    toast(`❌ Lỗi khởi chạy: ${err.message}`, 'error');
-    browserStatus[profileId] = { running: false, state: 'ERROR', error: err.message };
+    console.error('[toggleBrowser Exception]', err);
+    const errMsg = err?.message || String(err);
+    toast(`❌ Lỗi khởi chạy: ${errMsg}`, 'error');
+    browserStatus[profileId] = { running: false, state: 'ERROR', error: errMsg };
+  } finally {
+    renderProfiles();
+    try {
+      await refreshStatus();
+    } catch (e) {}
   }
-
-  await refreshStatus();
 }
 // ── Test proxy thủ công (bấm nút 🔌 riêng) ──
 async function testProxyOnly(profile) {
